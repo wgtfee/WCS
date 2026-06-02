@@ -90,6 +90,7 @@ public class ChainExecutionEngine
                     {
                         completed.Add(node.NodeId);
                         result.SkippedNodes++;
+                        EnqueueReadySuccessors(executionOrder, completed, inProgress, readyQueue, prunedNodes);
                         continue;
                     }
                     readyQueue.Enqueue(node);

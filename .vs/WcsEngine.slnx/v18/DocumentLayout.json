@@ -1,0 +1,170 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "I:\\code\\IOT\\WCS ENG\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
+      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\devicelistview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
+      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\devicelistview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\dashboardview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
+      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\dashboardview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 23,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:130:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:23:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:35:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:43:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:50:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:53:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:56:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:59:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:62:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:65:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:68:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:71:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:74:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:132:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:131:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:3:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{0174dea2-fdbe-4ef1-8f99-c0beae78880f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "MainWindow.axaml",
+              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
+              "WhenOpened": "2026-06-02T08:34:12.203Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "DeviceListView.axaml",
+              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\DeviceListView.axaml",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\DeviceListView.axaml",
+              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\DeviceListView.axaml",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\DeviceListView.axaml",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
+              "WhenOpened": "2026-06-02T08:34:07.555Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "DashboardView.axaml",
+              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\DashboardView.axaml",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\DashboardView.axaml",
+              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\DashboardView.axaml",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\DashboardView.axaml",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
+              "WhenOpened": "2026-06-02T08:33:20.712Z",
+              "EditorCaption": ""
+            }
+          ]
+        },
+        {
+          "DockedWidth": 245,
+          "SelectedChildIndex": -1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{d3b09462-361e-4675-acc6-e0732f84d521}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
