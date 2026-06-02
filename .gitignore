@@ -1,0 +1,9 @@
+# 忽略所有 bin 目录
+[Bb]in/
+
+# 忽略所有 obj 目录
+[Cc]bj/
+
+# 忽略所有 dll 和 pdb 文件
+*.dll
+*.pdb

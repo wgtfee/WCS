@@ -1,0 +1,82 @@
+namespace Wcs.Host.BackgroundServices;
+
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Wcs.Core.EventBus.Events;
+using Wcs.Core.EventBus.Publisher;
+using Wcs.Core.PlcSubsystem;
+using Wcs.Core.StateCenter.Interfaces;
+using Wcs.Core.StateCenter.Models;
+
+/// <summary>
+/// PLC 轮询后台服务 - 定时读取 PLC 并驱动 StateCenter
+/// </summary>
+public class PlcPollingBackgroundService : BackgroundService
+{
+    private readonly IPlcPollingService _pollingService;
+    private readonly IPlcBlockDiffEngine _diffEngine;
+    private readonly IStateCenter _stateCenter;
+    private readonly IEventBus _eventBus;
+    private readonly ILogger<PlcPollingBackgroundService> _logger;
+
+    public PlcPollingBackgroundService(
+        IPlcPollingService pollingService,
+        IPlcBlockDiffEngine diffEngine,
+        IStateCenter stateCenter,
+        IEventBus eventBus,
+        ILogger<PlcPollingBackgroundService> logger)
+    {
+        _pollingService = pollingService;
+        _diffEngine = diffEngine;
+        _stateCenter = stateCenter;
+        _eventBus = eventBus;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("PLC polling service starting");
+
+        try
+        {
+            await _pollingService.StartAsync(stoppingToken);
+
+            // 轮询循环: 读取 PLC -> 对比变化 -> 更新 StateCenter -> 发布事件
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await Task.Delay(50, stoppingToken); // 50ms 快速轮询
+
+                foreach (var block in _pollingService.GetAllConnectionStatuses())
+                {
+                    // 通过 PlcBlockDiffEngine 处理变化
+                    var cachedBlocks = _diffEngine.GetCachedBlocks();
+                    foreach (var cachedBlock in cachedBlocks)
+                    {
+                        var lastBlock = _diffEngine.GetLastBlock(cachedBlock.PlcName, cachedBlock.BlockNumber);
+                        if (lastBlock != null)
+                        {
+                            var diff = _diffEngine.ComparePlcBlocks(lastBlock, cachedBlock);
+                            if (diff.HasChanges)
+                            {
+                                await _eventBus.PublishAsync(new PlcBlockChangedEvent
+                                {
+                                    BlockName = diff.PlcName,
+                                    OldValues = new Dictionary<string, object> { ["Data"] = diff.OldData },
+                                    NewValues = new Dictionary<string, object> { ["Data"] = diff.NewData },
+                                    ChangedFields = diff.Changes.Select(c => $"Offset_{c.Offset}").ToList()
+                                }, stoppingToken);
+                            }
+                        }
+                        _diffEngine.SetLastBlock(cachedBlock);
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            await _pollingService.StopAsync(CancellationToken.None);
+            _logger.LogInformation("PLC polling service stopped");
+        }
+    }
+}

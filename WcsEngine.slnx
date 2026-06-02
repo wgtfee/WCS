@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Wcs.Application/Wcs.Application.csproj" />
+    <Project Path="src/Wcs.Core/Wcs.Core.csproj" />
+    <Project Path="src/Wcs.Host/Wcs.Host.csproj" />
+    <Project Path="src/Wcs.Infrastructure/Wcs.Infrastructure.csproj" />
+  </Folder>
+</Solution>

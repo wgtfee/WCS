@@ -1,0 +1,15 @@
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\bin\Debug\net8.0\Wcs.Infrastructure.deps.json
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\bin\Debug\net8.0\Wcs.Infrastructure.dll
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\bin\Debug\net8.0\Wcs.Infrastructure.pdb
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\bin\Debug\net8.0\Wcs.Core.dll
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\bin\Debug\net8.0\Wcs.Core.pdb
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.csproj.AssemblyReference.cache
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.AssemblyInfoInputs.cache
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.AssemblyInfo.cs
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.csproj.CoreCompileInputs.cache
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infr.978A0ED1.Up2Date
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.dll
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\refint\Wcs.Infrastructure.dll
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.pdb
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\ref\Wcs.Infrastructure.dll
