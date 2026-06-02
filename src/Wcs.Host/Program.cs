@@ -1,5 +1,6 @@
 using Serilog;
 using Wcs.Application;
+using Wcs.Core.AlarmCenter;
 using Wcs.Core.Common.Options;
 using Wcs.Core.PlcSubsystem;
 using Wcs.Core.Recovery;
@@ -8,6 +9,7 @@ using Wcs.Infrastructure;
 using Wcs.Infrastructure.Logging;
 using Wcs.Infrastructure.Persistence;
 using Wcs.Infrastructure.SignalR;
+using Microsoft.Extensions.Options;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -89,6 +91,23 @@ try
     catch (Exception ex)
     {
         logger.LogWarning(ex, "系统恢复失败，以全新状态启动");
+    }
+
+    // 加载报警规则配置
+    try
+    {
+        var alarmCenter = app.Services.GetRequiredService<IAlarmCenter>();
+        var wcsOptions = app.Services.GetRequiredService<IOptions<WcsOptions>>();
+        foreach (var rule in wcsOptions.Value.AlarmRules)
+        {
+            alarmCenter.SetAlarmRule(rule);
+            logger.LogInformation("加载报警规则: {AlarmCode} (DelayRaise={DelayRaise}ms, DelayRecover={DelayRecover}ms)",
+                rule.AlarmCode, rule.DelayRaiseMs, rule.DelayRecoverMs);
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "加载报警规则失败，使用默认规则");
     }
 
     // SignalR Hub 端点

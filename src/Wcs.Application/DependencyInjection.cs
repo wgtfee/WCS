@@ -33,9 +33,14 @@ public static class DependencyInjection
         services.AddSingleton<IResourceLockManager, ResourceLockManager>();
 
         // Core - depends on above
-        services.AddSingleton<IAlarmCenter>(sp =>
+        services.AddSingleton<AlarmCenter>(sp =>
             new AlarmCenter(sp.GetRequiredService<IEventBus>()));
-        services.AddSingleton<IObjectTrackingCenter, ObjectTrackingCenter>();
+        services.AddSingleton<IAlarmCenter>(sp => sp.GetRequiredService<AlarmCenter>());
+        services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<AlarmCenter>());
+
+        services.AddSingleton<ObjectTrackingCenter>();
+        services.AddSingleton<IObjectTrackingCenter>(sp => sp.GetRequiredService<ObjectTrackingCenter>());
+        services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<ObjectTrackingCenter>());
         services.AddSingleton<DeadlockDetector>();
 
         // Recovery

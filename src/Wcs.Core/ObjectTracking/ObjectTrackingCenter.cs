@@ -1,6 +1,8 @@
 namespace Wcs.Core.ObjectTracking;
 
 using System.Collections.Concurrent;
+using System.Text.Json;
+using Wcs.Core.Common.Interfaces;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.ObjectTracking.Models;
@@ -87,7 +89,7 @@ public interface IObjectTrackingCenter
 /// 物料跟踪中心实现
 /// 新增功能：移动历史索引、Zone 空间索引、Task 索引、事件发布
 /// </summary>
-public class ObjectTrackingCenter : IObjectTrackingCenter
+public class ObjectTrackingCenter : IObjectTrackingCenter, ISnapshotProvider
 {
     private readonly ConcurrentDictionary<string, ObjectState> _objects = new();
 
@@ -294,6 +296,29 @@ public class ObjectTrackingCenter : IObjectTrackingCenter
     }
 
     public int Count => _objects.Count;
+
+    // ==================== ISnapshotProvider ====================
+
+    public string ModuleName => "ObjectTracking";
+
+    public Task<object> CaptureSnapshotAsync(CancellationToken ct = default)
+    {
+        return Task.FromResult<object>(GetSnapshot());
+    }
+
+    public Task RestoreSnapshotAsync(object snapshot, CancellationToken ct = default)
+    {
+        if (snapshot is JsonElement element)
+        {
+            var dict = JsonSerializer.Deserialize<Dictionary<string, ObjectState>>(element.GetRawText());
+            if (dict != null) RestoreFromSnapshot(dict);
+        }
+        else if (snapshot is Dictionary<string, ObjectState> dict)
+        {
+            RestoreFromSnapshot(dict);
+        }
+        return Task.CompletedTask;
+    }
 
     // ==================== 内部方法 ====================
 

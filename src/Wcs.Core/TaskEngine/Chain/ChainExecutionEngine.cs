@@ -1,19 +1,27 @@
 namespace Wcs.Core.TaskEngine.Chain;
 
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.EventBus.Events;
+using Wcs.Core.EventBus.Handlers;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.StateCenter.Models;
 
 /// <summary>
 /// DAG 任务链执行引擎 — 管理任务图的拓扑执行、重试、超时、checkpoint
-/// 职责单一：接收 TaskGraph，按拓扑序执行节点，返回执行结果
+/// 支持 DecisionNode 条件分支路由和 WaitNode 事件驱动
 /// </summary>
 public class ChainExecutionEngine
 {
     private readonly ChainRecoveryService _recoveryService;
     private readonly IEventBus? _eventBus;
     private readonly ILogger<ChainExecutionEngine>? _logger;
+
+    // DecisionNode 委托注册表：Expression → handler
+    private readonly ConcurrentDictionary<string, Func<DecisionNode, CancellationToken, Task<bool>>> _decisionHandlers = new();
+
+    // WaitNode 委托注册表：ConditionType → handler
+    private readonly ConcurrentDictionary<string, Func<WaitNode, CancellationToken, Task<bool>>> _waitHandlers = new();
 
     public ChainExecutionEngine(
         ChainRecoveryService recoveryService,
@@ -23,7 +31,30 @@ public class ChainExecutionEngine
         _recoveryService = recoveryService ?? throw new ArgumentNullException(nameof(recoveryService));
         _eventBus = eventBus;
         _logger = logger;
+
+        // 注册默认的 Signal 等待处理器
+        RegisterWaitConditionHandler("Signal", ExecuteWaitSignalAsync);
     }
+
+    // ==================== 委托注册 ====================
+
+    /// <summary>
+    /// 注册 DecisionNode 条件评估器
+    /// </summary>
+    public void RegisterDecisionHandler(string expression, Func<DecisionNode, CancellationToken, Task<bool>> handler)
+    {
+        _decisionHandlers[expression] = handler ?? throw new ArgumentNullException(nameof(handler));
+    }
+
+    /// <summary>
+    /// 注册 WaitNode 条件等待处理器
+    /// </summary>
+    public void RegisterWaitConditionHandler(string conditionType, Func<WaitNode, CancellationToken, Task<bool>> handler)
+    {
+        _waitHandlers[conditionType] = handler ?? throw new ArgumentNullException(nameof(handler));
+    }
+
+    // ==================== 主执行循环 ====================
 
     /// <summary>
     /// 执行整个 DAG 任务图
@@ -37,12 +68,11 @@ public class ChainExecutionEngine
             TotalNodes = graph.Nodes.Count
         };
 
+        var prunedNodes = new HashSet<string>(); // 未选中分支的节点（被剪枝）
+
         try
         {
-            // 从 checkpoint 恢复（如果有）
             var executionOrder = _recoveryService.ResumeGraph(graph);
-
-            // 准备就绪节点队列
             var readyQueue = new Queue<TaskNode>();
             var completed = new HashSet<string>();
             var inProgress = new HashSet<string>();
@@ -53,9 +83,7 @@ public class ChainExecutionEngine
             {
                 if (inDegree.TryGetValue(node.NodeId, out var deg) && deg == 0)
                 {
-                    // 跳过已完成的节点
-                    if (graph.TopologicalOrder.Any(n => n.NodeId == node.NodeId &&
-                        (_recoveryService.GetCheckpoint(graph.GraphId)?.CompletedNodeIds.Contains(node.NodeId) == true)))
+                    if (IsNodeCheckpointed(graph, node))
                     {
                         completed.Add(node.NodeId);
                         result.SkippedNodes++;
@@ -70,9 +98,7 @@ public class ChainExecutionEngine
                 var node = readyQueue.Dequeue();
                 inProgress.Add(node.NodeId);
 
-                // 执行节点
                 var success = await ExecuteNodeWithRetryAsync(graph, node, result, ct);
-
                 inProgress.Remove(node.NodeId);
 
                 if (success)
@@ -81,17 +107,33 @@ public class ChainExecutionEngine
                     _recoveryService.CheckpointCompleted(graph.GraphId, node.NodeId);
                     result.CompletedNodes++;
 
-                    // 找到后继节点，检查其前置是否全部完成
-                    foreach (var successor in executionOrder)
+                    // DecisionNode 特殊处理：分支路由
+                    if (node is DecisionNode decision)
                     {
-                        if (!completed.Contains(successor.NodeId) && !readyQueue.Contains(successor) && !inProgress.Contains(successor.NodeId))
+                        var chosenBranchId = success ? decision.TrueBranchNodeId : decision.FalseBranchNodeId;
+                        var unchosenBranchId = success ? decision.FalseBranchNodeId : decision.TrueBranchNodeId;
+
+                        if (!string.IsNullOrEmpty(unchosenBranchId))
+                            prunedNodes.Add(unchosenBranchId);
+
+                        // 只 enqueue 选中分支的根节点（如果其所有前置已完成）
+                        if (!string.IsNullOrEmpty(chosenBranchId))
                         {
-                            var deps = GetDependencies(successor);
-                            if (deps.All(d => completed.Contains(d)))
+                            var chosenNode = graph.NodeIndex.TryGetValue(chosenBranchId, out var cn) ? cn : null;
+                            if (chosenNode != null && !completed.Contains(chosenNode.NodeId))
                             {
-                                readyQueue.Enqueue(successor);
+                                var deps = GetDependencies(chosenNode);
+                                if (deps.All(d => completed.Contains(d) || prunedNodes.Contains(d)))
+                                {
+                                    readyQueue.Enqueue(chosenNode);
+                                }
                             }
                         }
+                    }
+                    else
+                    {
+                        // 非 DecisionNode：标准后继查找
+                        EnqueueReadySuccessors(executionOrder, completed, inProgress, readyQueue, prunedNodes);
                     }
                 }
                 else
@@ -100,12 +142,13 @@ public class ChainExecutionEngine
                     result.FailedNodes++;
                     result.ErrorMessage = $"Node '{node.NodeId}' failed after {node.MaxRetries} retries";
 
-                    // DecisionNode 失败不中断整体执行
                     if (node is not DecisionNode)
                         break;
                 }
             }
 
+            // 将剪枝节点计入 SkippedNodes
+            result.SkippedNodes += prunedNodes.Count(n => !completed.Contains(n));
             result.Success = result.FailedNodes == 0 && result.CompletedNodes > 0;
         }
         catch (OperationCanceledException)
@@ -130,13 +173,41 @@ public class ChainExecutionEngine
     }
 
     /// <summary>
-    /// 执行单个节点（含重试和超时）
+    /// 标准后继查找 — 将前置依赖全部完成（或被剪枝）的节点加入就绪队列
     /// </summary>
+    private void EnqueueReadySuccessors(
+        IReadOnlyList<TaskNode> executionOrder,
+        HashSet<string> completed,
+        HashSet<string> inProgress,
+        Queue<TaskNode> readyQueue,
+        HashSet<string> prunedNodes)
+    {
+        foreach (var successor in executionOrder)
+        {
+            if (completed.Contains(successor.NodeId) || prunedNodes.Contains(successor.NodeId)
+                || readyQueue.Contains(successor) || inProgress.Contains(successor.NodeId))
+                continue;
+
+            var deps = GetDependencies(successor);
+            // 如果有依赖被剪枝，当前节点也剪枝（传递性）
+            if (deps.Any(d => prunedNodes.Contains(d)))
+            {
+                prunedNodes.Add(successor.NodeId);
+                continue;
+            }
+
+            if (deps.All(d => completed.Contains(d)))
+            {
+                readyQueue.Enqueue(successor);
+            }
+        }
+    }
+
+    // ==================== 节点执行 ====================
+
     private async Task<bool> ExecuteNodeWithRetryAsync(TaskGraph graph, TaskNode node, TaskGraphResult result, CancellationToken ct)
     {
-        // 已完成的节点跳过
-        var cp = _recoveryService.GetCheckpoint(graph.GraphId);
-        if (cp?.CompletedNodeIds.Contains(node.NodeId) == true)
+        if (IsNodeCheckpointed(graph, node))
             return true;
 
         for (int attempt = 0; attempt <= node.MaxRetries; attempt++)
@@ -165,41 +236,31 @@ public class ChainExecutionEngine
             {
                 _logger?.LogWarning("Node {NodeId} timed out after {TimeoutMs}ms",
                     node.NodeId, node.TimeoutMs);
-                // 超时后重试
             }
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Node {NodeId} failed on attempt {Attempt}", node.NodeId, attempt);
-                // 异常后重试
             }
         }
 
         return false;
     }
 
-    /// <summary>
-    /// 根据节点类型执行具体逻辑
-    /// </summary>
     private async Task<bool> ExecuteNodeAsync(TaskGraph graph, TaskNode node, CancellationToken ct)
     {
         switch (node)
         {
             case ActionNode action:
                 return await ExecuteActionNodeAsync(action, ct);
-
             case DelayNode delay:
                 await Task.Delay(delay.DelayMs, ct);
                 return true;
-
             case WaitNode wait:
                 return await ExecuteWaitNodeAsync(wait, ct);
-
             case ParallelNode parallel:
                 return await ExecuteParallelNodeAsync(graph, parallel, ct);
-
             case DecisionNode decision:
-                return await ExecuteDecisionNodeAsync(graph, decision, ct);
-
+                return await ExecuteDecisionNodeAsync(decision, ct);
             default:
                 _logger?.LogWarning("Unknown node type: {NodeType}", node.GetType().Name);
                 return false;
@@ -208,11 +269,11 @@ public class ChainExecutionEngine
 
     private Task<bool> ExecuteActionNodeAsync(ActionNode node, CancellationToken ct)
     {
-        // ActionNode 由外部处理器执行（如 PLC 写入、API 调用）
-        // 这里返回 true — 实际动作由注册的外部委托执行
         _logger?.LogInformation("Action node {NodeId}: type={ActionType}", node.NodeId, node.ActionType);
         return Task.FromResult(true);
     }
+
+    // ==================== WaitNode 事件驱动 ====================
 
     private async Task<bool> ExecuteWaitNodeAsync(WaitNode node, CancellationToken ct)
     {
@@ -222,17 +283,89 @@ public class ChainExecutionEngine
             return true;
         }
 
-        // Signal/External 类型需要外部条件满足
-        // 当前实现：轮询等待
-        var deadline = DateTime.UtcNow.AddMilliseconds(node.TimeoutMs);
-        while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
+        if (_waitHandlers.TryGetValue(node.ConditionType, out var handler))
         {
-            await Task.Delay(node.PollMs, ct);
-            // 等待外部信号置位 — 由外部调用 MarkConditionMet
+            return await handler(node, ct);
         }
 
-        return !ct.IsCancellationRequested;
+        _logger?.LogWarning("No handler registered for WaitNode condition type: {ConditionType}", node.ConditionType);
+        return false;
     }
+
+    /// <summary>
+    /// 默认 Signal 等待处理器 — 通过 EventBus 订阅 DeviceStateChangedEvent
+    /// ConditionExpression 格式: "DeviceId:ExpectedStatus"
+    /// 例如: "CV_101:Running" 表示等待 CV_101 设备进入 Running 状态
+    /// </summary>
+    private async Task<bool> ExecuteWaitSignalAsync(WaitNode node, CancellationToken ct)
+    {
+        if (_eventBus == null)
+        {
+            _logger?.LogWarning("WaitNode {NodeId}: EventBus not available, falling back to polling", node.NodeId);
+            await Task.Delay(node.PollMs, ct);
+            return true;
+        }
+
+        var tcs = new TaskCompletionSource<bool>();
+        using var ctReg = ct.Register(() => tcs.TrySetCanceled());
+
+        // 解析条件表达式: "DeviceId:ExpectedStatus"
+        var parts = node.ConditionExpression?.Split(':', 2) ?? Array.Empty<string>();
+        var targetDevice = parts.Length > 0 ? parts[0] : "";
+        var targetStatus = parts.Length > 1 ? parts[1] : "Running";
+
+        var handler = new DeviceStateEventHandler(tcs, targetDevice, targetStatus);
+        _eventBus.Subscribe(handler);
+
+        try
+        {
+            return await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(node.TimeoutMs), ct);
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            _eventBus.Unsubscribe(handler);
+        }
+    }
+
+    /// <summary>
+    /// 设备状态事件处理器 — 用于 WaitNode 等待特定设备状态
+    /// </summary>
+    private sealed class DeviceStateEventHandler : IEventHandler<DeviceStateChangedEvent>
+    {
+        private readonly TaskCompletionSource<bool> _tcs;
+        private readonly string _targetDevice;
+        private readonly string _targetStatus;
+        private bool _handled;
+
+        public DeviceStateEventHandler(TaskCompletionSource<bool> tcs, string targetDevice, string targetStatus)
+        {
+            _tcs = tcs;
+            _targetDevice = targetDevice;
+            _targetStatus = targetStatus;
+        }
+
+        public Task HandleAsync(DeviceStateChangedEvent @event, CancellationToken cancellationToken)
+        {
+            if (!_handled)
+            {
+                if (string.IsNullOrEmpty(_targetDevice) || @event.DeviceId == _targetDevice)
+                {
+                    if (@event.NewStatus.ToString() == _targetStatus || string.IsNullOrEmpty(_targetStatus))
+                    {
+                        _handled = true;
+                        _tcs.TrySetResult(true);
+                    }
+                }
+            }
+            return Task.CompletedTask;
+        }
+    }
+
+    // ==================== ParallelNode ====================
 
     private async Task<bool> ExecuteParallelNodeAsync(TaskGraph graph, ParallelNode node, CancellationToken ct)
     {
@@ -261,21 +394,48 @@ public class ChainExecutionEngine
         }
     }
 
-    private Task<bool> ExecuteDecisionNodeAsync(TaskGraph graph, DecisionNode node, CancellationToken ct)
+    // ==================== DecisionNode 条件分支 ====================
+
+    private async Task<bool> ExecuteDecisionNodeAsync(DecisionNode node, CancellationToken ct)
     {
-        // 决策条件评估由外部注入的决策器完成
-        // 此处返回 true — 实际决策逻辑通过 EventBus 或委托注入
-        _logger?.LogInformation("Decision node {NodeId}: expression={Expression}", node.NodeId, node.Expression);
-        return Task.FromResult(true);
+        // 查注册表执行条件评估
+        if (_decisionHandlers.TryGetValue(node.Expression, out var handler))
+        {
+            var result = await handler(node, ct);
+            _logger?.LogInformation("Decision node {NodeId}: expression={Expression} evaluated to {Result}",
+                node.NodeId, node.Expression, result);
+            return result;
+        }
+
+        if (_decisionHandlers.Count > 0)
+        {
+            _logger?.LogWarning("Decision node {NodeId}: no handler registered for expression '{Expression}', " +
+                "trying default handler", node.NodeId, node.Expression);
+
+            // 尝试默认 handler（如果有）
+            if (_decisionHandlers.TryGetValue("*", out var defaultHandler))
+                return await defaultHandler(node, ct);
+        }
+
+        _logger?.LogWarning("Decision node {NodeId}: no handler for expression '{Expression}', defaulting to true",
+            node.NodeId, node.Expression);
+        return true;
+    }
+
+    // ==================== 辅助方法 ====================
+
+    private bool IsNodeCheckpointed(TaskGraph graph, TaskNode node)
+    {
+        var cp = _recoveryService.GetCheckpoint(graph.GraphId);
+        return cp?.CompletedNodeIds.Contains(node.NodeId) == true;
     }
 
     private static Dictionary<string, int> BuildInDegreeMap(TaskGraph graph)
     {
         var inDegree = new Dictionary<string, int>();
         foreach (var node in graph.Nodes)
-        {
             inDegree[node.NodeId] = 0;
-        }
+
         foreach (var node in graph.Nodes)
         {
             foreach (var depId in node.DependsOn)

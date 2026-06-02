@@ -1,8 +1,10 @@
 namespace Wcs.Core.AlarmCenter;
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Wcs.Core.AlarmCenter.Engine;
 using Wcs.Core.AlarmCenter.Models;
+using Wcs.Core.Common.Interfaces;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.StateCenter.Models;
@@ -58,6 +60,21 @@ public interface IAlarmCenter
     /// 是否处于风暴模式
     /// </summary>
     bool IsInStormMode { get; }
+
+    /// <summary>
+    /// 按时间范围查询报警历史
+    /// </summary>
+    IEnumerable<AlarmState> GetAlarmsByTimeRange(DateTime from, DateTime to);
+
+    /// <summary>
+    /// 按报警代码+时间范围查询
+    /// </summary>
+    IEnumerable<AlarmState> GetAlarmsByCode(string alarmCode, DateTime from, DateTime to);
+
+    /// <summary>
+    /// 获取报警总数（含已恢复）
+    /// </summary>
+    int GetTotalCount();
 }
 
 /// <summary>
@@ -65,7 +82,7 @@ public interface IAlarmCenter
 /// Raw Signal → AlarmDebounceEngine → AlarmStormGuard → AlarmStateMachine
 ///   → AlarmAggregationEngine → EventBus
 /// </summary>
-public class AlarmCenter : IAlarmCenter
+public class AlarmCenter : IAlarmCenter, ISnapshotProvider
 {
     private readonly ConcurrentDictionary<string, AlarmState> _alarms = new();       // alarmId → state
     private readonly ConcurrentDictionary<string, AlarmRule> _rules = new();          // alarmCode → rule
@@ -292,6 +309,89 @@ public class AlarmCenter : IAlarmCenter
         });
     }
 
+    // ==================== 批量查询（Item 5） ====================
+
+    public IEnumerable<AlarmState> GetAlarmsByTimeRange(DateTime from, DateTime to)
+    {
+        return _alarms.Values
+            .Where(a => a.OccurTime >= from && a.OccurTime <= to)
+            .ToList();
+    }
+
+    public IEnumerable<AlarmState> GetAlarmsByCode(string alarmCode, DateTime from, DateTime to)
+    {
+        return _alarms.Values
+            .Where(a => a.AlarmCode == alarmCode && a.OccurTime >= from && a.OccurTime <= to)
+            .ToList();
+    }
+
+    public int GetTotalCount() => _alarms.Count;
+
+    // ==================== ISnapshotProvider ====================
+
+    public string ModuleName => "AlarmCenter";
+
+    public Task<object> CaptureSnapshotAsync(CancellationToken ct = default)
+    {
+        var snapshot = new AlarmCenterSnapshot
+        {
+            Alarms = _alarms.Values.ToList(),
+            Rules = _rules.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+        };
+        return Task.FromResult<object>(snapshot);
+    }
+
+    public Task RestoreSnapshotAsync(object snapshot, CancellationToken ct = default)
+    {
+        List<AlarmState>? alarms = null;
+        Dictionary<string, AlarmRule>? rules = null;
+
+        if (snapshot is JsonElement element)
+        {
+            var parsed = JsonSerializer.Deserialize<AlarmCenterSnapshot>(element.GetRawText());
+            if (parsed != null)
+            {
+                alarms = parsed.Alarms;
+                rules = parsed.Rules;
+            }
+        }
+        else if (snapshot is AlarmCenterSnapshot s)
+        {
+            alarms = s.Alarms;
+            rules = s.Rules;
+        }
+
+        if (alarms != null)
+        {
+            _alarms.Clear();
+            foreach (var alarm in alarms)
+            {
+                // 折叠中间态：PendingRaise → Active, PendingRecover → Recovered
+                var status = alarm.Status switch
+                {
+                    AlarmStatusEnum.PendingRaise => AlarmStatusEnum.Active,
+                    AlarmStatusEnum.PendingRecover => AlarmStatusEnum.Recovered,
+                    _ => alarm.Status
+                };
+                alarm.Status = status;
+                _alarms[alarm.AlarmId] = alarm;
+            }
+        }
+
+        if (rules != null)
+        {
+            _rules.Clear();
+            foreach (var kvp in rules)
+                _rules[kvp.Key] = kvp.Value;
+        }
+
+        // 重置瞬态引擎状态
+        _aggregation.Clear();
+        _stormGuard.Reset();
+
+        return Task.CompletedTask;
+    }
+
     // ==================== 清理 ====================
 
     public void Dispose()
@@ -300,4 +400,13 @@ public class AlarmCenter : IAlarmCenter
         _aggregation.Clear();
         _stormGuard.Reset();
     }
+}
+
+/// <summary>
+/// 报警中心快照 — 用于 ISnapshotProvider 序列化
+/// </summary>
+public class AlarmCenterSnapshot
+{
+    public List<AlarmState> Alarms { get; set; } = new();
+    public Dictionary<string, AlarmRule> Rules { get; set; } = new();
 }

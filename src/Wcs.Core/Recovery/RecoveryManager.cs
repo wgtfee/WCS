@@ -13,12 +13,12 @@ public interface ISnapshotRepository
     /// <summary>
     /// 保存快照
     /// </summary>
-    Task SaveSnapshotAsync(StateSnapshot snapshot, CancellationToken ct = default);
+    Task SaveSnapshotAsync(SystemSnapshot snapshot, CancellationToken ct = default);
 
     /// <summary>
     /// 加载最新快照
     /// </summary>
-    Task<StateSnapshot?> LoadLatestSnapshotAsync(CancellationToken ct = default);
+    Task<SystemSnapshot?> LoadLatestSnapshotAsync(CancellationToken ct = default);
 
     /// <summary>
     /// 获取快照列表
@@ -58,7 +58,7 @@ public class SnapshotRepository : ISnapshotRepository
         Directory.CreateDirectory(_storagePath);
     }
 
-    public async Task SaveSnapshotAsync(StateSnapshot snapshot, CancellationToken ct = default)
+    public async Task SaveSnapshotAsync(SystemSnapshot snapshot, CancellationToken ct = default)
     {
         var fileName = $"{FilePrefix}{DateTime.UtcNow:yyyyMMddHHmmssfff}{FileExtension}";
         var filePath = Path.Combine(_storagePath, fileName);
@@ -67,7 +67,7 @@ public class SnapshotRepository : ISnapshotRepository
         await File.WriteAllTextAsync(filePath, json, ct);
     }
 
-    public async Task<StateSnapshot?> LoadLatestSnapshotAsync(CancellationToken ct = default)
+    public async Task<SystemSnapshot?> LoadLatestSnapshotAsync(CancellationToken ct = default)
     {
         var files = Directory.GetFiles(_storagePath, $"{FilePrefix}*{FileExtension}")
             .OrderByDescending(f => f)
@@ -76,7 +76,29 @@ public class SnapshotRepository : ISnapshotRepository
         if (files.Count == 0) return null;
 
         var json = await File.ReadAllTextAsync(files[0], ct);
-        return JsonSerializer.Deserialize<StateSnapshot>(json);
+
+        // 尝试新格式 (SystemSnapshot)
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("ModuleSnapshots", out _))
+        {
+            return JsonSerializer.Deserialize<SystemSnapshot>(json);
+        }
+
+        // 旧格式 (StateSnapshot) — 转换为 SystemSnapshot，仅包含 StateCenter
+        var stateSnapshot = JsonSerializer.Deserialize<StateSnapshot>(json);
+        if (stateSnapshot != null)
+        {
+            return new SystemSnapshot
+            {
+                Timestamp = stateSnapshot.SnapshotTime,
+                ModuleSnapshots = new()
+                {
+                    ["StateCenter"] = JsonSerializer.SerializeToElement(stateSnapshot)
+                }
+            };
+        }
+
+        return null;
     }
 
     public Task<IEnumerable<SnapshotMetadata>> GetSnapshotListAsync(CancellationToken ct = default)
@@ -191,23 +213,17 @@ public class RecoveryManager : IRecoveryManager
     {
         var result = new RecoveryResult();
 
-        var stateSnapshot = await _snapshotRepo.LoadLatestSnapshotAsync(ct);
-        if (stateSnapshot == null)
+        var sysSnapshot = await _snapshotRepo.LoadLatestSnapshotAsync(ct);
+        if (sysSnapshot == null)
         {
             result.Message = "No snapshot found for recovery";
             return result;
         }
 
-        // 构建模块快照字典
-        var moduleData = new Dictionary<string, object>
-        {
-            ["StateCenter"] = stateSnapshot
-        };
-
-        // 按依赖反序恢复
+        // 按依赖反序恢复：StateCenter → ObjectTracking → AlarmCenter → TaskChain
         foreach (var moduleName in RestoreOrder)
         {
-            if (!moduleData.TryGetValue(moduleName, out var data))
+            if (!sysSnapshot.ModuleSnapshots.TryGetValue(moduleName, out var element))
                 continue;
 
             var provider = _providers.FirstOrDefault(p => p.ModuleName == moduleName);
@@ -216,7 +232,7 @@ public class RecoveryManager : IRecoveryManager
 
             try
             {
-                await provider.RestoreSnapshotAsync(data, ct);
+                await provider.RestoreSnapshotAsync(element, ct);
                 result.RestoredModules.Add(moduleName);
             }
             catch (Exception ex)
@@ -233,15 +249,12 @@ public class RecoveryManager : IRecoveryManager
 
     public async Task SaveSnapshotAsync(CancellationToken ct = default)
     {
-        // 从 StateCenter 收集快照
-        var stateProvider = _providers.FirstOrDefault(p => p.ModuleName == "StateCenter");
-        if (stateProvider != null)
+        var sysSnapshot = new SystemSnapshot();
+        foreach (var provider in _providers)
         {
-            var snapshotObj = await stateProvider.CaptureSnapshotAsync(ct);
-            if (snapshotObj is StateSnapshot stateSnapshot)
-            {
-                await _snapshotRepo.SaveSnapshotAsync(stateSnapshot, ct);
-            }
+            var data = await provider.CaptureSnapshotAsync(ct);
+            sysSnapshot.ModuleSnapshots[provider.ModuleName] = JsonSerializer.SerializeToElement(data);
         }
+        await _snapshotRepo.SaveSnapshotAsync(sysSnapshot, ct);
     }
 }

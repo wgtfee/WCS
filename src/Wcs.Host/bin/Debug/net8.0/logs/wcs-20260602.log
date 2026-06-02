@@ -1,0 +1,6 @@
+2026-06-02 10:36:00.063 [INF] WCS Runtime Engine 启动中...
+2026-06-02 10:36:00.124 [INF] PLC polling service starting
+2026-06-02 10:36:00.125 [INF] Starting PLC polling service
+2026-06-02 10:36:00.136 [INF] Snapshot service started (interval: "00:00:05")
+2026-06-02 10:36:00.206 [INF] Persist service started (interval: "00:00:10")
+2026-06-02 10:36:00.207 [INF] Alarm monitor service started
