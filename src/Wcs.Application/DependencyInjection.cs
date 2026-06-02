@@ -2,6 +2,7 @@ namespace Wcs.Application;
 
 using Wcs.Application.Services;
 using Wcs.Core.AlarmCenter;
+using Wcs.Core.Common.Interfaces;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.ObjectTracking;
 using Wcs.Core.Recovery;
@@ -22,7 +23,10 @@ public static class DependencyInjection
     public static IServiceCollection AddWcsApplication(this IServiceCollection services)
     {
         // Core singletons
-        services.AddSingleton<IStateCenter, StateCenter>();
+        // StateCenter: 先注册实例，EventBus 是可选依赖
+        services.AddSingleton<StateCenter>(_ => new StateCenter());
+        services.AddSingleton<IStateCenter>(sp => sp.GetRequiredService<StateCenter>());
+        services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<StateCenter>());
         services.AddSingleton<IEventBus, EventBus>();
         services.AddSingleton<IIdempotencyManager, IdempotencyManager>();
         services.AddSingleton<ITaskScheduler, TaskScheduler>();
@@ -38,7 +42,7 @@ public static class DependencyInjection
         services.AddSingleton<ISnapshotRepository, SnapshotRepository>();
         services.AddSingleton<IRecoveryManager>(sp =>
             new RecoveryManager(
-                sp.GetRequiredService<IStateCenter>(),
+                sp.GetServices<ISnapshotProvider>(),
                 sp.GetRequiredService<ISnapshotRepository>()));
 
         // Task engine

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj": {}
+    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj": {}
   },
   "projects": {
-    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj": {
+    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
+        "projectUniqueName": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
         "projectName": "Wcs.Application",
-        "projectPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
+        "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
         "packagesPath": "F:\\_packages",
-        "outputPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\obj\\",
+        "outputPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "D:\\dev23.1\\Offline Packages",

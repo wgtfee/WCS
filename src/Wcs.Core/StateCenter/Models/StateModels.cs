@@ -119,14 +119,43 @@ public enum TaskStatusEnum
 }
 
 /// <summary>
-/// 报警状态枚举
+/// 报警状态枚举（5 状态生命周期的扁平映射）
 /// </summary>
 public enum AlarmStatusEnum
 {
-    Active = 0,
-    Acknowledged = 1,
-    Recovered = 2
+    /// <summary>正常 / 无报警</summary>
+    Normal = 0,
+    /// <summary>Pending — 延迟确认中（防抖期间）</summary>
+    PendingRaise = 1,
+    /// <summary>报警已激活</summary>
+    Active = 2,
+    /// <summary>操作员已确认</summary>
+    Acknowledged = 3,
+    /// <summary>PendingRecover — 恢复延迟确认中</summary>
+    PendingRecover = 4,
+    /// <summary>已恢复</summary>
+    Recovered = 5
 }
+
+/// <summary>
+/// 报警规则配置 — 每种 AlarmCode 对应一条规则
+/// </summary>
+public class AlarmRule
+{
+    public string AlarmCode { get; set; } = string.Empty;
+    public AlarmLevelEnum Level { get; set; } = AlarmLevelEnum.Warning;
+    public int DelayRaiseMs { get; set; } = 3000;       // 防抖确认时间
+    public int DelayRecoverMs { get; set; } = 5000;     // 防抖恢复时间
+    public bool AutoAck { get; set; } = false;           // 自动确认
+    public int SuppressionWindowSec { get; set; } = 60;  // 风暴抑制窗口（秒）
+    public int SuppressionThreshold { get; set; } = 10;  // 窗口内触发次数阈值
+    public string? AlarmGroup { get; set; }              // 聚合分组（同组做根因归并）
+}
+
+/// <summary>
+/// 报警聚合分组键
+/// </summary>
+public record AlarmGroupKey(string DeviceId, string AlarmGroup);
 
 /// <summary>
 /// 报警级别枚举

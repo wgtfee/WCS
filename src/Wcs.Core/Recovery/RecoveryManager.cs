@@ -1,5 +1,8 @@
 namespace Wcs.Core.Recovery;
 
+using System.Collections.Concurrent;
+using System.Text.Json;
+using Wcs.Core.Common.Interfaces;
 using Wcs.Core.StateCenter.Interfaces;
 
 /// <summary>
@@ -42,7 +45,6 @@ public class SnapshotMetadata
 
 /// <summary>
 /// 基于内存文件系统的快照仓库
-/// 生产环境应替换为数据库持久化
 /// </summary>
 public class SnapshotRepository : ISnapshotRepository
 {
@@ -61,11 +63,7 @@ public class SnapshotRepository : ISnapshotRepository
         var fileName = $"{FilePrefix}{DateTime.UtcNow:yyyyMMddHHmmssfff}{FileExtension}";
         var filePath = Path.Combine(_storagePath, fileName);
 
-        var json = System.Text.Json.JsonSerializer.Serialize(snapshot, new System.Text.Json.JsonSerializerOptions
-        {
-            WriteIndented = false
-        });
-
+        var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = false });
         await File.WriteAllTextAsync(filePath, json, ct);
     }
 
@@ -78,7 +76,7 @@ public class SnapshotRepository : ISnapshotRepository
         if (files.Count == 0) return null;
 
         var json = await File.ReadAllTextAsync(files[0], ct);
-        return System.Text.Json.JsonSerializer.Deserialize<StateSnapshot>(json);
+        return JsonSerializer.Deserialize<StateSnapshot>(json);
     }
 
     public Task<IEnumerable<SnapshotMetadata>> GetSnapshotListAsync(CancellationToken ct = default)
@@ -110,11 +108,7 @@ public class SnapshotRepository : ISnapshotRepository
         var removed = 0;
         foreach (var file in files.Skip(keepCount))
         {
-            try
-            {
-                File.Delete(file);
-                removed++;
-            }
+            try { File.Delete(file); removed++; }
             catch { }
         }
 
@@ -124,7 +118,16 @@ public class SnapshotRepository : ISnapshotRepository
 }
 
 /// <summary>
-/// 恢复管理器
+/// 复合系统快照 — 包含多个模块的独立快照数据
+/// </summary>
+public class SystemSnapshot
+{
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public Dictionary<string, JsonElement> ModuleSnapshots { get; set; } = new();
+}
+
+/// <summary>
+/// 恢复管理器接口
 /// </summary>
 public interface IRecoveryManager
 {
@@ -132,6 +135,11 @@ public interface IRecoveryManager
     /// 执行系统恢复
     /// </summary>
     Task<RecoveryResult> RecoverAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// 保存当前系统快照
+    /// </summary>
+    Task SaveSnapshotAsync(CancellationToken ct = default);
 
     /// <summary>
     /// 检查是否需要恢复
@@ -146,23 +154,30 @@ public class RecoveryResult
 {
     public bool Success { get; set; }
     public DateTime RecoveryTime { get; set; } = DateTime.UtcNow;
-    public int RestoredDevices { get; set; }
-    public int RestoredTasks { get; set; }
-    public int RestoredAlarms { get; set; }
+    public List<string> RestoredModules { get; set; } = new();
     public string? Message { get; set; }
 }
 
 /// <summary>
-/// 恢复管理器实现
+/// 多模块恢复管理器 — 协调所有 ISnapshotProvider 的快照与恢复
+/// 恢复顺序：StateCenter → ObjectTracking → AlarmCenter → TaskChain（依赖反序）
 /// </summary>
 public class RecoveryManager : IRecoveryManager
 {
-    private readonly IStateCenter _stateCenter;
+    private readonly IEnumerable<ISnapshotProvider> _providers;
     private readonly ISnapshotRepository _snapshotRepo;
 
-    public RecoveryManager(IStateCenter stateCenter, ISnapshotRepository snapshotRepo)
+    // 恢复顺序：先恢复基础状态，再恢复高级模块
+    private static readonly string[] RestoreOrder = {
+        "StateCenter",
+        "ObjectTracking",
+        "AlarmCenter",
+        "TaskChain"
+    };
+
+    public RecoveryManager(IEnumerable<ISnapshotProvider> providers, ISnapshotRepository snapshotRepo)
     {
-        _stateCenter = stateCenter ?? throw new ArgumentNullException(nameof(stateCenter));
+        _providers = providers ?? throw new ArgumentNullException(nameof(providers));
         _snapshotRepo = snapshotRepo ?? throw new ArgumentNullException(nameof(snapshotRepo));
     }
 
@@ -176,21 +191,57 @@ public class RecoveryManager : IRecoveryManager
     {
         var result = new RecoveryResult();
 
-        var snapshot = await _snapshotRepo.LoadLatestSnapshotAsync(ct);
-        if (snapshot == null)
+        var stateSnapshot = await _snapshotRepo.LoadLatestSnapshotAsync(ct);
+        if (stateSnapshot == null)
         {
-            result.Message = "没有找到可恢复的快照";
+            result.Message = "No snapshot found for recovery";
             return result;
         }
 
-        _stateCenter.RestoreFromSnapshot(snapshot);
+        // 构建模块快照字典
+        var moduleData = new Dictionary<string, object>
+        {
+            ["StateCenter"] = stateSnapshot
+        };
+
+        // 按依赖反序恢复
+        foreach (var moduleName in RestoreOrder)
+        {
+            if (!moduleData.TryGetValue(moduleName, out var data))
+                continue;
+
+            var provider = _providers.FirstOrDefault(p => p.ModuleName == moduleName);
+            if (provider == null)
+                continue;
+
+            try
+            {
+                await provider.RestoreSnapshotAsync(data, ct);
+                result.RestoredModules.Add(moduleName);
+            }
+            catch (Exception ex)
+            {
+                result.Message = $"Failed to restore module '{moduleName}': {ex.Message}";
+                return result;
+            }
+        }
 
         result.Success = true;
-        result.RestoredDevices = snapshot.DeviceStates.Count;
-        result.RestoredTasks = snapshot.TaskRuntimes.Count;
-        result.RestoredAlarms = snapshot.AlarmStates.Count;
-        result.Message = $"从快照 {snapshot.SnapshotTime:O} 恢复成功";
-
+        result.Message = $"System recovered: {string.Join(", ", result.RestoredModules)}";
         return result;
+    }
+
+    public async Task SaveSnapshotAsync(CancellationToken ct = default)
+    {
+        // 从 StateCenter 收集快照
+        var stateProvider = _providers.FirstOrDefault(p => p.ModuleName == "StateCenter");
+        if (stateProvider != null)
+        {
+            var snapshotObj = await stateProvider.CaptureSnapshotAsync(ct);
+            if (snapshotObj is StateSnapshot stateSnapshot)
+            {
+                await _snapshotRepo.SaveSnapshotAsync(stateSnapshot, ct);
+            }
+        }
     }
 }

@@ -1,7 +1,7 @@
 {
   "format": 1,
   "restore": {
-    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj": {}
+    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj": {}
   },
   "projects": {
     "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Core\\Wcs.Core.csproj": {
@@ -90,14 +90,14 @@
         }
       }
     },
-    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj": {
+    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj",
+        "projectUniqueName": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj",
         "projectName": "Wcs.Desktop",
-        "projectPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj",
+        "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj",
         "packagesPath": "F:\\_packages",
-        "outputPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\obj\\",
+        "outputPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "D:\\dev23.1\\Offline Packages",

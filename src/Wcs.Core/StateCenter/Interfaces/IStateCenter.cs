@@ -1,12 +1,15 @@
 namespace Wcs.Core.StateCenter.Interfaces;
 
+using Wcs.Core.StateCenter.Features;
 using Wcs.Core.StateCenter.Models;
 
 /// <summary>
-/// StateCenter 接口 - 系统实时状态中心
+/// StateCenter 接口 - 系统实时状态中心（system truth）
 /// </summary>
 public interface IStateCenter
 {
+    // ========== 设备状态 ==========
+
     /// <summary>
     /// 更新设备状态
     /// </summary>
@@ -21,6 +24,8 @@ public interface IStateCenter
     /// 获取所有设备状态
     /// </summary>
     IEnumerable<DeviceState> GetAllDeviceStates();
+
+    // ========== 任务运行时 ==========
 
     /// <summary>
     /// 更新任务运行时
@@ -37,6 +42,8 @@ public interface IStateCenter
     /// </summary>
     IEnumerable<TaskRuntime> GetAllActiveTasks();
 
+    // ========== 报警状态 ==========
+
     /// <summary>
     /// 更新报警状态
     /// </summary>
@@ -52,6 +59,8 @@ public interface IStateCenter
     /// </summary>
     IEnumerable<AlarmState> GetActiveAlarms();
 
+    // ========== 物体状态 ==========
+
     /// <summary>
     /// 更新物体状态
     /// </summary>
@@ -61,6 +70,8 @@ public interface IStateCenter
     /// 获取物体状态
     /// </summary>
     ObjectState? GetObjectState(string objectId);
+
+    // ========== PLC 数据块 ==========
 
     /// <summary>
     /// 更新PLC数据块状态
@@ -72,13 +83,15 @@ public interface IStateCenter
     /// </summary>
     PlcBlockState? GetPlcBlockState(string blockName);
 
-    /// <summary>
-    /// 清空所有状态（恢复时使用）
-    /// </summary>
-    void Clear();
+    // ========== 快照与恢复 ==========
 
     /// <summary>
-    /// 获取状态快照（用于恢复）
+    /// 获取指定类型的快照字典（泛型，原子一致）
+    /// </summary>
+    IReadOnlyDictionary<string, T> GetSnapshot<T>();
+
+    /// <summary>
+    /// 获取完整状态快照（用于持久化）
     /// </summary>
     StateSnapshot GetSnapshot();
 
@@ -86,6 +99,40 @@ public interface IStateCenter
     /// 从快照恢复状态
     /// </summary>
     void RestoreFromSnapshot(StateSnapshot snapshot);
+
+    /// <summary>
+    /// 清空所有状态（恢复时使用）
+    /// </summary>
+    void Clear();
+
+    // ========== 批量更新 ==========
+
+    /// <summary>
+    /// 开始批量更新作用域 — 退出时统一触发一次通知
+    /// </summary>
+    IBatchScope BeginBatch();
+
+    // ========== Per-key 订阅 ==========
+
+    /// <summary>
+    /// 订阅指定 key 的变更通知
+    /// </summary>
+    IDisposable WatchDevice(string deviceId, Action<DeviceState> handler);
+
+    /// <summary>
+    /// 订阅指定 taskId 的变更通知
+    /// </summary>
+    IDisposable WatchTask(string taskId, Action<TaskRuntime> handler);
+
+    /// <summary>
+    /// 订阅指定 alarmId 的变更通知
+    /// </summary>
+    IDisposable WatchAlarm(string alarmId, Action<AlarmState> handler);
+
+    /// <summary>
+    /// 订阅指定 objectId 的变更通知
+    /// </summary>
+    IDisposable WatchObject(string objectId, Action<ObjectState> handler);
 }
 
 /// <summary>

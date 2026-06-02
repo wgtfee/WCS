@@ -1,8 +1,11 @@
 namespace Wcs.Core.AlarmCenter;
 
-using Wcs.Core.StateCenter.Models;
+using System.Collections.Concurrent;
+using Wcs.Core.AlarmCenter.Engine;
+using Wcs.Core.AlarmCenter.Models;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
+using Wcs.Core.StateCenter.Models;
 
 /// <summary>
 /// 报警中心接口
@@ -10,19 +13,21 @@ using Wcs.Core.EventBus.Publisher;
 public interface IAlarmCenter
 {
     /// <summary>
-    /// 产生报警
+    /// 原始报警信号到达 — 经防抖→风暴抑制→状态机→聚合后产生实际报警
     /// </summary>
-    Task RaiseAlarmAsync(string alarmCode, AlarmLevelEnum level, string message, string? source = null, CancellationToken ct = default);
+    Task RaiseAlarmAsync(string alarmCode, AlarmLevelEnum level, string message,
+        string? source = null, string? deviceId = null, string? alarmGroup = null,
+        CancellationToken ct = default);
 
     /// <summary>
-    /// 确认报警
-    /// </summary>
-    Task AcknowledgeAlarmAsync(string alarmId, CancellationToken ct = default);
-
-    /// <summary>
-    /// 恢复报警
+    /// 原始恢复信号到达 — 经防抖→状态机→聚合后恢复报警
     /// </summary>
     Task RecoverAlarmAsync(string alarmCode, CancellationToken ct = default);
+
+    /// <summary>
+    /// 确认报警（仅 Active 状态可用）
+    /// </summary>
+    Task AcknowledgeAlarmAsync(string alarmId, CancellationToken ct = default);
 
     /// <summary>
     /// 获取报警状态
@@ -30,7 +35,7 @@ public interface IAlarmCenter
     AlarmState? GetAlarm(string alarmId);
 
     /// <summary>
-    /// 获取所有活跃报警
+    /// 获取所有活跃报警（含 PendingRecover）
     /// </summary>
     IEnumerable<AlarmState> GetActiveAlarms();
 
@@ -40,77 +45,214 @@ public interface IAlarmCenter
     IEnumerable<AlarmState> GetAlarmsByLevel(AlarmLevelEnum level);
 
     /// <summary>
-    /// 获取报警总数
+    /// 获取活跃报警数
     /// </summary>
     int GetActiveCount();
+
+    /// <summary>
+    /// 注册/更新报警规则
+    /// </summary>
+    void SetAlarmRule(AlarmRule rule);
+
+    /// <summary>
+    /// 是否处于风暴模式
+    /// </summary>
+    bool IsInStormMode { get; }
 }
 
 /// <summary>
-/// 报警中心实现 - 统一管理报警产生、确认、恢复
+/// 报警中心实现 — 5 层报警管线：
+/// Raw Signal → AlarmDebounceEngine → AlarmStormGuard → AlarmStateMachine
+///   → AlarmAggregationEngine → EventBus
 /// </summary>
 public class AlarmCenter : IAlarmCenter
 {
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, AlarmState> _alarms = new();
+    private readonly ConcurrentDictionary<string, AlarmState> _alarms = new();       // alarmId → state
+    private readonly ConcurrentDictionary<string, AlarmRule> _rules = new();          // alarmCode → rule
     private readonly IEventBus _eventBus;
+    private readonly AlarmDebounceEngine _debounceEngine;
+    private readonly AlarmStormGuard _stormGuard;
+    private readonly AlarmAggregationEngine _aggregation;
+
+    public bool IsInStormMode => _stormGuard.IsInStormMode;
+
+    /// <summary>
+    /// 默认规则 — 给未注册的 AlarmCode 使用
+    /// </summary>
+    private static readonly AlarmRule DefaultRule = new()
+    {
+        AlarmCode = "*",
+        Level = AlarmLevelEnum.Warning,
+        DelayRaiseMs = 1000,
+        DelayRecoverMs = 3000,
+        SuppressionWindowSec = 60,
+        SuppressionThreshold = 10
+    };
 
     public AlarmCenter(IEventBus eventBus)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+
+        _aggregation = new AlarmAggregationEngine();
+
+        _stormGuard = new AlarmStormGuard(windowSeconds: 60, globalMaxPerWindow: 1000);
+        _stormGuard.StormStarted += () => OnStormEvent(true);
+        _stormGuard.StormEnded += () => OnStormEvent(false);
+
+        _debounceEngine = new AlarmDebounceEngine(
+            onConfirmedRaise: OnDebounceConfirmedRaise,
+            onConfirmedRecover: OnDebounceConfirmedRecover,
+            onCanceledRaise: OnDebounceCanceledRaise,
+            onRebounce: OnDebounceRebounce
+        );
     }
 
-    public async Task RaiseAlarmAsync(string alarmCode, AlarmLevelEnum level, string message, string? source = null, CancellationToken ct = default)
+    // ==================== 规则管理 ====================
+
+    public void SetAlarmRule(AlarmRule rule)
     {
+        _rules[rule.AlarmCode] = rule;
+    }
+
+    private AlarmRule GetRule(string alarmCode)
+    {
+        return _rules.TryGetValue(alarmCode, out var rule) ? rule : DefaultRule;
+    }
+
+    // ==================== 报警信号入口 ====================
+
+    public Task RaiseAlarmAsync(string alarmCode, AlarmLevelEnum level, string message,
+        string? source = null, string? deviceId = null, string? alarmGroup = null,
+        CancellationToken ct = default)
+    {
+        // Step 1: 查找规则
+        var rule = GetRule(alarmCode);
+
+        // Step 2: 防抖 — 信号进入 DelayRaise 窗口
+        _debounceEngine.SignalRaise(alarmCode, rule);
+
+        return Task.CompletedTask;
+    }
+
+    public Task RecoverAlarmAsync(string alarmCode, CancellationToken ct = default)
+    {
+        // Step 1: 查找规则
+        var rule = GetRule(alarmCode);
+
+        // Step 2: 防抖 — 信号进入 DelayRecover 窗口
+        _debounceEngine.SignalRecover(alarmCode, rule);
+
+        return Task.CompletedTask;
+    }
+
+    // ==================== 防抖回调 ====================
+
+    /// <summary>
+    /// DelayRaise 到期 — 确认报警
+    /// </summary>
+    private void OnDebounceConfirmedRaise(string alarmCode)
+    {
+        var rule = GetRule(alarmCode);
+
+        // Step 3: 风暴检测
+        if (!_stormGuard.CheckAndCount(alarmCode, rule))
+        {
+            // 被风暴抑制，不产生报警实体
+            return;
+        }
+
         var alarmId = $"ALM-{alarmCode}-{DateTime.UtcNow:yyyyMMddHHmmssfff}";
         var alarm = new AlarmState
         {
             AlarmId = alarmId,
             AlarmCode = alarmCode,
             Status = AlarmStatusEnum.Active,
-            Level = level,
-            Message = $"[{source ?? "WCS"}] {message}",
+            Level = rule.Level,
+            Message = $"[WCS] {alarmCode}",
             OccurTime = DateTime.UtcNow
         };
-
         _alarms[alarmId] = alarm;
 
-        await _eventBus.PublishAsync(new AlarmRaisedEvent
+        // Step 4: 聚合检测
+        bool isRoot = _aggregation.RegisterAlarm(alarmId, alarmCode, rule.AlarmGroup);
+        if (!isRoot)
+        {
+            // 是子报警，不在面板上显示
+            alarm.Status = AlarmStatusEnum.Recovered;
+        }
+
+        // 发布事件
+        _eventBus.PublishAsync(new AlarmRaisedEvent
         {
             AlarmId = alarmId,
             AlarmCode = alarmCode,
-            Level = level,
-            Message = message,
-            AlarmState = alarm
-        }, ct);
+            Level = rule.Level,
+            Message = alarmCode
+        });
     }
+
+    /// <summary>
+    /// DelayRecover 到期 — 确认恢复
+    /// </summary>
+    private void OnDebounceConfirmedRecover(string alarmCode)
+    {
+        // 找到所有该 alarmCode 的活跃报警
+        var toRecover = _alarms.Values
+            .Where(a => a.AlarmCode == alarmCode && AlarmStateMachine.IsActive(a.Status))
+            .ToList();
+
+        foreach (var alarm in toRecover)
+        {
+            AlarmStateMachine.Transition(alarm, AlarmStatusEnum.Recovered);
+            alarm.RecoverTime = DateTime.UtcNow;
+
+            // 如果是根因，释放子报警
+            var released = _aggregation.RecoverGroup(alarm.AlarmId);
+        }
+
+        // 发布事件
+        _eventBus.PublishAsync(new AlarmRecoveredEvent
+        {
+            AlarmCode = alarmCode,
+            RecoverTime = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// PendingRaise 期间信号消失 — 取消报警
+    /// </summary>
+    private void OnDebounceCanceledRaise(string alarmCode)
+    {
+        // 无需产生报警记录
+    }
+
+    /// <summary>
+    /// PendingRecover 期间信号重新触发 — 回到 Active
+    /// </summary>
+    private void OnDebounceRebounce(string alarmCode)
+    {
+        foreach (var alarm in _alarms.Values
+            .Where(a => a.AlarmCode == alarmCode && a.Status == AlarmStatusEnum.PendingRecover))
+        {
+            AlarmStateMachine.Transition(alarm, AlarmStatusEnum.Active);
+        }
+    }
+
+    // ==================== 用户操作 ====================
 
     public Task AcknowledgeAlarmAsync(string alarmId, CancellationToken ct = default)
     {
-        if (_alarms.TryGetValue(alarmId, out var alarm) && alarm.Status == AlarmStatusEnum.Active)
+        if (_alarms.TryGetValue(alarmId, out var alarm))
         {
-            alarm.Status = AlarmStatusEnum.Acknowledged;
+            if (alarm.Status == AlarmStatusEnum.Active)
+            {
+                AlarmStateMachine.Transition(alarm, AlarmStatusEnum.Acknowledged);
+            }
         }
         return Task.CompletedTask;
     }
 
-    public async Task RecoverAlarmAsync(string alarmCode, CancellationToken ct = default)
-    {
-        foreach (var kvp in _alarms)
-        {
-            if (kvp.Value.AlarmCode == alarmCode &&
-                (kvp.Value.Status == AlarmStatusEnum.Active || kvp.Value.Status == AlarmStatusEnum.Acknowledged))
-            {
-                kvp.Value.Status = AlarmStatusEnum.Recovered;
-                kvp.Value.RecoverTime = DateTime.UtcNow;
-
-                await _eventBus.PublishAsync(new AlarmRecoveredEvent
-                {
-                    AlarmId = kvp.Key,
-                    AlarmCode = alarmCode,
-                    RecoverTime = kvp.Value.RecoverTime.Value
-                }, ct);
-            }
-        }
-    }
+    // ==================== 查询 ====================
 
     public AlarmState? GetAlarm(string alarmId)
     {
@@ -121,7 +263,7 @@ public class AlarmCenter : IAlarmCenter
     public IEnumerable<AlarmState> GetActiveAlarms()
     {
         return _alarms.Values
-            .Where(a => a.Status == AlarmStatusEnum.Active || a.Status == AlarmStatusEnum.Acknowledged)
+            .Where(a => AlarmStateMachine.IsVisible(a.Status))
             .ToList();
     }
 
@@ -132,6 +274,30 @@ public class AlarmCenter : IAlarmCenter
 
     public int GetActiveCount()
     {
-        return _alarms.Values.Count(a => a.Status == AlarmStatusEnum.Active);
+        return _alarms.Values.Count(a =>
+            a.Status == AlarmStatusEnum.Active ||
+            a.Status == AlarmStatusEnum.Acknowledged);
+    }
+
+    // ==================== 风暴事件 ====================
+
+    private void OnStormEvent(bool started)
+    {
+        _eventBus.PublishAsync(new AlarmRaisedEvent
+        {
+            AlarmId = "SYSTEM-ALARMSTORM",
+            AlarmCode = "ALARM_STORM",
+            Level = AlarmLevelEnum.Critical,
+            Message = started ? "Alarm storm detected — suppression active" : "Alarm storm ended — suppression released"
+        });
+    }
+
+    // ==================== 清理 ====================
+
+    public void Dispose()
+    {
+        _debounceEngine.Dispose();
+        _aggregation.Clear();
+        _stormGuard.Reset();
     }
 }

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\Wcs.Host.csproj": {}
+    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\Wcs.Host.csproj": {}
   },
   "projects": {
-    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj": {
+    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
+        "projectUniqueName": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
         "projectName": "Wcs.Application",
-        "projectPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
+        "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
         "packagesPath": "F:\\_packages",
-        "outputPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\obj\\",
+        "outputPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "D:\\dev23.1\\Offline Packages",
@@ -176,14 +176,14 @@
         }
       }
     },
-    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\Wcs.Host.csproj": {
+    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\Wcs.Host.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\Wcs.Host.csproj",
+        "projectUniqueName": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\Wcs.Host.csproj",
         "projectName": "Wcs.Host",
-        "projectPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\Wcs.Host.csproj",
+        "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\Wcs.Host.csproj",
         "packagesPath": "F:\\_packages",
-        "outputPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\obj\\",
+        "outputPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Host\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "D:\\dev23.1\\Offline Packages",
@@ -211,14 +211,14 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj": {
-                "projectPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj"
+              "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj": {
+                "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj"
               },
               "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Core\\Wcs.Core.csproj": {
                 "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Core\\Wcs.Core.csproj"
               },
-              "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj": {
-                "projectPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj"
+              "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj": {
+                "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj"
               }
             }
           }
@@ -279,14 +279,14 @@
         }
       }
     },
-    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj": {
+    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj",
+        "projectUniqueName": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj",
         "projectName": "Wcs.Infrastructure",
-        "projectPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj",
+        "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj",
         "packagesPath": "F:\\_packages",
-        "outputPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\obj\\",
+        "outputPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "D:\\dev23.1\\Offline Packages",

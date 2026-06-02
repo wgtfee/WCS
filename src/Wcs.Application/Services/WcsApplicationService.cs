@@ -179,7 +179,7 @@ public class WcsApplicationService
     /// </summary>
     public async Task RaiseAlarmAsync(string code, AlarmLevelEnum level, string msg,
         string? source = null, CancellationToken ct = default)
-        => await _alarmCenter.RaiseAlarmAsync(code, level, msg, source, ct);
+        => await _alarmCenter.RaiseAlarmAsync(code, level, msg, source: source, ct: ct);
 
     /// <summary>
     /// 确认报警

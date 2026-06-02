@@ -45,7 +45,7 @@ public class AlarmMonitorBackgroundService : BackgroundService
                     foreach (var dl in deadlocks)
                     {
                         await _alarmCenter.RaiseAlarmAsync("DEADLOCK", AlarmLevelEnum.Warning,
-                            dl.ToString(), "DeadlockDetector", stoppingToken);
+                            dl.ToString(), source: "DeadlockDetector", ct: stoppingToken);
                     }
 
                     var resolved = _deadlockDetector.ResolveDeadlocks();

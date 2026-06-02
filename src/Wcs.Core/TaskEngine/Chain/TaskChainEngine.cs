@@ -1,5 +1,6 @@
 namespace Wcs.Core.TaskEngine.Chain;
 
+using Microsoft.Extensions.Logging;
 using Wcs.Core.TaskEngine.Context;
 using Wcs.Core.TaskEngine.Orchestrator;
 using Wcs.Core.TaskEngine.Scheduler;
@@ -111,6 +112,11 @@ public interface ITaskChainEngine
     Task<TaskChainResult> ExecuteSerialAsync(IEnumerable<TaskContext> tasks, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 执行 DAG 任务图
+    /// </summary>
+    Task<TaskGraphResult> ExecuteGraphAsync(TaskGraph graph, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 获取链执行结果
     /// </summary>
     TaskChainResult? GetChainResult(string chainId);
@@ -154,13 +160,18 @@ public class TaskChainEngine : ITaskChainEngine
 {
     private readonly ITaskOrchestrator _orchestrator;
     private readonly ITaskScheduler _scheduler;
+    private readonly ChainExecutionEngine? _dagEngine;
     private readonly Dictionary<string, TaskChainResult> _results = new();
     private readonly object _resultLock = new();
 
-    public TaskChainEngine(ITaskOrchestrator orchestrator, ITaskScheduler scheduler)
+    public TaskChainEngine(
+        ITaskOrchestrator orchestrator,
+        ITaskScheduler scheduler,
+        ChainExecutionEngine? dagEngine = null)
     {
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
         _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
+        _dagEngine = dagEngine;
     }
 
     public async Task<TaskChainResult> ExecuteChainAsync(TaskChain chain, CancellationToken cancellationToken = default)
@@ -202,6 +213,14 @@ public class TaskChainEngine : ITaskChainEngine
         }
 
         return result;
+    }
+
+    public async Task<TaskGraphResult> ExecuteGraphAsync(TaskGraph graph, CancellationToken cancellationToken = default)
+    {
+        if (_dagEngine == null)
+            throw new InvalidOperationException("ChainExecutionEngine not configured for DAG execution");
+
+        return await _dagEngine.ExecuteAsync(graph, cancellationToken);
     }
 
     public async Task<TaskChainResult> ExecuteParallelAsync(IEnumerable<TaskContext> tasks, CancellationToken cancellationToken = default)
@@ -253,13 +272,8 @@ public class TaskChainEngine : ITaskChainEngine
     {
         foreach (var task in tasks)
         {
-            // 加入调度队列
             await _scheduler.EnqueueAsync(task, cancellationToken);
-
-            // 启动任务
             await _orchestrator.StartTaskAsync(task, cancellationToken);
-
-            // 等待任务完成
             var completedTask = await _orchestrator.WaitTaskAsync(task.TaskId, cancellationToken: cancellationToken);
 
             if (completedTask?.Status == StateCenter.Models.TaskStatusEnum.Completed)
@@ -269,7 +283,7 @@ public class TaskChainEngine : ITaskChainEngine
             else
             {
                 result.FailedTasks++;
-                return false; // 顺序执行中断
+                return false;
             }
         }
 
@@ -281,19 +295,14 @@ public class TaskChainEngine : ITaskChainEngine
         var taskList = tasks.ToList();
         var executionTasks = new List<Task>();
 
-        // 并行启动所有任务
         foreach (var task in taskList)
         {
             await _scheduler.EnqueueAsync(task, cancellationToken);
             await _orchestrator.StartTaskAsync(task, cancellationToken);
-
-            // 添加等待任务
             executionTasks.Add(ExecuteAndTrackAsync(task, result, cancellationToken));
         }
 
-        // 等待所有任务完成
         await Task.WhenAll(executionTasks).ConfigureAwait(false);
-
         return result.FailedTasks == 0;
     }
 
@@ -303,17 +312,11 @@ public class TaskChainEngine : ITaskChainEngine
 
         if (completedTask?.Status == StateCenter.Models.TaskStatusEnum.Completed)
         {
-            lock (_resultLock)
-            {
-                result.CompletedTasks++;
-            }
+            lock (_resultLock) { result.CompletedTasks++; }
         }
         else
         {
-            lock (_resultLock)
-            {
-                result.FailedTasks++;
-            }
+            lock (_resultLock) { result.FailedTasks++; }
         }
     }
 }

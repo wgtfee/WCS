@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "Iq6K7wueOPs=",
+  "dgSpecHash": "Avf+zflLfno=",
   "success": true,
-  "projectFilePath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
+  "projectFilePath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
   "expectedPackageFiles": [
     "F:\\_packages\\microsoft.extensions.configuration.abstractions\\8.0.0\\microsoft.extensions.configuration.abstractions.8.0.0.nupkg.sha512",
     "F:\\_packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
