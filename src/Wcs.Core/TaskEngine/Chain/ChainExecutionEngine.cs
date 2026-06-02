@@ -20,6 +20,9 @@ public class ChainExecutionEngine
     // DecisionNode 委托注册表：Expression → handler
     private readonly ConcurrentDictionary<string, Func<DecisionNode, CancellationToken, Task<bool>>> _decisionHandlers = new();
 
+    // DecisionNode 分支选择结果缓存：nodeId → conditionResult
+    private readonly ConcurrentDictionary<string, bool> _decisionResults = new();
+
     // WaitNode 委托注册表：ConditionType → handler
     private readonly ConcurrentDictionary<string, Func<WaitNode, CancellationToken, Task<bool>>> _waitHandlers = new();
 
@@ -101,49 +104,46 @@ public class ChainExecutionEngine
                 var success = await ExecuteNodeWithRetryAsync(graph, node, result, ct);
                 inProgress.Remove(node.NodeId);
 
-                if (success)
+                if (node is DecisionNode decision)
+                {
+                    // DecisionNode: 从缓存读取分支选择结果，节点本身视为执行成功
+                    _decisionResults.TryGetValue(node.NodeId, out var conditionResult);
+                    completed.Add(node.NodeId);
+                    _recoveryService.CheckpointCompleted(graph.GraphId, node.NodeId);
+                    result.CompletedNodes++;
+
+                    var chosenBranchId = conditionResult ? decision.TrueBranchNodeId : decision.FalseBranchNodeId;
+                    var unchosenBranchId = conditionResult ? decision.FalseBranchNodeId : decision.TrueBranchNodeId;
+
+                    if (!string.IsNullOrEmpty(unchosenBranchId))
+                        prunedNodes.Add(unchosenBranchId);
+
+                    if (!string.IsNullOrEmpty(chosenBranchId))
+                    {
+                        var chosenNode = graph.NodeIndex.TryGetValue(chosenBranchId, out var cn) ? cn : null;
+                        if (chosenNode != null && !completed.Contains(chosenNode.NodeId))
+                        {
+                            var deps = GetDependencies(chosenNode);
+                            if (deps.All(d => completed.Contains(d) || prunedNodes.Contains(d)))
+                                readyQueue.Enqueue(chosenNode);
+                        }
+                    }
+                }
+                else if (success)
                 {
                     completed.Add(node.NodeId);
                     _recoveryService.CheckpointCompleted(graph.GraphId, node.NodeId);
                     result.CompletedNodes++;
 
-                    // DecisionNode 特殊处理：分支路由
-                    if (node is DecisionNode decision)
-                    {
-                        var chosenBranchId = success ? decision.TrueBranchNodeId : decision.FalseBranchNodeId;
-                        var unchosenBranchId = success ? decision.FalseBranchNodeId : decision.TrueBranchNodeId;
-
-                        if (!string.IsNullOrEmpty(unchosenBranchId))
-                            prunedNodes.Add(unchosenBranchId);
-
-                        // 只 enqueue 选中分支的根节点（如果其所有前置已完成）
-                        if (!string.IsNullOrEmpty(chosenBranchId))
-                        {
-                            var chosenNode = graph.NodeIndex.TryGetValue(chosenBranchId, out var cn) ? cn : null;
-                            if (chosenNode != null && !completed.Contains(chosenNode.NodeId))
-                            {
-                                var deps = GetDependencies(chosenNode);
-                                if (deps.All(d => completed.Contains(d) || prunedNodes.Contains(d)))
-                                {
-                                    readyQueue.Enqueue(chosenNode);
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // 非 DecisionNode：标准后继查找
-                        EnqueueReadySuccessors(executionOrder, completed, inProgress, readyQueue, prunedNodes);
-                    }
+                    // 标准后继查找
+                    EnqueueReadySuccessors(executionOrder, completed, inProgress, readyQueue, prunedNodes);
                 }
                 else
                 {
                     _recoveryService.CheckpointFailed(graph.GraphId, node.NodeId);
                     result.FailedNodes++;
                     result.ErrorMessage = $"Node '{node.NodeId}' failed after {node.MaxRetries} retries";
-
-                    if (node is not DecisionNode)
-                        break;
+                    break;
                 }
             }
 
@@ -237,12 +237,19 @@ public class ChainExecutionEngine
                 _logger?.LogWarning("Node {NodeId} timed out after {TimeoutMs}ms",
                     node.NodeId, node.TimeoutMs);
             }
+            catch (OperationCanceledException)
+            {
+                // 外层 CancellationToken 被取消 — 传播异常
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Node {NodeId} failed on attempt {Attempt}", node.NodeId, attempt);
             }
         }
 
+        // 所有重试均已耗尽，检查是否为外部取消
+        ct.ThrowIfCancellationRequested();
         return false;
     }
 
@@ -408,27 +415,32 @@ public class ChainExecutionEngine
 
     private async Task<bool> ExecuteDecisionNodeAsync(DecisionNode node, CancellationToken ct)
     {
+        var conditionResult = false;
+
         // 查注册表执行条件评估
         if (_decisionHandlers.TryGetValue(node.Expression, out var handler))
         {
-            var result = await handler(node, ct);
+            conditionResult = await handler(node, ct);
             _logger?.LogInformation("Decision node {NodeId}: expression={Expression} evaluated to {Result}",
-                node.NodeId, node.Expression, result);
-            return result;
+                node.NodeId, node.Expression, conditionResult);
         }
-
-        if (_decisionHandlers.Count > 0)
+        else if (_decisionHandlers.Count > 0)
         {
             _logger?.LogWarning("Decision node {NodeId}: no handler registered for expression '{Expression}', " +
                 "trying default handler", node.NodeId, node.Expression);
 
-            // 尝试默认 handler（如果有）
             if (_decisionHandlers.TryGetValue("*", out var defaultHandler))
-                return await defaultHandler(node, ct);
+                conditionResult = await defaultHandler(node, ct);
+        }
+        else
+        {
+            _logger?.LogWarning("Decision node {NodeId}: no handler for expression '{Expression}', defaulting to true",
+                node.NodeId, node.Expression);
+            conditionResult = true;
         }
 
-        _logger?.LogWarning("Decision node {NodeId}: no handler for expression '{Expression}', defaulting to true",
-            node.NodeId, node.Expression);
+        // 缓存分支选择结果供主循环使用；节点本身始终返回成功
+        _decisionResults[node.NodeId] = conditionResult;
         return true;
     }
 

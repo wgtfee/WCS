@@ -100,7 +100,7 @@ public class EventBus : IEventBus
         {
             foreach (var handler in handlers.ToList())
             {
-                var task = ExecuteHandlerAsync((dynamic)handler, @event, cancellationToken);
+                var task = ExecuteHandlerAsync((IEventHandler<TEvent>)handler, @event, cancellationToken);
                 tasks.Add(task);
             }
         }
@@ -110,7 +110,7 @@ public class EventBus : IEventBus
         {
             foreach (var handler in delegateHandlers.ToList())
             {
-                var delegateTask = ((EventHandlerDelegate<TEvent>)(object)handler)(@event, cancellationToken);
+                var delegateTask = SafelyExecuteDelegateAsync((EventHandlerDelegate<TEvent>)(object)handler, @event, cancellationToken);
                 tasks.Add(delegateTask);
             }
         }
@@ -151,16 +151,15 @@ public class EventBus : IEventBus
 
         var eventType = @event.GetType();
         var method = typeof(EventBus)
-            .GetMethod(nameof(PublishAsync), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-        
-        if (method != null)
-        {
-            var genericMethod = method.MakeGenericMethod(eventType);
-            var task = (Task)genericMethod.Invoke(this, new object[] { @event, cancellationToken })!;
-            return task;
-        }
+            .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .First(m => m.Name == nameof(PublishAsync)
+                     && m.IsGenericMethodDefinition
+                     && m.GetGenericArguments().Length == 1
+                     && m.GetParameters().Length == 2);
 
-        return Task.CompletedTask;
+        var genericMethod = method.MakeGenericMethod(eventType);
+        var task = (Task)genericMethod.Invoke(this, new object[] { @event, cancellationToken })!;
+        return task;
     }
 
     public IEnumerable<Type> GetSubscribedEvents()
@@ -206,6 +205,19 @@ public class EventBus : IEventBus
         try
         {
             await handler.HandleAsync(@event, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Suppress exceptions - events should not crash other handlers
+        }
+    }
+
+    private static async Task SafelyExecuteDelegateAsync<TEvent>(EventHandlerDelegate<TEvent> handler, TEvent @event, CancellationToken cancellationToken)
+        where TEvent : IEvent
+    {
+        try
+        {
+            await handler(@event, cancellationToken).ConfigureAwait(false);
         }
         catch
         {

@@ -1,1 +1,207 @@
-Adding SaveDeviceRuntimeAsync to TaskRepository.cs
+以下是 WCS Runtime Engine V2 的完整解析。
+
+1. 这是什么系统？
+这是一个仓库控制系统（WCS） 的运行时引擎，核心职责是：
+
+控制输送线上的物料搬运（传送带启停、分拣、合流）
+管理设备状态（传感器、电机、PLC）
+执行工作任务链（取货 → 输送 → 分拣 → 入库）
+监控报警并在异常时自动处理
+故障恢复（系统崩溃后还原状态）
+.NET 8 单体应用，5 层项目：
+
+
+Wcs.Core        — 核心逻辑层（所有业务逻辑在这里）
+Wcs.Infrastructure — 基础设施层（PLC 驱动、数据库访问等）
+Wcs.Application — 应用层（DI 注册、应用服务编排）
+Wcs.Host        — 托管层（ASP.NET Core 入口、后台服务）
+Wcs.Desktop     — 桌面端（监控界面）
+2. 四大核心模块
+
+┌─────────────────────────────────────────────────────────────┐
+│                    EventBus (事件总线)                        │
+│  所有模块通过 EventBus 异步通信，不直接依赖                   │
+└─────────────────────────────────────────────────────────────┘
+        ↕            ↕            ↕            ↕
+┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
+│ StateCenter │ │ TaskChain │ │AlarmCenter │ │ Recovery   │
+│ 状态中心    │ │ 任务链引擎 │ │ 报警中心    │ │ 恢复总线   │
+├────────────┤ ├────────────┤ ├────────────┤ ├────────────┤
+│ 设备状态    │ │ DAG 图执   │ │ 5层管线    │ │ 快照持久化 │
+│ 任务状态    │ │ 行器      │ │ 根因分析    │ │ 模块恢复   │
+│ 物体位置    │ │ Action/   │ │ 风暴抑制    │ │ 事件重放   │
+│ (System    │ │ Wait/     │ │ 状态机      │ │ (故障后    │
+│  Truth)    │ │ Parallel  │ │            │ │  还原)    │
+└────────────┘ └────────────┘ └────────────┘ └────────────┘
+2a. StateCenter — 系统实时状态中心
+这是系统的 "单一事实源"（System Truth）。所有模块不直接持有对方的状态，而是通过 EventBus 发布事件，StateCenter 作为状态的权威存储。
+
+管理 4 种状态：
+
+DeviceState — 设备状态（在线/离线/运行/空闲/错误/维护），含传感器值和属性
+TaskRuntime — 任务运行时状态（已创建/排队/执行中/完成/失败/取消）
+ObjectState — 物料/物体位置追踪，实时位置和目标位置
+PlcBlockState — PLC 数据块缓存
+关键能力： ISnapshotProvider — 崩溃时保存并恢复全量状态
+
+2b. TaskChainEngine — DAG 工作流引擎
+执行有向无环图（DAG） 任务链。这是系统的"流程大脑"。
+
+5 种节点类型（record）：
+
+节点	作用	示例
+ActionNode	执行动作	写 PLC、调用 API、执行脚本
+WaitNode	等待条件	等待设备进入 Ready 状态、等待信号、固定延迟
+ParallelNode	并行分支	同时启动多条输送线
+DelayNode	延迟	等待 5 秒
+DecisionNode	条件路由	判断仓位是否已满 → 走不同分支
+执行机制：
+
+先用 Kahn 拓扑排序 确定节点执行顺序
+自动环检测（有环抛异常）
+每个节点有重试（默认 3 次）+ 超时（默认 30 秒）
+Checkpoint：每完成一个节点记录断点，崩溃后从断点继续
+剪枝：DecisionNode 选中一个分支 → 未选中分支全部剪枝
+
+// DAG 定义示例
+ChainBuilder.Create()
+    .AddAction("scan", "BarcodeScan")
+    .AddDecision("check", "CheckStorageAvailable", "full", "empty")
+        .DependsOn("check", "scan")
+    .AddWait("full", new WaitCondition { DeviceId = "CV01", ExpectedStatus = "Ready" })
+        .DependsOn("full", "check")
+    .AddAction("store", "PlcWrite", new() { { "command", "StoreToLane" } })
+        .DependsOn("store", "full")
+    .Build();
+2c. AlarmCenter — 5 层报警管线
+报警不是"来了就触发"，而是经过 5 层处理：
+
+
+原始信号 → ①防抖 → ②风暴抑制 → ③状态机 → ④聚合 → ⑤EventBus
+① AlarmDebounceEngine（防抖）：
+
+报警信号持续 DelayRaiseMs 毫秒才确认（防止瞬间干扰误报）
+恢复信号持续 DelayRecoverMs 毫秒才确认（防止抖动
+防抖期间信号消失 → 取消报警（canceled）
+恢复期间信号重现 → 回到活跃（rebounce）
+② AlarmStormGuard（风暴抑制）：
+
+60 秒窗口内同类型报警超过阈值 → 抑制后续报警
+避免"PLC 断连 → 1000 个设备报离线"的雪崩
+③ AlarmStateMachine（5 状态状态机）：
+
+
+Normal → PendingRaise → Active → Acknowledged → PendingRecover → Recovered
+   ↑          |              ↑                       |
+   └─canceled─┘              └─────rebounce──────────┘
+④ AlarmAggregationEngine（聚合/根因）：
+
+flat 分组：同 Device + AlarmGroup 中最早到达的为根因，其余抑制
+树层次（Step8 新增）：父子报警树 + 路径追踪 + 递归恢复
+⑤ EventBus 发布： 最终报警事件通过 EventBus 通知其他模块
+
+2d. RecoveryManager — 系统状态恢复总线
+这是崩溃恢复的核心，负责整个系统状态的一致还原。
+
+工作流程：
+
+
+  正常运行          系统崩溃 -> 重启          恢复完成
+     │                  │                      │
+     ▼                  ▼                      ▼
+┌────────────┐    ┌──────────────┐    ┌─────────────────┐
+│ 定时快照    │    │ 启动时检测    │    │ 按 RestoreOrder │
+│ (所有模块   │    │ 快照存在？    │    │ 逐个恢复模块    │
+│  分别保存)  │    │              │    │                 │
+└────────────┘    └──────┬───────┘    └────────┬────────┘
+                         │                     │
+                         ▼                     ▼
+                    ┌──────────────┐    ┌─────────────────┐
+                    │ 加载 System  │    │ 事件重放         │
+                    │ Snapshot    │    │ (快照后的增量)   │
+                    └──────┬───────┘    └────────┬────────┘
+                           │                     │
+                           ▼                     ▼
+                    按 RestoreOrder:       重放 DeviceState、
+                    StateCenter(0) →       TaskState 等
+                    ObjectTracking(1) →    状态变更事件
+                    AlarmCenter(2)
+关键特性：
+
+SystemSnapshot — 包含多个模块的独立快照，Dictionary<string, JsonElement>
+RestoreOrder — 每个模块自声明恢复顺序（StateCenter=0, OT=1, AlarmCenter=2）
+Event Replay（Step8 新增）— 快照之后发生的事件从 FileEventStore 读出并重放
+3. 事件总线 EventBus
+所有模块之间通过 EventBus 异步通信，没有直接依赖。
+
+关键事件类型：
+
+
+DeviceStateChangedEvent  — 设备状态变化（High 优先级）
+TaskStateChangedEvent    — 任务状态变化（High）
+AlarmRaisedEvent         — 报警产生（Critical）
+AlarmRecoveredEvent      — 报警恢复（High）
+ObjectLocationChangedEvent — 物体移动（Medium）
+PlcBlockChangedEvent     — PLC 数据变化（Medium）
+SystemStartedEvent       — 系统启动（Medium）
+SystemErrorEvent         — 系统错误（Critical）
+Step8 新增：事件可选持久化到文件（FileEventStore），JSON-lines 格式按小时轮转。
+
+4. 领域服务（非核心但重要）
+ObjectTrackingCenter — 物体追踪
+追踪物料在输送线上的实时位置
+Step8 新增 TopologyGraph：Zone/Node/Edge 有向图 + BFS 最短路径 + 占用管理
+降级为领域服务（非四大核心）
+ResourceLockManager — 资源锁
+设备互斥锁（防止两台 AGV 同时进入同一工位）
+Step8 新增：TTL/Lease（自动过期）、TryAcquireAsync、RenewLease
+后台 Timer 每 5 秒自动清理过期锁
+DeviceCenter — 设备抽象层
+具体设备实现（ConcreteDevices）
+PlcSubsystem — PLC 子系统
+与西门子/三菱等 PLC 通信
+5. 关键数据流：一次完整的"扫码入库"
+
+① 扫码枪读到条码
+        │
+        ▼
+② DeviceCenter 触发 DeviceStateChangedEvent
+        │
+        ▼
+③ StateCenter 更新设备状态，发布事件
+        │
+        ▼
+④ TaskChainEngine 读取任务链定义（DAG）
+   ┌────────────────────────────────────────────┐
+   │ scan → checkStorage → waitConveyor → store │
+   │ Action   Decision      WaitNode    Action  │
+   └────────────────────────────────────────────┘
+        │
+        ▼
+⑤ 每一步执行中：ActionNode 写 PLC、WaitNode 等设备反馈
+        │
+        ▼
+⑥ 如果设备故障 → AlarmCenter 产生报警
+   waitConveyor 超时 → 报警 → 操作员确认 → 继续/终止
+        │
+        ▼
+⑦ RecoveryManager 定时保存快照
+   （崩溃后从最新快照恢复 + 事件重放）
+6. Step8 做了什么
+
+Step7 成熟度 ~82 分 → Step8 后约 ~90 分
+
+P0: AlarmRule 配置格式升级   │ 小改进
+    ISnapshotProvider.RestoreOrder │
+    WaitNode 结构化条件        │
+
+P1: ResourceLock TTL/Lease    │ 三大核心升级
+    ObjectTracking 拓扑图      │
+    TaskChain 版本管理         │
+
+P2: EventBus 持久化 + 重放     │ 崩溃恢复完整闭环
+
+P3: 报警根因树形分析           │ 运维能力提升
+
+P4: DecisionHandler 语义命名   │ 代码可读性
+一句话总结： WCS 是一个基于 DAG 工作流引擎的仓库控制系统，四大核心（StateCenter→TaskChainEngine→AlarmCenter→RecoveryManager）通过 EventBus 异步协作。崩溃恢复靠 SystemSnapshot + EventReplay 实现完整闭环。

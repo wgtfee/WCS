@@ -142,6 +142,7 @@ public class ChainBuilder
 
     /// <summary>
     /// 构建任务图 — 进行拓扑排序和环检测
+    /// 同时将依赖关系持久化到各节点的 DependsOn 属性，供执行引擎使用
     /// </summary>
     public TaskGraph Build(string? graphId = null)
     {
@@ -155,15 +156,21 @@ public class ChainBuilder
             outEdges[node.NodeId] = new List<string>();
         }
 
-        // 根据 DependsOn 和 _adjacency 建立边
+        // 收集每个节点的完整依赖（_adjacency + node.DependsOn）
+        var combinedDeps = new Dictionary<string, List<string>>();
         foreach (var node in _nodes)
         {
             var deps = new List<string>();
             if (_adjacency.TryGetValue(node.NodeId, out var explicitDeps))
                 deps.AddRange(explicitDeps);
             deps.AddRange(node.DependsOn);
+            combinedDeps[node.NodeId] = deps.Distinct().ToList();
+        }
 
-            foreach (var depId in deps.Distinct())
+        // 根据依赖关系建立边
+        foreach (var node in _nodes)
+        {
+            foreach (var depId in combinedDeps[node.NodeId])
             {
                 if (!outEdges.ContainsKey(depId))
                     throw new InvalidOperationException($"Node '{node.NodeId}' depends on unknown node '{depId}'");
@@ -204,12 +211,22 @@ public class ChainBuilder
             throw new InvalidOperationException($"Cycle detected involving nodes: {string.Join(", ", cyclic)}");
         }
 
+        // 将依赖持久化到节点（record with 表达式），供执行引擎 BuildInDegreeMap 使用
+        var updatedNodes = _nodes.Select(node =>
+        {
+            var deps = combinedDeps[node.NodeId];
+            return deps.Count > 0 ? node with { DependsOn = deps } : node;
+        }).ToList();
+
+        var updatedIndex = updatedNodes.ToDictionary(n => n.NodeId);
+        var updatedSorted = sorted.Select(n => updatedIndex[n.NodeId]).ToList();
+
         return new TaskGraph
         {
             GraphId = graphId ?? Guid.NewGuid().ToString("N"),
-            Nodes = _nodes.AsReadOnly(),
-            NodeIndex = new Dictionary<string, TaskNode>(_nodeIndex),
-            TopologicalOrder = sorted.AsReadOnly(),
+            Nodes = updatedNodes.AsReadOnly(),
+            NodeIndex = updatedIndex,
+            TopologicalOrder = updatedSorted.AsReadOnly(),
             Version = _definition?.Version,
             DefinitionId = _definition?.DefinitionId
         };

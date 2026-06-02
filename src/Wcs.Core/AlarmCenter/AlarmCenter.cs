@@ -235,11 +235,14 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
 
         foreach (var alarm in toRecover)
         {
+            // 确保经过 PendingRecover → Recovered 合法路径
+            if (alarm.Status != AlarmStatusEnum.PendingRecover)
+                AlarmStateMachine.Transition(alarm, AlarmStatusEnum.PendingRecover);
             AlarmStateMachine.Transition(alarm, AlarmStatusEnum.Recovered);
             alarm.RecoverTime = DateTime.UtcNow;
 
             // 如果是根因，释放子报警
-            var released = _aggregation.RecoverGroup(alarm.AlarmId);
+            _aggregation.RecoverGroup(alarm.AlarmId);
         }
 
         // 发布事件
