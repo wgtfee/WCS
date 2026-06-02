@@ -1,10 +1,10 @@
-# 忽略所有 bin 目录
+# 忽略所有名为 bin 和 obj 的文件夹及其子内容
+bin/
+obj/
 [Bb]bin/
+[Oo]obj/
 
-# 忽略所有 obj 目录
-[Cc]obj/
-
-# 忽略所有 dll 和 pdb 文件
+# 忽略特定后缀文件
 *.dll
 *.pdb
 *.exe

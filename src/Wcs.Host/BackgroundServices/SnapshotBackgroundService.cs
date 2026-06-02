@@ -5,25 +5,24 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wcs.Core.Common.Options;
 using Wcs.Core.Recovery;
-using Wcs.Core.StateCenter.Interfaces;
 
 /// <summary>
-/// 快照后台服务 - 定时保存 StateCenter 快照
+/// 快照后台服务 - 定时保存系统快照（通过 RecoveryManager 协调多模块）
 /// </summary>
 public class SnapshotBackgroundService : BackgroundService
 {
-    private readonly IStateCenter _stateCenter;
+    private readonly IRecoveryManager _recoveryManager;
     private readonly ISnapshotRepository _snapshotRepo;
     private readonly ILogger<SnapshotBackgroundService> _logger;
     private readonly IOptionsMonitor<WcsOptions> _options;
 
     public SnapshotBackgroundService(
-        IStateCenter stateCenter,
+        IRecoveryManager recoveryManager,
         ISnapshotRepository snapshotRepo,
         ILogger<SnapshotBackgroundService> logger,
         IOptionsMonitor<WcsOptions> options)
     {
-        _stateCenter = stateCenter;
+        _recoveryManager = recoveryManager;
         _snapshotRepo = snapshotRepo;
         _logger = logger;
         _options = options;
@@ -38,8 +37,7 @@ public class SnapshotBackgroundService : BackgroundService
         {
             try
             {
-                var snapshot = _stateCenter.GetSnapshot();
-                await _snapshotRepo.SaveSnapshotAsync(snapshot, stoppingToken);
+                await _recoveryManager.SaveSnapshotAsync(stoppingToken);
                 await _snapshotRepo.CleanupOldSnapshotsAsync(
                     _options.CurrentValue.Snapshot.MaxSnapshots, stoppingToken);
             }
