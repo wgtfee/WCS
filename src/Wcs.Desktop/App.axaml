@@ -1,0 +1,23 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Wcs.Desktop"
+             xmlns:conv="using:Wcs.Desktop.Converters"
+             x:Class="Wcs.Desktop.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="/Styles/Colors.axaml" />
+                <ResourceInclude Source="/Styles/Themes.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Global Converters -->
+            <conv:StatusToColorConverter x:Key="StatusToColor" />
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+            <conv:InverseBoolConverter x:Key="InverseBool" />
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

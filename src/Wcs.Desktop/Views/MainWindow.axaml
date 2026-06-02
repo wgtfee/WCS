@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Wcs.Desktop.ViewModels"
+        xmlns:ctl="using:Wcs.Desktop.Controls"
+        x:Class="Wcs.Desktop.Views.MainWindow"
+        Title="WCS Runtime Engine - Desktop Monitor"
+        Width="1280" Height="800"
+        Background="#1E1E1E"
+        Foreground="White"
+        WindowStartupLocation="CenterScreen">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Header -->
+        <Border Background="#2A2A2A" Padding="16,8">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="WCS Runtime Engine Monitor" FontSize="20" FontWeight="Bold"
+                           VerticalAlignment="Center" />
+                <Border Grid.Column="1" CornerRadius="4" Padding="8,4"
+                        Background="#333333">
+                    <TextBlock Text="{Binding ConnectionText}" FontSize="12" Foreground="#CCCCCC" />
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Tab Content -->
+        <TabControl Grid.Row="1" ItemsSource="{Binding Tabs}"
+                    SelectedIndex="{Binding SelectedTabIndex}"
+                    Background="#1E1E1E">
+            <TabControl.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Header}" Foreground="White" />
+                </DataTemplate>
+            </TabControl.ItemTemplate>
+            <TabControl.ContentTemplate>
+                <DataTemplate>
+                    <ContentControl Content="{Binding Content}" />
+                </DataTemplate>
+            </TabControl.ContentTemplate>
+        </TabControl>
+
+        <!-- Connection Bar -->
+        <ctl:ConnectionBar x:Name="StatusBar" Grid.Row="2" />
+    </Grid>
+</Window>

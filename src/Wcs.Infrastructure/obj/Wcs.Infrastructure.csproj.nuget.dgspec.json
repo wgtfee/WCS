@@ -1,7 +1,7 @@
 {
   "format": 1,
   "restore": {
-    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj": {}
+    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj": {}
   },
   "projects": {
     "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Core\\Wcs.Core.csproj": {
@@ -90,14 +90,14 @@
         }
       }
     },
-    "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj": {
+    "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj",
+        "projectUniqueName": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj",
         "projectName": "Wcs.Infrastructure",
-        "projectPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj",
+        "projectPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\Wcs.Infrastructure.csproj",
         "packagesPath": "F:\\_packages",
-        "outputPath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\obj\\",
+        "outputPath": "i:\\code\\IOT\\WCS ENG\\src\\Wcs.Infrastructure\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "D:\\dev23.1\\Offline Packages",

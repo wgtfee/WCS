@@ -71,9 +71,9 @@ public class SignalRStatePublisher
     /// </summary>
     public async Task PushDeviceStateAsync(string deviceId, DeviceState state)
     {
-        await _hubContext.Clients.Group($"device:{deviceId}")
-            .SendAsync("DeviceStateChanged", new { deviceId, state });
-        await _hubContext.Clients.All.SendAsync("DeviceStateBroadcast", new { deviceId, state });
+        var msg = new DeviceStateChangedMessage(deviceId, state);
+        await _hubContext.Clients.Group($"device:{deviceId}").SendAsync("DeviceStateChanged", msg);
+        await _hubContext.Clients.All.SendAsync("DeviceStateBroadcast", msg);
     }
 
     /// <summary>
@@ -81,7 +81,8 @@ public class SignalRStatePublisher
     /// </summary>
     public async Task PushTaskStateAsync(string taskId, TaskRuntime runtime)
     {
-        await _hubContext.Clients.All.SendAsync("TaskStateChanged", new { taskId, runtime });
+        var msg = new TaskStateChangedMessage(taskId, runtime);
+        await _hubContext.Clients.All.SendAsync("TaskStateChanged", msg);
     }
 
     /// <summary>
@@ -89,8 +90,9 @@ public class SignalRStatePublisher
     /// </summary>
     public async Task PushAlarmAsync(string action, object alarm)
     {
-        await _hubContext.Clients.Group("alarms").SendAsync("AlarmEvent", new { action, alarm });
-        await _hubContext.Clients.All.SendAsync("AlarmBroadcast", new { action, alarm });
+        var msg = new AlarmEventMessage(action, alarm);
+        await _hubContext.Clients.Group("alarms").SendAsync("AlarmEvent", msg);
+        await _hubContext.Clients.All.SendAsync("AlarmBroadcast", msg);
     }
 
     /// <summary>
@@ -98,6 +100,7 @@ public class SignalRStatePublisher
     /// </summary>
     public async Task PushObjectLocationAsync(string objectId, string oldPos, string newPos)
     {
-        await _hubContext.Clients.All.SendAsync("ObjectMoved", new { objectId, oldPos, newPos });
+        var msg = new ObjectMovedMessage(objectId, oldPos, newPos);
+        await _hubContext.Clients.All.SendAsync("ObjectMoved", msg);
     }
 }

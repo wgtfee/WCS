@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Wcs.Desktop.Controls.ConnectionBar"
+             Height="24">
+    <Border Background="#1A1A1A" Padding="8,4">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+            <Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="Gray"
+                     HorizontalAlignment="Left" VerticalAlignment="Center" />
+            <TextBlock x:Name="StatusText" Grid.Column="1" Text="Disconnected"
+                       FontSize="12" Foreground="Gray" Margin="6,0,0,0"
+                       VerticalAlignment="Center" />
+        </Grid>
+    </Border>
+</UserControl>

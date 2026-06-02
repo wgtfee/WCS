@@ -150,3 +150,15 @@ public enum ObjectStatusEnum
     Completed = 3,
     Error = 4
 }
+
+/// <summary>
+/// 系统概览 DTO
+/// </summary>
+public class SystemOverview
+{
+    public int DeviceCount { get; set; }
+    public int ActiveTaskCount { get; set; }
+    public int ActiveAlarmCount { get; set; }
+    public int TrackedObjectCount { get; set; }
+    public int ActiveLockCount { get; set; }
+}

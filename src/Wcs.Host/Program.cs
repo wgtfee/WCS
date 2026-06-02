@@ -51,6 +51,8 @@ try
 
     // SignalR 实时推送
     builder.Services.AddSignalR();
+    // REST API 控制器
+    builder.Services.AddControllers();
     // 健康检查
     builder.Services.AddHealthChecks()
         .AddCheck<Wcs.Host.HealthChecks.WcsReadinessCheck>("readiness")
@@ -91,6 +93,8 @@ try
 
     // SignalR Hub 端点
     app.MapHub<WcsHub>("/wcs");
+    // REST API 控制器
+    app.MapControllers();
 
     // 默认页面
         // 健康检查端点
