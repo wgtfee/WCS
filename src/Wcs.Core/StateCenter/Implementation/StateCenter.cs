@@ -1,6 +1,7 @@
 namespace Wcs.Core.StateCenter.Implementation;
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Wcs.Core.Common.Interfaces;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
@@ -323,6 +324,7 @@ public class StateCenter : IStateCenter, ISnapshotProvider
     // ==================== ISnapshotProvider ====================
 
     string ISnapshotProvider.ModuleName => "StateCenter";
+    int ISnapshotProvider.RestoreOrder => 0;
 
     async Task<object> ISnapshotProvider.CaptureSnapshotAsync(CancellationToken ct)
     {
@@ -333,7 +335,15 @@ public class StateCenter : IStateCenter, ISnapshotProvider
     async Task ISnapshotProvider.RestoreSnapshotAsync(object snapshot, CancellationToken ct)
     {
         await Task.CompletedTask;
-        RestoreFromSnapshot((StateSnapshot)snapshot);
+        if (snapshot is JsonElement element)
+        {
+            var stateSnapshot = JsonSerializer.Deserialize<StateSnapshot>(element.GetRawText());
+            if (stateSnapshot != null) RestoreFromSnapshot(stateSnapshot);
+        }
+        else if (snapshot is StateSnapshot stateSnapshot)
+        {
+            RestoreFromSnapshot(stateSnapshot);
+        }
     }
 
     // ==================== 内部方法 ====================

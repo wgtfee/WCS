@@ -309,10 +309,20 @@ public class ChainExecutionEngine
         var tcs = new TaskCompletionSource<bool>();
         using var ctReg = ct.Register(() => tcs.TrySetCanceled());
 
-        // 解析条件表达式: "DeviceId:ExpectedStatus"
-        var parts = node.ConditionExpression?.Split(':', 2) ?? Array.Empty<string>();
-        var targetDevice = parts.Length > 0 ? parts[0] : "";
-        var targetStatus = parts.Length > 1 ? parts[1] : "Running";
+        // 优先使用结构化 Condition，兼容旧字符串格式
+        string targetDevice, targetStatus;
+        if (node.Condition != null)
+        {
+            targetDevice = node.Condition.DeviceId;
+            targetStatus = node.Condition.ExpectedStatus;
+        }
+        else
+        {
+            // 解析条件表达式: "DeviceId:ExpectedStatus"
+            var parts = node.ConditionExpression?.Split(':', 2) ?? Array.Empty<string>();
+            targetDevice = parts.Length > 0 ? parts[0] : "";
+            targetStatus = parts.Length > 1 ? parts[1] : "Running";
+        }
 
         var handler = new DeviceStateEventHandler(tcs, targetDevice, targetStatus);
         _eventBus.Subscribe(handler);

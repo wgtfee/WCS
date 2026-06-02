@@ -41,4 +41,10 @@ public record Location
     /// 获取线段路径（用于空间索引查询）
     /// </summary>
     public string ConveyorKey => $"{Zone}.{Conveyor}";
+
+    // NEW: optional node reference resolved from Zone/Conveyor/Position
+    public string? NodeId { get; init; }
+
+    // NEW: resolve NodeId from Zone/Conveyor/Position
+    public string ResolveNodeId() => $"{Zone}.{Conveyor}.{Position}";
 }

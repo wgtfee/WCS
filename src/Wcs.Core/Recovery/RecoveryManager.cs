@@ -3,6 +3,7 @@ namespace Wcs.Core.Recovery;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Wcs.Core.Common.Interfaces;
+using Wcs.Core.EventBus.Persistence;
 using Wcs.Core.StateCenter.Interfaces;
 
 /// <summary>
@@ -188,19 +189,16 @@ public class RecoveryManager : IRecoveryManager
 {
     private readonly IEnumerable<ISnapshotProvider> _providers;
     private readonly ISnapshotRepository _snapshotRepo;
+    private readonly EventReplayService? _eventReplay;
 
-    // 恢复顺序：先恢复基础状态，再恢复高级模块
-    private static readonly string[] RestoreOrder = {
-        "StateCenter",
-        "ObjectTracking",
-        "AlarmCenter",
-        "TaskChain"
-    };
-
-    public RecoveryManager(IEnumerable<ISnapshotProvider> providers, ISnapshotRepository snapshotRepo)
+    public RecoveryManager(
+        IEnumerable<ISnapshotProvider> providers,
+        ISnapshotRepository snapshotRepo,
+        EventReplayService? eventReplay = null)
     {
         _providers = providers ?? throw new ArgumentNullException(nameof(providers));
         _snapshotRepo = snapshotRepo ?? throw new ArgumentNullException(nameof(snapshotRepo));
+        _eventReplay = eventReplay;
     }
 
     public async Task<bool> NeedsRecoveryAsync(CancellationToken ct = default)
@@ -220,15 +218,16 @@ public class RecoveryManager : IRecoveryManager
             return result;
         }
 
-        // 按依赖反序恢复：StateCenter → ObjectTracking → AlarmCenter → TaskChain
-        foreach (var moduleName in RestoreOrder)
-        {
-            if (!sysSnapshot.ModuleSnapshots.TryGetValue(moduleName, out var element))
-                continue;
+        // 按 RestoreOrder 顺序恢复（依赖反序：先基础模块，后高级模块）
+        var orderedProviders = _providers
+            .Where(p => sysSnapshot.ModuleSnapshots.ContainsKey(p.ModuleName))
+            .OrderBy(p => p.RestoreOrder)
+            .ToList();
 
-            var provider = _providers.FirstOrDefault(p => p.ModuleName == moduleName);
-            if (provider == null)
-                continue;
+        foreach (var provider in orderedProviders)
+        {
+            var moduleName = provider.ModuleName;
+            var element = sysSnapshot.ModuleSnapshots[moduleName];
 
             try
             {
@@ -242,8 +241,29 @@ public class RecoveryManager : IRecoveryManager
             }
         }
 
+        // 触发事件重放（可选 — 需要 EventReplayService + IEventStore）
+        if (_eventReplay != null)
+        {
+            try
+            {
+                var replayed = await _eventReplay.ReplayAsync(sysSnapshot.Timestamp, ct);
+                result.Message =
+                    $"System recovered: {string.Join(", ", result.RestoredModules)}, " +
+                    $"events replayed: {replayed}";
+            }
+            catch (Exception ex)
+            {
+                result.Message =
+                    $"System recovered: {string.Join(", ", result.RestoredModules)}, " +
+                    $"but event replay failed: {ex.Message}";
+            }
+        }
+        else
+        {
+            result.Message = $"System recovered: {string.Join(", ", result.RestoredModules)}";
+        }
+
         result.Success = true;
-        result.Message = $"System recovered: {string.Join(", ", result.RestoredModules)}";
         return result;
     }
 

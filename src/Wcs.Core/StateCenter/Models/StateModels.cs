@@ -54,8 +54,14 @@ public class AlarmState
     public string Message { get; set; } = string.Empty;
     
     public DateTime OccurTime { get; set; }
-    
+
     public DateTime? RecoverTime { get; set; }
+
+    /// <summary>根因报警 ID（根因树）</summary>
+    public string? RootCauseAlarmId { get; set; }
+
+    /// <summary>根因树深度（根因=0）</summary>
+    public int RootCauseDepth { get; set; }
 }
 
 /// <summary>
@@ -147,8 +153,10 @@ public class AlarmRule
     public int DelayRaiseMs { get; set; } = 3000;       // 防抖确认时间
     public int DelayRecoverMs { get; set; } = 5000;     // 防抖恢复时间
     public bool AutoAck { get; set; } = false;           // 自动确认
+    public bool AutoRecover { get; set; } = false;       // 条件恢复时自动清除，无需人工确认
     public int SuppressionWindowSec { get; set; } = 60;  // 风暴抑制窗口（秒）
     public int SuppressionThreshold { get; set; } = 10;  // 窗口内触发次数阈值
+    public int SuppressWindowMs { get; set; } = 0;       // 抑制窗口（毫秒），0=不抑制
     public string? AlarmGroup { get; set; }              // 聚合分组（同组做根因归并）
 }
 

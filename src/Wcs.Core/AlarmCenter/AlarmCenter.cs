@@ -75,6 +75,21 @@ public interface IAlarmCenter
     /// 获取报警总数（含已恢复）
     /// </summary>
     int GetTotalCount();
+
+    /// <summary>
+    /// 获取从指定报警到根因的路径
+    /// </summary>
+    IReadOnlyList<string> GetRootCausePath(string alarmId);
+
+    /// <summary>
+    /// 获取指定设备的所有根因报警
+    /// </summary>
+    IEnumerable<AlarmState> GetDeviceRootAlarms(string deviceId);
+
+    /// <summary>
+    /// 获取报警在根因树中的深度
+    /// </summary>
+    int GetRootCauseDepth(string alarmId);
 }
 
 /// <summary>
@@ -327,9 +342,31 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
 
     public int GetTotalCount() => _alarms.Count;
 
+    // ==================== 根因树查询（Phase 3） ====================
+
+    public IReadOnlyList<string> GetRootCausePath(string alarmId)
+    {
+        return _aggregation.GetRootCausePath(alarmId);
+    }
+
+    public IEnumerable<AlarmState> GetDeviceRootAlarms(string deviceId)
+    {
+        return _alarms.Values
+            .Where(a => a.RootCauseAlarmId == null  // 根因报警
+                     && a.AlarmCode == deviceId     // 匹配设备
+                     && AlarmStateMachine.IsVisible(a.Status))
+            .ToList();
+    }
+
+    public int GetRootCauseDepth(string alarmId)
+    {
+        return _aggregation.GetRootCauseDepth(alarmId);
+    }
+
     // ==================== ISnapshotProvider ====================
 
     public string ModuleName => "AlarmCenter";
+    public int RestoreOrder => 2;
 
     public Task<object> CaptureSnapshotAsync(CancellationToken ct = default)
     {

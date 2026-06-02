@@ -1,6 +1,7 @@
 namespace Wcs.Core.TaskEngine.Chain;
 
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using Wcs.Core.TaskEngine.Context;
 using Wcs.Core.TaskEngine.Orchestrator;
 using Wcs.Core.TaskEngine.Scheduler;
@@ -163,15 +164,19 @@ public class TaskChainEngine : ITaskChainEngine
     private readonly ChainExecutionEngine? _dagEngine;
     private readonly Dictionary<string, TaskChainResult> _results = new();
     private readonly object _resultLock = new();
+    private readonly ConcurrentDictionary<string, TaskChainDefinition> _definitions = new();
+    private readonly ILogger<TaskChainEngine>? _logger;
 
     public TaskChainEngine(
         ITaskOrchestrator orchestrator,
         ITaskScheduler scheduler,
-        ChainExecutionEngine? dagEngine = null)
+        ChainExecutionEngine? dagEngine = null,
+        ILogger<TaskChainEngine>? logger = null)
     {
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
         _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
         _dagEngine = dagEngine;
+        _logger = logger;
     }
 
     public async Task<TaskChainResult> ExecuteChainAsync(TaskChain chain, CancellationToken cancellationToken = default)
@@ -215,10 +220,34 @@ public class TaskChainEngine : ITaskChainEngine
         return result;
     }
 
+    public void RegisterDefinition(TaskChainDefinition definition)
+    {
+        _definitions[definition.DefinitionId] = definition;
+    }
+
+    public TaskChainDefinition? GetDefinition(string definitionId)
+    {
+        _definitions.TryGetValue(definitionId, out var def);
+        return def;
+    }
+
     public async Task<TaskGraphResult> ExecuteGraphAsync(TaskGraph graph, CancellationToken cancellationToken = default)
     {
         if (_dagEngine == null)
             throw new InvalidOperationException("ChainExecutionEngine not configured for DAG execution");
+
+        // Version compatibility check
+        if (graph.DefinitionId != null && graph.Version != null)
+        {
+            if (_definitions.TryGetValue(graph.DefinitionId, out var def))
+            {
+                if (def.Version.Major > graph.Version.Major)
+                {
+                    _logger?.LogWarning("Graph {GraphId} version {GraphVer} is behind definition {DefId} version {DefVer}",
+                        graph.GraphId, graph.Version, graph.DefinitionId, def.Version);
+                }
+            }
+        }
 
         return await _dagEngine.ExecuteAsync(graph, cancellationToken);
     }

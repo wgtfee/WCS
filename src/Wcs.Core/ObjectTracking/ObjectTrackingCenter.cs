@@ -6,6 +6,7 @@ using Wcs.Core.Common.Interfaces;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.ObjectTracking.Models;
+using Wcs.Core.ObjectTracking.Topology;
 using Wcs.Core.StateCenter.Models;
 
 /// <summary>
@@ -108,6 +109,19 @@ public class ObjectTrackingCenter : IObjectTrackingCenter, ISnapshotProvider
     /// 移动历史保留上限（每种物体）
     /// </summary>
     private const int MaxHistoryPerObject = 1000;
+
+    /// <summary>
+    /// 可选的拓扑图引用，用于路径查询和空间推理。
+    /// </summary>
+    public TopologyGraph? TopologyGraph { get; private set; }
+
+    /// <summary>
+    /// 设置拓扑图引用。
+    /// </summary>
+    public void SetTopologyGraph(TopologyGraph graph)
+    {
+        TopologyGraph = graph ?? throw new ArgumentNullException(nameof(graph));
+    }
 
     public ObjectTrackingCenter(IEventBus? eventBus = null)
     {
@@ -224,6 +238,44 @@ public class ObjectTrackingCenter : IObjectTrackingCenter, ISnapshotProvider
         }
     }
 
+    /// <summary>
+    /// 拓扑感知查询：获取在指定路径上的所有物料。
+    /// 使用 TopologyGraph 查找从 fromNodeId 到 toNodeId 的最短路径，
+    /// 然后返回位置落在路径节点上的所有物料。
+    /// </summary>
+    public IEnumerable<ObjectState> GetObjectsOnPath(string fromNodeId, string toNodeId)
+    {
+        if (TopologyGraph == null)
+            return Enumerable.Empty<ObjectState>();
+
+        var path = TopologyGraph.GetShortestPath(fromNodeId, toNodeId);
+        if (!path.Found || path.NodePath.Count == 0)
+            return Enumerable.Empty<ObjectState>();
+
+        // 收集路径上所有节点的位置键
+        var pathPositionKeys = new HashSet<string>();
+        foreach (var nodeId in path.NodePath)
+        {
+            var node = TopologyGraph.GetNode(nodeId);
+            if (node == null)
+                continue;
+
+            // 使用 Node 中的 ZoneId/ConveyorId/PositionId 构建位置键
+            var positionKey = $"{node.ZoneId}.{node.ConveyorId}.{node.PositionId}";
+            if (!string.IsNullOrWhiteSpace(node.ZoneId))
+                pathPositionKeys.Add(positionKey);
+        }
+
+        if (pathPositionKeys.Count == 0)
+            return Enumerable.Empty<ObjectState>();
+
+        // 返回位置匹配的物料
+        return _objects.Values
+            .Where(o => !string.IsNullOrEmpty(o.CurrentPosition) &&
+                        pathPositionKeys.Contains(o.CurrentPosition))
+            .ToList();
+    }
+
     public IEnumerable<ObjectState> GetMovingObjects()
     {
         return _objects.Values.Where(o => o.Status == ObjectStatusEnum.Moving).ToList();
@@ -300,6 +352,7 @@ public class ObjectTrackingCenter : IObjectTrackingCenter, ISnapshotProvider
     // ==================== ISnapshotProvider ====================
 
     public string ModuleName => "ObjectTracking";
+    public int RestoreOrder => 1;
 
     public Task<object> CaptureSnapshotAsync(CancellationToken ct = default)
     {

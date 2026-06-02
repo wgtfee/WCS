@@ -14,6 +14,11 @@ public sealed class AlarmAggregationEngine
     private readonly ConcurrentDictionary<string, HashSet<string>> _groupMembers = new(); // rootAlarmId → childIds
     private readonly ConcurrentDictionary<string, AlarmGroupKey> _alarmGroups = new(); // alarmId → groupKey
 
+    // 根因树层次结构
+    private readonly ConcurrentDictionary<string, string?> _parentMap = new(); // alarmId → parentAlarmId (null=根)
+    private readonly ConcurrentDictionary<string, HashSet<string>> _childrenMap = new(); // parentId → childIds
+    private readonly ConcurrentDictionary<string, int> _depthMap = new(); // alarmId → depth
+
     /// <summary>
     /// 判断报警是否被抑制（作为子报警被根因抑制）
     /// </summary>
@@ -106,10 +111,152 @@ public sealed class AlarmAggregationEngine
         return released;
     }
 
+    /// <summary>
+    /// 注册报警树层次关系 — 父子关系 + 深度计算
+    /// </summary>
+    /// <param name="alarmId">报警 ID</param>
+    /// <param name="parentAlarmId">父报警 ID（null 表示根因）</param>
+    public void RegisterAlarmHierarchy(string alarmId, string? parentAlarmId)
+    {
+        _parentMap[alarmId] = parentAlarmId;
+
+        if (parentAlarmId != null)
+        {
+            var siblings = _childrenMap.GetOrAdd(parentAlarmId, _ => new HashSet<string>());
+            lock (siblings) { siblings.Add(alarmId); }
+            _depthMap[alarmId] = GetRootCauseDepthInternal(alarmId);
+        }
+        else
+        {
+            _depthMap[alarmId] = 0;
+        }
+    }
+
+    /// <summary>
+    /// 获取从当前报警到根因的路径（自底向上）
+    /// </summary>
+    public IReadOnlyList<string> GetRootCausePath(string alarmId)
+    {
+        var path = new List<string>();
+        var current = alarmId;
+
+        while (current != null)
+        {
+            path.Add(current);
+            _parentMap.TryGetValue(current, out current);
+        }
+
+        return path.AsReadOnly();
+    }
+
+    /// <summary>
+    /// 获取指定报警的所有后代报警 ID（递归，广度优先）
+    /// </summary>
+    public IReadOnlyList<string> GetDescendantAlarms(string alarmId)
+    {
+        var descendants = new List<string>();
+        var queue = new Queue<string>();
+
+        if (_childrenMap.TryGetValue(alarmId, out var directChildren))
+        {
+            lock (directChildren)
+            {
+                foreach (var childId in directChildren)
+                    queue.Enqueue(childId);
+            }
+        }
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            descendants.Add(current);
+
+            if (_childrenMap.TryGetValue(current, out var children))
+            {
+                lock (children)
+                {
+                    foreach (var childId in children)
+                        queue.Enqueue(childId);
+                }
+            }
+        }
+
+        return descendants.AsReadOnly();
+    }
+
+    /// <summary>
+    /// 获取报警在根因树中的深度
+    /// </summary>
+    public int GetRootCauseDepth(string alarmId)
+    {
+        return _depthMap.TryGetValue(alarmId, out var depth) ? depth : 0;
+    }
+
+    /// <summary>
+    /// 递归恢复报警树 — 从指定节点开始恢复整个子树
+    /// </summary>
+    /// <returns>恢复的报警 ID 列表（含自身和所有子节点）</returns>
+    public IReadOnlyList<string> RecoverTree(string rootAlarmId)
+    {
+        var recovered = new List<string>();
+
+        // BFS 收集所有子节点
+        var allNodes = new List<string> { rootAlarmId };
+        allNodes.AddRange(GetDescendantAlarms(rootAlarmId));
+
+        // 移除索引（从叶子到根）
+        for (int i = allNodes.Count - 1; i >= 0; i--)
+        {
+            var nodeId = allNodes[i];
+            recovered.Add(nodeId);
+
+            _parentMap.TryRemove(nodeId, out _);
+            _childrenMap.TryRemove(nodeId, out _);
+            _depthMap.TryRemove(nodeId, out _);
+            _alarmGroups.TryRemove(nodeId, out _);
+        }
+
+        // 清理旧的 flat 分组索引
+        var nodeSet = new HashSet<string>(recovered);
+        var rootKeysToRemove = _rootCauses
+            .Where(kvp => nodeSet.Contains(kvp.Value))
+            .Select(kvp => kvp.Key)
+            .ToList();
+        foreach (var key in rootKeysToRemove)
+            _rootCauses.TryRemove(key, out _);
+
+        foreach (var nodeId in recovered)
+        {
+            _groupMembers.TryRemove(nodeId, out _);
+        }
+
+        return recovered.AsReadOnly();
+    }
+
     public void Clear()
     {
         _rootCauses.Clear();
         _groupMembers.Clear();
         _alarmGroups.Clear();
+        _parentMap.Clear();
+        _childrenMap.Clear();
+        _depthMap.Clear();
+    }
+
+    /// <summary>
+    /// 计算报警在树中的深度 — 向上遍历到根
+    /// </summary>
+    private int GetRootCauseDepthInternal(string alarmId)
+    {
+        var depth = 0;
+        var current = alarmId;
+
+        while (_parentMap.TryGetValue(current, out var parent) && parent != null)
+        {
+            depth++;
+            current = parent;
+        }
+
+        return depth;
     }
 }

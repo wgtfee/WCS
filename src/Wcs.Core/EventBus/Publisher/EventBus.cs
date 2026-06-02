@@ -3,15 +3,23 @@ namespace Wcs.Core.EventBus.Publisher;
 using System.Collections.Concurrent;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Handlers;
+using Wcs.Core.EventBus.Persistence;
 
 /// <summary>
-/// 内存事件总线实现
+/// 内存事件总线实现 — 可选 IEventStore 持久化集成
+/// 持久化为 fire-and-forget 模式，不影响主事件发布流程
 /// </summary>
 public class EventBus : IEventBus
 {
     private readonly ConcurrentDictionary<Type, List<object>> _subscribers = new();
     private readonly ConcurrentDictionary<Type, List<Delegate>> _delegateHandlers = new();
     private readonly object _subscribeLock = new();
+    private readonly IEventStore? _eventStore;
+
+    public EventBus(IEventStore? eventStore = null)
+    {
+        _eventStore = eventStore;
+    }
 
     public void Subscribe<TEvent>(IEventHandler<TEvent> handler) where TEvent : IEvent
     {
@@ -111,6 +119,30 @@ public class EventBus : IEventBus
         {
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
+
+        // Fire-and-forget: 持久化事件到 EventStore（不影响主流程）
+        if (_eventStore != null)
+        {
+            PersistFireAndForget(@event);
+        }
+    }
+
+    /// <summary>
+    /// fire-and-forget 事件持久化
+    /// </summary>
+    private void PersistFireAndForget<TEvent>(TEvent @event) where TEvent : IEvent
+    {
+        Task.Run(async () =>
+        {
+            try
+            {
+                await _eventStore!.AppendAsync(@event);
+            }
+            catch
+            {
+                // 持久化失败不应影响事件发布
+            }
+        });
     }
 
     public Task PublishAsync(IEvent @event, CancellationToken cancellationToken = default)

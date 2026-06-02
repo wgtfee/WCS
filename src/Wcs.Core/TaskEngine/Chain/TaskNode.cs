@@ -37,6 +37,19 @@ public record ActionNode : TaskNode
 }
 
 /// <summary>
+/// 结构化等待条件 — 替代 ConditionExpression 字符串解析
+/// </summary>
+public record WaitCondition
+{
+    /// <summary>设备 ID（如 "CV01"）</summary>
+    public string DeviceId { get; init; } = string.Empty;
+    /// <summary>期望状态（如 "Ready", "Running"）</summary>
+    public string ExpectedStatus { get; init; } = string.Empty;
+    /// <summary>可选：等待命名事件信号</summary>
+    public string? SignalName { get; init; }
+}
+
+/// <summary>
 /// 等待节点 — 等待条件满足后继续
 /// </summary>
 public record WaitNode : TaskNode
@@ -44,8 +57,11 @@ public record WaitNode : TaskNode
     /// <summary>条件类型：Signal / Delay / External</summary>
     public string ConditionType { get; init; } = "Signal";
 
-    /// <summary>条件表达式（PLC 地址或表达式）</summary>
+    /// <summary>条件表达式（PLC 地址或表达式），兼容旧格式 "DeviceId:ExpectedStatus"</summary>
     public string ConditionExpression { get; init; } = string.Empty;
+
+    /// <summary>结构化条件（优先于 ConditionExpression）</summary>
+    public WaitCondition? Condition { get; init; }
 
     /// <summary>轮询间隔（毫秒）</summary>
     public int PollMs { get; init; } = 500;
@@ -103,6 +119,12 @@ public class TaskGraph
 
     /// <summary>拓扑排序后的执行顺序</summary>
     public IReadOnlyList<TaskNode> TopologicalOrder { get; init; } = Array.Empty<TaskNode>();
+
+    /// <summary>链定义版本</summary>
+    public Version? Version { get; init; }
+
+    /// <summary>关联的 TaskChainDefinition ID</summary>
+    public string? DefinitionId { get; init; }
 }
 
 /// <summary>

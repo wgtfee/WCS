@@ -9,6 +9,7 @@ public class ChainBuilder
     private readonly List<TaskNode> _nodes = new();
     private readonly Dictionary<string, TaskNode> _nodeIndex = new();
     private readonly Dictionary<string, List<string>> _adjacency = new(); // nodeId → dependsOnIds
+    private TaskChainDefinition? _definition;
 
     private ChainBuilder() { }
 
@@ -34,7 +35,23 @@ public class ChainBuilder
     }
 
     /// <summary>
-    /// 添加等待节点
+    /// 添加等待节点（结构化条件）
+    /// </summary>
+    public ChainBuilder AddWait(string nodeId, WaitCondition condition, Action<TaskNode>? configure = null)
+    {
+        var node = new WaitNode
+        {
+            NodeId = nodeId,
+            ConditionType = "Signal",
+            Condition = condition
+        };
+        configure?.Invoke(node);
+        AddNode(node);
+        return this;
+    }
+
+    /// <summary>
+    /// 添加等待节点（表达式条件）
     /// </summary>
     public ChainBuilder AddWait(string nodeId, string conditionType, string conditionExpression, Action<TaskNode>? configure = null)
     {
@@ -83,6 +100,12 @@ public class ChainBuilder
     /// <summary>
     /// 添加决策节点
     /// </summary>
+    /// <param name="nodeId">节点 ID</param>
+    /// <param name="expression">条件表达式或语义处理器名称（如 "CheckStorageAvailable"、"x > 10"）。
+    /// 建议使用业务语义名称而非实现表达式，通过 RegisterDecisionHandler 注册匹配。</param>
+    /// <param name="trueBranchId">条件为 true 时的分支节点 ID</param>
+    /// <param name="falseBranchId">条件为 false 时的分支节点 ID</param>
+    /// <param name="configure">可选配置委托</param>
     public ChainBuilder AddDecision(string nodeId, string expression, string trueBranchId, string falseBranchId, Action<TaskNode>? configure = null)
     {
         var node = new DecisionNode
@@ -105,6 +128,15 @@ public class ChainBuilder
         if (!_adjacency.ContainsKey(nodeId))
             _adjacency[nodeId] = new List<string>();
         _adjacency[nodeId].Add(dependsOnId);
+        return this;
+    }
+
+    /// <summary>
+    /// 关联链定义
+    /// </summary>
+    public ChainBuilder WithDefinition(TaskChainDefinition definition)
+    {
+        _definition = definition;
         return this;
     }
 
@@ -177,7 +209,9 @@ public class ChainBuilder
             GraphId = graphId ?? Guid.NewGuid().ToString("N"),
             Nodes = _nodes.AsReadOnly(),
             NodeIndex = new Dictionary<string, TaskNode>(_nodeIndex),
-            TopologicalOrder = sorted.AsReadOnly()
+            TopologicalOrder = sorted.AsReadOnly(),
+            Version = _definition?.Version,
+            DefinitionId = _definition?.DefinitionId
         };
     }
 

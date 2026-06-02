@@ -3,6 +3,7 @@ namespace Wcs.Application;
 using Wcs.Application.Services;
 using Wcs.Core.AlarmCenter;
 using Wcs.Core.Common.Interfaces;
+using Wcs.Core.EventBus.Persistence;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.ObjectTracking;
 using Wcs.Core.Recovery;
@@ -31,6 +32,10 @@ public static class DependencyInjection
         services.AddSingleton<IIdempotencyManager, IdempotencyManager>();
         services.AddSingleton<ITaskScheduler, TaskScheduler>();
         services.AddSingleton<IResourceLockManager, ResourceLockManager>();
+
+        // EventStore persistence (optional, fire-and-forget)
+        services.AddSingleton<IEventStore, FileEventStore>();
+        services.AddSingleton<EventReplayService>();
 
         // Core - depends on above
         services.AddSingleton<AlarmCenter>(sp =>
