@@ -84,6 +84,28 @@ public interface IObjectTrackingCenter
     /// 获取物料总数
     /// </summary>
     int Count { get; }
+
+    // ========== 预占位管理 ==========
+
+    /// <summary>
+    /// 预约指定节点 — 防止双托盘占位
+    /// </summary>
+    bool ReservePosition(string objectId, string nodeId, List<string>? route = null);
+
+    /// <summary>
+    /// 确认到达预约节点（到达后确认，释放预占）
+    /// </summary>
+    bool ConfirmPosition(string objectId, string currentNodeId);
+
+    /// <summary>
+    /// 取消预约
+    /// </summary>
+    bool CancelReservation(string objectId);
+
+    /// <summary>
+    /// 获取物料预约的节点
+    /// </summary>
+    string? GetReservedNode(string objectId);
 }
 
 /// <summary>
@@ -326,6 +348,105 @@ public class ObjectTrackingCenter : IObjectTrackingCenter, ISnapshotProvider
     public string? GetObjectByTask(string taskId)
     {
         return _taskIndex.TryGetValue(taskId, out var objectId) ? objectId : null;
+    }
+
+    // ========== 预占位管理 ==========
+
+    /// <summary>
+    /// 预约指定节点 — 检查是否已被其他物料预约，没有则成功
+    /// 需要 TopologyGraph 配合检查节点占用
+    /// </summary>
+    public bool ReservePosition(string objectId, string nodeId, List<string>? route = null)
+    {
+        if (!_objects.TryGetValue(objectId, out var state))
+            return false;
+
+        // 检查节点是否已被其他物料预约
+        foreach (var obj in _objects.Values)
+        {
+            if (obj.ObjectId != objectId &&
+                obj.ReservedNodeId == nodeId &&
+                obj.Status != ObjectStatusEnum.Completed)
+            {
+                return false; // 节点已被其他物料预约
+            }
+        }
+
+        // 检查 TopologyGraph 中该节点是否已被占用
+        if (TopologyGraph != null && TopologyGraph.IsNodeReserved(nodeId))
+        {
+            return false;
+        }
+
+        state.ReservedNodeId = nodeId;
+        state.Route = route;
+        state.UpdateTime = DateTime.UtcNow;
+
+        // 在 TopologyGraph 中标记预约
+        TopologyGraph?.SetNodeOccupied(nodeId, true);
+        TopologyGraph?.SetNodeOccupiedBy(nodeId, objectId);
+
+        return true;
+    }
+
+    /// <summary>
+    /// 确认到达预约节点
+    /// </summary>
+    public bool ConfirmPosition(string objectId, string currentNodeId)
+    {
+        if (!_objects.TryGetValue(objectId, out var state))
+            return false;
+
+        if (state.ReservedNodeId == null)
+            return false;
+
+        // 清理旧预约标记
+        var oldReserved = state.ReservedNodeId;
+        TopologyGraph?.SetNodeOccupied(oldReserved, false);
+        TopologyGraph?.SetNodeOccupiedBy(oldReserved, null);
+
+        // 更新当前位置
+        state.CurrentPosition = currentNodeId;
+        state.ReservedNodeId = null;
+        state.Route = null;
+        state.UpdateTime = DateTime.UtcNow;
+
+        // 如果新位置在 TopologyGraph 中有对应节点，标记为占用
+        TopologyGraph?.SetNodeOccupied(currentNodeId, true);
+        TopologyGraph?.SetNodeOccupiedBy(currentNodeId, objectId);
+
+        return true;
+    }
+
+    /// <summary>
+    /// 取消预约
+    /// </summary>
+    public bool CancelReservation(string objectId)
+    {
+        if (!_objects.TryGetValue(objectId, out var state))
+            return false;
+
+        if (state.ReservedNodeId == null)
+            return false;
+
+        var reservedNode = state.ReservedNodeId;
+        state.ReservedNodeId = null;
+        state.Route = null;
+        state.UpdateTime = DateTime.UtcNow;
+
+        // 释放 TopologyGraph 中的预约
+        TopologyGraph?.SetNodeOccupied(reservedNode, false);
+        TopologyGraph?.SetNodeOccupiedBy(reservedNode, null);
+
+        return true;
+    }
+
+    /// <summary>
+    /// 获取物料预约的节点
+    /// </summary>
+    public string? GetReservedNode(string objectId)
+    {
+        return _objects.TryGetValue(objectId, out var state) ? state.ReservedNodeId : null;
     }
 
     public Dictionary<string, ObjectState> GetSnapshot()

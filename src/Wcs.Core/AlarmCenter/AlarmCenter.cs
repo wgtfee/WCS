@@ -3,6 +3,7 @@ namespace Wcs.Core.AlarmCenter;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Wcs.Core.AlarmCenter.Engine;
+using Wcs.Core.AlarmCenter.Masking;
 using Wcs.Core.AlarmCenter.Models;
 using Wcs.Core.Common.Interfaces;
 using Wcs.Core.EventBus.Events;
@@ -105,6 +106,7 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
     private readonly AlarmDebounceEngine _debounceEngine;
     private readonly AlarmStormGuard _stormGuard;
     private readonly AlarmAggregationEngine _aggregation;
+    private readonly AlarmMaskManager _maskManager;
 
     public bool IsInStormMode => _stormGuard.IsInStormMode;
 
@@ -121,9 +123,10 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
         SuppressionThreshold = 10
     };
 
-    public AlarmCenter(IEventBus eventBus)
+    public AlarmCenter(IEventBus eventBus, AlarmMaskManager? maskManager = null)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _maskManager = maskManager ?? new AlarmMaskManager();
 
         _aggregation = new AlarmAggregationEngine();
 
@@ -191,6 +194,12 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
         {
             // 被风暴抑制，不产生报警实体
             return;
+        }
+
+        // Step 3b: 屏蔽检测（设备维修等场景）
+        if (_maskManager.IsMasked(rule.AlarmGroup, alarmCode))
+        {
+            return; // 被屏蔽，不产生报警
         }
 
         var alarmId = $"ALM-{alarmCode}-{DateTime.UtcNow:yyyyMMddHHmmssfff}";

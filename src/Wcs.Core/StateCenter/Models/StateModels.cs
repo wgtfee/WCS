@@ -70,16 +70,22 @@ public class AlarmState
 public class ObjectState
 {
     public string ObjectId { get; set; } = string.Empty;
-    
+
     public string CurrentPosition { get; set; } = string.Empty;
-    
+
     public string? TargetPosition { get; set; }
-    
+
     public ObjectStatusEnum Status { get; set; }
-    
+
     public DateTime UpdateTime { get; set; }
-    
+
     public Dictionary<string, object> Attributes { get; set; } = new();
+
+    /// <summary>预约的节点 ID — 防双托盘占位</summary>
+    public string? ReservedNodeId { get; set; }
+
+    /// <summary>完整路径节点列表 — 预约时可指定</summary>
+    public List<string>? Route { get; set; }
 }
 
 /// <summary>

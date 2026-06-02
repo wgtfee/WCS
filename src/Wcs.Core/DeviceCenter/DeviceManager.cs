@@ -1,337 +1,95 @@
 namespace Wcs.Core.DeviceCenter;
 
-using System.Collections.Concurrent;
-
 /// <summary>
 /// 设备管理器接口
 /// </summary>
 public interface IDeviceManager
 {
-    /// <summary>
-    /// 注册设备
-    /// </summary>
     void RegisterDevice(IDevice device);
-
-    /// <summary>
-    /// 注销设备
-    /// </summary>
     bool UnregisterDevice(string deviceId);
-
-    /// <summary>
-    /// 获取指定设备
-    /// </summary>
     IDevice? GetDevice(string deviceId);
-
-    /// <summary>
-    /// 获取所有设备
-    /// </summary>
     IEnumerable<IDevice> GetAllDevices();
-
-    /// <summary>
-    /// 按类型获取设备
-    /// </summary>
     IEnumerable<IDevice> GetDevicesByType(DeviceTypeEnum type);
-
-    /// <summary>
-    /// 启动设备
-    /// </summary>
     Task<bool> StartDeviceAsync(string deviceId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 停止设备
-    /// </summary>
     Task<bool> StopDeviceAsync(string deviceId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 复位设备
-    /// </summary>
     Task<bool> ResetDeviceAsync(string deviceId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 暂停设备
-    /// </summary>
     Task<bool> PauseDeviceAsync(string deviceId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 恢复设备
-    /// </summary>
     Task<bool> ResumeDeviceAsync(string deviceId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 设备计数
-    /// </summary>
     int GetTotalDeviceCount();
-
-    /// <summary>
-    /// 获取指定状态的设备数
-    /// </summary>
     int GetDeviceCountByStatus(DeviceStatusEnum status);
-
-    /// <summary>
-    /// 订阅设备事件
-    /// </summary>
     void Subscribe(IDeviceEventHandler handler);
-
-    /// <summary>
-    /// 取消订阅设备事件
-    /// </summary>
     void Unsubscribe(IDeviceEventHandler handler);
-
-    /// <summary>
-    /// 同步设备状态
-    /// </summary>
     Task SyncDeviceStateAsync(string deviceId, DeviceStatusEnum newStatus, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// 设备管理器实现
+/// 设备管理器实现 — 委托给 4 个子组件：
+/// DeviceRegistry + DeviceCommandDispatcher + DeviceStateSynchronizer + DeviceHealthMonitor
 /// </summary>
 public class DeviceManager : IDeviceManager
 {
-    private readonly ConcurrentDictionary<string, IDevice> _devices = new();
-    private readonly List<IDeviceEventHandler> _eventHandlers = new();
-    private readonly object _handlerLock = new();
+    /// <summary>设备注册表</summary>
+    public DeviceRegistry Registry { get; }
 
-    public void RegisterDevice(IDevice device)
+    /// <summary>设备命令调度器</summary>
+    public DeviceCommandDispatcher CommandDispatcher { get; }
+
+    /// <summary>设备状态同步器</summary>
+    public DeviceStateSynchronizer StateSynchronizer { get; }
+
+    /// <summary>设备健康监控器</summary>
+    public DeviceHealthMonitor HealthMonitor { get; }
+
+    public DeviceManager()
     {
-        ArgumentNullException.ThrowIfNull(device);
-
-        if (!_devices.TryAdd(device.DeviceId, device))
-        {
-            throw new InvalidOperationException($"Device {device.DeviceId} already registered");
-        }
+        Registry = new DeviceRegistry();
+        CommandDispatcher = new DeviceCommandDispatcher(Registry);
+        StateSynchronizer = new DeviceStateSynchronizer(Registry, CommandDispatcher);
+        HealthMonitor = new DeviceHealthMonitor(Registry, CommandDispatcher);
     }
 
-    public bool UnregisterDevice(string deviceId)
-    {
-        ArgumentNullException.ThrowIfNull(deviceId);
-        return _devices.TryRemove(deviceId, out _);
-    }
+    // ==================== 设备注册/注销/查询（委托给 Registry） ====================
 
-    public IDevice? GetDevice(string deviceId)
-    {
-        ArgumentNullException.ThrowIfNull(deviceId);
-        _devices.TryGetValue(deviceId, out var device);
-        return device;
-    }
+    public void RegisterDevice(IDevice device) => Registry.RegisterDevice(device);
 
-    public IEnumerable<IDevice> GetAllDevices()
-    {
-        return _devices.Values.ToList();
-    }
+    public bool UnregisterDevice(string deviceId) => Registry.UnregisterDevice(deviceId);
 
-    public IEnumerable<IDevice> GetDevicesByType(DeviceTypeEnum type)
-    {
-        return _devices.Values
-            .Where(d => d.DeviceType == type)
-            .ToList();
-    }
+    public IDevice? GetDevice(string deviceId) => Registry.GetDevice(deviceId);
 
-    public async Task<bool> StartDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(deviceId);
+    public IEnumerable<IDevice> GetAllDevices() => Registry.GetAllDevices();
 
-        var device = GetDevice(deviceId);
-        if (device == null)
-            return false;
+    public IEnumerable<IDevice> GetDevicesByType(DeviceTypeEnum type) => Registry.GetDevicesByType(type);
 
-        var oldStatus = device.Status;
-        var result = await device.StartAsync(cancellationToken).ConfigureAwait(false);
+    public int GetTotalDeviceCount() => Registry.Count;
 
-        if (result && device.Status != oldStatus)
-        {
-            await PublishDeviceStartedAsync(device, cancellationToken).ConfigureAwait(false);
-        }
+    public int GetDeviceCountByStatus(DeviceStatusEnum status) => Registry.GetCountByStatus(status);
 
-        return result;
-    }
+    // ==================== 设备命令（委托给 CommandDispatcher） ====================
 
-    public async Task<bool> StopDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(deviceId);
+    public Task<bool> StartDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
+        => CommandDispatcher.StartDeviceAsync(deviceId, cancellationToken);
 
-        var device = GetDevice(deviceId);
-        if (device == null)
-            return false;
+    public Task<bool> StopDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
+        => CommandDispatcher.StopDeviceAsync(deviceId, cancellationToken);
 
-        var oldStatus = device.Status;
-        var result = await device.StopAsync(cancellationToken).ConfigureAwait(false);
+    public Task<bool> ResetDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
+        => CommandDispatcher.ResetDeviceAsync(deviceId, cancellationToken);
 
-        if (result && device.Status != oldStatus)
-        {
-            await PublishDeviceStoppedAsync(device, cancellationToken).ConfigureAwait(false);
-        }
+    public Task<bool> PauseDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
+        => CommandDispatcher.PauseDeviceAsync(deviceId, cancellationToken);
 
-        return result;
-    }
+    public Task<bool> ResumeDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
+        => CommandDispatcher.ResumeDeviceAsync(deviceId, cancellationToken);
 
-    public async Task<bool> ResetDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(deviceId);
+    // ==================== 设备事件（委托给 CommandDispatcher） ====================
 
-        var device = GetDevice(deviceId);
-        if (device == null)
-            return false;
+    public void Subscribe(IDeviceEventHandler handler) => CommandDispatcher.Subscribe(handler);
 
-        return await device.ResetAsync(cancellationToken).ConfigureAwait(false);
-    }
+    public void Unsubscribe(IDeviceEventHandler handler) => CommandDispatcher.Unsubscribe(handler);
 
-    public async Task<bool> PauseDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(deviceId);
+    // ==================== 状态同步（委托给 StateSynchronizer） ====================
 
-        var device = GetDevice(deviceId);
-        if (device == null)
-            return false;
-
-        return await device.PauseAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<bool> ResumeDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(deviceId);
-
-        var device = GetDevice(deviceId);
-        if (device == null)
-            return false;
-
-        return await device.ResumeAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    public int GetTotalDeviceCount()
-    {
-        return _devices.Count;
-    }
-
-    public int GetDeviceCountByStatus(DeviceStatusEnum status)
-    {
-        return _devices.Values.Count(d => d.Status == status);
-    }
-
-    public void Subscribe(IDeviceEventHandler handler)
-    {
-        ArgumentNullException.ThrowIfNull(handler);
-
-        lock (_handlerLock)
-        {
-            if (!_eventHandlers.Contains(handler))
-            {
-                _eventHandlers.Add(handler);
-            }
-        }
-    }
-
-    public void Unsubscribe(IDeviceEventHandler handler)
-    {
-        ArgumentNullException.ThrowIfNull(handler);
-
-        lock (_handlerLock)
-        {
-            _eventHandlers.Remove(handler);
-        }
-    }
-
-    public async Task SyncDeviceStateAsync(string deviceId, DeviceStatusEnum newStatus, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(deviceId);
-
-        var device = GetDevice(deviceId);
-        if (device == null)
-            return;
-
-        var oldStatus = device.Status;
-
-        if (oldStatus == newStatus)
-            return;
-
-        // 状态转移逻辑
-        switch (newStatus)
-        {
-            case DeviceStatusEnum.Running:
-                await device.StartAsync(cancellationToken).ConfigureAwait(false);
-                break;
-            case DeviceStatusEnum.Idle:
-                await device.StopAsync(cancellationToken).ConfigureAwait(false);
-                break;
-            case DeviceStatusEnum.Paused:
-                await device.PauseAsync(cancellationToken).ConfigureAwait(false);
-                break;
-        }
-
-        if (device.Status != oldStatus)
-        {
-            await PublishDeviceStatusChangedAsync(device, oldStatus, newStatus, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    /// <summary>
-    /// 获取事件处理器数量
-    /// </summary>
-    public int GetEventHandlerCount()
-    {
-        lock (_handlerLock)
-        {
-            return _eventHandlers.Count;
-        }
-    }
-
-    /// <summary>
-    /// 发布设备启动事件
-    /// </summary>
-    private async Task PublishDeviceStartedAsync(IDevice device, CancellationToken cancellationToken)
-    {
-        List<IDeviceEventHandler> handlers;
-        lock (_handlerLock)
-        {
-            handlers = new List<IDeviceEventHandler>(_eventHandlers);
-        }
-
-        var tasks = handlers.Select(h => h.OnDeviceStartedAsync(device, cancellationToken));
-        await Task.WhenAll(tasks).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// 发布设备停止事件
-    /// </summary>
-    private async Task PublishDeviceStoppedAsync(IDevice device, CancellationToken cancellationToken)
-    {
-        List<IDeviceEventHandler> handlers;
-        lock (_handlerLock)
-        {
-            handlers = new List<IDeviceEventHandler>(_eventHandlers);
-        }
-
-        var tasks = handlers.Select(h => h.OnDeviceStoppedAsync(device, cancellationToken));
-        await Task.WhenAll(tasks).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// 发布设备状态变化事件
-    /// </summary>
-    private async Task PublishDeviceStatusChangedAsync(IDevice device, DeviceStatusEnum oldStatus, DeviceStatusEnum newStatus, CancellationToken cancellationToken)
-    {
-        List<IDeviceEventHandler> handlers;
-        lock (_handlerLock)
-        {
-            handlers = new List<IDeviceEventHandler>(_eventHandlers);
-        }
-
-        var tasks = handlers.Select(h => h.OnDeviceStatusChangedAsync(device, oldStatus, newStatus, cancellationToken));
-        await Task.WhenAll(tasks).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// 发布设备错误事件
-    /// </summary>
-    public async Task PublishDeviceErrorAsync(IDevice device, string errorMessage, CancellationToken cancellationToken = default)
-    {
-        List<IDeviceEventHandler> handlers;
-        lock (_handlerLock)
-        {
-            handlers = new List<IDeviceEventHandler>(_eventHandlers);
-        }
-
-        var tasks = handlers.Select(h => h.OnDeviceErrorAsync(device, errorMessage, cancellationToken));
-        await Task.WhenAll(tasks).ConfigureAwait(false);
-    }
+    public Task SyncDeviceStateAsync(string deviceId, DeviceStatusEnum newStatus,
+        CancellationToken cancellationToken = default)
+        => StateSynchronizer.SyncDeviceStateAsync(deviceId, newStatus, cancellationToken);
 }

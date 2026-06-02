@@ -1,4 +1,4 @@
-# WCS Runtime Engine V2 — 完整数据流详解
+# WCS Runtime Engine V3 — 完整数据流详解
 
 > 本文档从「PLC 数据采集 → 数据汇聚 → 任务调度 → 链式执行 → 设备控制 → 完成」的全链路视角，解释每个环节的代码位置、模块职责和交互方式。
 
@@ -89,11 +89,17 @@ i:\code\IOT\WCS ENG\
 │   │   │   └── RecoveryManager.cs            #   恢复管理器（快照+事件重放）
 │   │   │
 │   │   ├── ResourceLock/                    # 资源锁
-│   │   │   └── ResourceLockManager.cs        #   分布式锁（TTL/Lease/自动清理）
+│   │   │   └── ResourceLockManager.cs        #   分布式锁（TTL/Lease/FenceToken/自动清理）
 │   │   │
 │   │   ├── StateCenter/                     # ★ 状态中心（系统真理源）
 │   │   │   ├── Interfaces/IStateCenter.cs    #   状态中心接口
-│   │   │   ├── Implementation/StateCenter.cs #   状态中心实现
+│   │   │   ├── Implementation/              #   V3: 拆分为 5 个独立 Manager
+│   │   │   │   ├── StateCenter.cs            #   门面 + 委托
+│   │   │   │   ├── DeviceStateManager.cs     #   V3 新增：设备状态管理器
+│   │   │   │   ├── TaskStateManager.cs       #   V3 新增：任务运行时管理器
+│   │   │   │   ├── AlarmStateManager.cs      #   V3 新增：报警状态管理器
+│   │   │   │   ├── ObjectStateManager.cs     #   V3 新增：物体状态管理器
+│   │   │   │   └── PlcBlockStateManager.cs   #   V3 新增：PLC 数据块管理器
 │   │   │   ├── Models/StateModels.cs         #   状态模型（设备/任务/报警/物体/PLC）
 │   │   │   └── Features/
 │   │   │       ├── BatchScope.cs             #   批量更新作用域
@@ -739,7 +745,6 @@ EventBus 是整个系统的**骨架**，所有模块通过事件解耦通信：
 
 ### 11.3 两种订阅方式
 
-```csharp
 // 方式 1：接口处理器（推荐）
 class MyHandler : IEventHandler<DeviceStateChangedEvent>
 {
@@ -752,9 +757,6 @@ bus.Subscribe<DeviceStateChangedEvent>(async (e, ct) =>
 {
     // 处理事件
 });
-```
-
----
 
 ## 12. 横切关注点：AlarmCenter
 
@@ -766,8 +768,6 @@ bus.Subscribe<DeviceStateChangedEvent>(async (e, ct) =>
 - `src/Wcs.Core/AlarmCenter/Models/AlarmStateMachine.cs` — 状态机
 
 ### 12.1 5 层报警管线
-
-```
 Raw Signal
   │
   ▼
@@ -795,11 +795,8 @@ Raw Signal
   ▼
 ⑤ EventBus (事件发布)
      AlarmRaisedEvent / AlarmRecoveredEvent
-```
 
 ### 12.2 报警状态机
-
-```
         ┌──────────────────────────────────┐
         │                                  │
         ▼                                  │
@@ -812,9 +809,6 @@ Raw Signal
         │                      │  等待延迟到期
         │                      ▼
         └──────────── Recovered
-```
-
----
 
 ## 13. 横切关注点：系统恢复 RecoveryManager
 
@@ -833,8 +827,6 @@ Raw Signal
 | 3 | TaskChainEngine | 任务上下文，最后恢复 |
 
 ### 13.2 完整恢复流程
-
-```
 RecoveryManager.RecoverAsync()
   │
   ├── Phase 1: 收集快照
@@ -852,9 +844,6 @@ RecoveryManager.RecoverAsync()
           ├── 读取 FileEventStore 中 snapshot 之后的事件
           ├── 过滤可重放事件（白名单）
           └── 重新发布到 EventBus
-```
-
----
 
 ## 14. 汇总表：文件 → 职责
 
@@ -890,10 +879,41 @@ RecoveryManager.RecoverAsync()
 
 ## 一句话总结
 
-```
 PLC 发来数据 → PlcPollingService 采到 → PlcBlockDiffEngine 算出变化 →
 EventBus 广播通知 → StateCenter 记下状态 → TaskScheduler 排好队 →
 ChainExecutionEngine 按 DAG 图一步步执行 → DeviceManager 控制现场设备 →
 做完后 TaskOrchestrator 收尾 → 同时 AlarmCenter 全程盯着报警 →
 万一崩溃了 RecoveryManager 按 RestoreOrder 逐个恢复再重放事件追回来
-```
+
+---
+
+## 15. V3 架构升级（Step 9）
+
+V3 基于 V2 架构审计发现的 9 个工业级风险点进行整改。详见 [step-09-v3-upgrade.md](step-09-v3-upgrade.md)。
+
+### 新增模块
+
+| 模块 | 文件 | 目的 |
+|------|------|------|
+| **SignalMapper** | `PlcSubsystem/SignalMapper/` | PLC 地址 → 业务信号事件 |
+| **StateManager 拆分** | `StateCenter/Implementation/*Manager.cs` | 5 个独立 Manager 分担 StateCenter |
+| **AlarmMask** | `AlarmCenter/Masking/` | 设备维修时动态屏蔽报警 |
+| **DeviceRegistry** | `DeviceCenter/DeviceRegistry.cs` | 设备注册专用子组件 |
+| **DeviceCommandDispatcher** | `DeviceCenter/DeviceCommandDispatcher.cs` | 设备命令专用子组件 |
+| **DeviceStateSynchronizer** | `DeviceCenter/DeviceStateSynchronizer.cs` | 状态同步专用子组件 |
+| **DeviceHealthMonitor** | `DeviceCenter/DeviceHealthMonitor.cs` | 健康检查/心跳专用子组件 |
+| **BusinessSignals** | `EventBus/Events/BusinessSignals.cs` | 业务信号事件类 |
+
+### 关键升级
+
+| # | 升级 | 详情 |
+|---|------|------|
+| 1 | **StateCenter 解耦** | 拆为 5 个独立 Manager，各自管理 ConcurrentDictionary + diff + 通知 |
+| 2 | **SignalMapper** | `PlcBlockChangedEvent` → 业务信号事件（ConveyorReady/PalletArrived 等） |
+| 3 | **DeviceManager 拆分** | 拆为 Registry/CommandDispatcher/StateSynchronizer/HealthMonitor |
+| 4 | **WaitNode 双保险** | StateCenter 状态检查 + EventBus 订阅，防止事件丢失 |
+| 5 | **FenceToken** | 资源锁单调递增 token，防止 TTL 过期后误操作 |
+| 6 | **TaskPriority/Category** | 双维度排序（Category 优先，Priority 次级） |
+| 7 | **AlarmMask** | 设备级/报警码级动态报警屏蔽 |
+| 8 | **ReservedPosition** | ObjectState 新增 ReservedNodeId/Route，防止双托盘占位 |
+| 9 | **EventReplay 白名单** | 移除实时状态事件，只保留有状态恢复需求的事件 |

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Handlers;
 using Wcs.Core.EventBus.Publisher;
+using Wcs.Core.StateCenter.Interfaces;
 using Wcs.Core.StateCenter.Models;
 
 /// <summary>
@@ -15,6 +16,7 @@ public class ChainExecutionEngine
 {
     private readonly ChainRecoveryService _recoveryService;
     private readonly IEventBus? _eventBus;
+    private readonly IStateCenter? _stateCenter;
     private readonly ILogger<ChainExecutionEngine>? _logger;
 
     // DecisionNode 委托注册表：Expression → handler
@@ -29,10 +31,12 @@ public class ChainExecutionEngine
     public ChainExecutionEngine(
         ChainRecoveryService recoveryService,
         IEventBus? eventBus = null,
+        IStateCenter? stateCenter = null,
         ILogger<ChainExecutionEngine>? logger = null)
     {
         _recoveryService = recoveryService ?? throw new ArgumentNullException(nameof(recoveryService));
         _eventBus = eventBus;
+        _stateCenter = stateCenter;
         _logger = logger;
 
         // 注册默认的 Signal 等待处理器
@@ -332,6 +336,21 @@ public class ChainExecutionEngine
             targetStatus = parts.Length > 1 ? parts[1] : "Running";
         }
 
+        // === State + Event 双保险 ===
+        // 1. 先查 StateCenter：设备当前状态是否已满足条件
+        if (_stateCenter != null && !string.IsNullOrEmpty(targetDevice))
+        {
+            var deviceState = _stateCenter.GetDeviceState(targetDevice);
+            if (deviceState != null && deviceState.Status.ToString() == targetStatus)
+            {
+                _logger?.LogInformation(
+                    "WaitNode {NodeId}: device {Device} already in status {Status}, bypassing event subscription",
+                    node.NodeId, targetDevice, targetStatus);
+                return true;
+            }
+        }
+
+        // 2. 不满足则通过 EventBus 订阅状态变化事件
         var handler = new DeviceStateEventHandler(tcs, targetDevice, targetStatus);
         _eventBus.Subscribe(handler);
 

@@ -1,0 +1,237 @@
+# WCS Runtime Engine V3 — 架构升级计划
+
+## Context
+
+继 Step8 完成后，进行全面工业级架构审计，发现 9 个必须解决的风险点才能支撑真实现场（PLC、堆垛机、机器人、MES 对接）。
+
+核心思路：从"Demo 可用"升级到"工业可部署"。
+
+---
+
+## 升级总览
+
+| # | 问题 | 严重度 | 方案 |
+|---|------|--------|------|
+| 1 | StateCenter 过于中心化 | 🔴 | 拆为 DeviceStateManager/TaskStateManager/AlarmStateManager/ObjectStateManager |
+| 2 | PLC Diff 粒度太粗 | 🔴 | 新增 SignalMapper 层，PLC 地址 → 业务信号 |
+| 3 | DeviceManager 职责过重 | 🟡 | 拆为 Registry/CommandDispatcher/StateSynchronizer/HealthMonitor |
+| 4 | WaitNode 事件丢失竞态 | 🔴 | State + Event 双保险：先查状态，再订阅事件 |
+| 5 | EventReplay 重放实时数据 | 🟡 | 移除 PlcBlockChangedEvent / DeviceStateChangedEvent |
+| 6 | ResourceLock 缺 Fence Token | 🔴 | 引入单调递增 FenceToken，设备执行前校验 |
+| 7 | AlarmCenter 缺设备屏蔽 | 🟡 | 新增 AlarmMaskManager（Maintenance Mode） |
+| 8 | ObjectTracking 缺预占位 | 🔴 | 新增 ReservedNodeId + Reserve/Confirm/Cancel 方法 |
+| 9 | TaskScheduler 缺业务维度 | 🟡 | 新增 TaskPriority enum + TaskCategory enum，双维排序 |
+
+---
+
+## Phase 1 — PLC 信号映射层 SignalMapper（#2）
+
+**新建文件：**
+- `PlcSubsystem/SignalMapper/ISignalMapper.cs`
+- `PlcSubsystem/SignalMapper/SignalDefinition.cs`
+- `PlcSubsystem/SignalMapper/SignalMapperEngine.cs`
+
+**核心逻辑：** 监听 `PlcBlockChangedEvent`，根据配置的映射规则将 PLC 地址转换为业务事件。
+
+```csharp
+public class SignalDefinition
+{
+    string SignalId;           // 业务信号 ID
+    string PlcName;            // 来源 PLC
+    int BlockNumber;           // DB 块号
+    int ByteOffset;            // 字节偏移
+    int BitOffset = -1;        // 位偏移（-1=整个字节）
+    string DataType;           // bool/byte/int/word/dword
+    string TargetEventType;    // 目标事件类型名
+    string TargetProperty;     // 映射到目标事件的哪个属性
+    string? TransformExpression; // 可选值转换表达式
+}
+```
+
+示例：`DB1.DBX355.1` → `ConveyorReadyChangedEvent { DeviceId="CV01", Ready=true }`
+
+**修改文件：** `DependencyInjection.cs`
+
+---
+
+## Phase 2 — StateCenter 解耦（#1）
+
+**新建文件：**
+- `StateCenter/DeviceStateManager.cs`
+- `StateCenter/TaskStateManager.cs`
+- `StateCenter/AlarmStateManager.cs`
+- `StateCenter/ObjectStateManager.cs`
+
+**核心变更：** StateCenter 从"一个大字典"变为"一个门面 + 5 个独立 Manager"。
+
+每个 Manager 拥有自己的 `ConcurrentDictionary`、`KeyedEventChannel`、独立的 diff 判断逻辑。StateCenter 保持 `IStateCenter` 接口不变，内部委托。
+
+---
+
+## Phase 3 — WaitNode State+Event 双保险（#4）
+
+**修改文件：** `ChainExecutionEngine.cs`
+
+**核心变更：** `ExecuteWaitSignalAsync` 在创建 EventBus 订阅前**先查询 StateCenter**：
+
+```
+1. 查 StateCenter: 设备当前状态是否已满足条件？
+   ├── 是 → 直接返回 success（不用等事件）
+   └── 否 → 2. 订阅 EventBus 等待状态变化事件
+```
+
+给 `ChainExecutionEngine` 构造函数加可选 `IStateCenter` 参数。
+
+---
+
+## Phase 4 — ResourceLock FenceToken（#6）
+
+**修改文件：** `ResourceLockManager.cs`
+
+**核心变更：** 引入单调递增 fence token，防止 TTL 过期后旧持有者继续操作。
+
+```csharp
+internal class LockEntry { public long FenceToken { get; set; } }  // 新增
+
+public interface IResourceLockManager
+{
+    bool ValidateFenceToken(string resourceId, long fenceToken);  // 新增
+}
+```
+
+- 每次获取锁分配唯一递增 `FenceToken`
+- `ValidateFenceToken()` 校验是否仍为最新
+- 设备执行前先校验 token
+
+---
+
+## Phase 5 — TaskScheduler 多维度优先级（#9）
+
+**修改文件：** `TaskContext.cs`、`TaskScheduler.cs`
+
+**核心变更：**
+
+```csharp
+public enum TaskPriority { Emergency = 4, High = 3, Normal = 2, Low = 1 }
+public enum TaskCategory { Production = 0, Recovery = 1, Manual = 2 }
+```
+
+排序算法：`Category` 权重优先 → `Priority` 次级。Recovery 任务优先于 Production。
+
+---
+
+## Phase 6 — AlarmCenter AlarmMaskManager（#7）
+
+**新建文件：**
+- `AlarmCenter/Masking/AlarmMaskRule.cs`
+- `AlarmCenter/Masking/AlarmMaskManager.cs`
+
+**修改文件：** `AlarmCenter.cs`
+
+**核心逻辑：** 在 `OnDebounceConfirmedRaise` 中插入屏蔽检查：
+
+```csharp
+if (_maskManager.IsMasked(deviceId, alarmCode))
+    return; // 设备维修中，不产生报警
+```
+
+---
+
+## Phase 7 — ObjectTracking 预占位（#8）
+
+**修改文件：** `StateModels.cs`（ObjectState）、`ObjectTrackingCenter.cs`、`TopologyGraph.cs`
+
+**核心变更：**
+
+```csharp
+// ObjectState 新增
+public string? ReservedNodeId { get; set; }
+public List<string>? Route { get; set; }
+
+// ObjectTrackingCenter 新增
+void ReservePosition(string objectId, string nodeId, List<string>? route = null);
+void ConfirmPosition(string objectId);
+void CancelReservation(string objectId);
+```
+
+TopologyGraph 新增节点预留状态查询，防止双托盘占位。
+
+---
+
+## Phase 8 — EventReplay 白名单精炼（#5）
+
+**修改文件：** `EventReplayService.cs`
+
+**核心变更：** 移除实时状态事件，只保留有状态且需要恢复的事件：
+
+```csharp
+ReplayableEventTypes = {
+    typeof(TaskStateChangedEvent),      // 任务状态需要恢复
+    typeof(ObjectLocationChangedEvent), // 物体位置需要恢复
+    typeof(AlarmRaisedEvent),           // 报警需要恢复
+    typeof(AlarmRecoveredEvent),        // 报警恢复需要恢复
+    // 已移除：DeviceStateChangedEvent → 由 PLC 重新上报
+    // 已移除：PlcBlockChangedEvent    → 由 PLC 重新上报
+};
+```
+
+---
+
+## Phase 9 — DeviceManager 拆分（#3）
+
+**新建文件：**
+- `DeviceCenter/DeviceRegistry.cs`
+- `DeviceCenter/DeviceCommandDispatcher.cs`
+- `DeviceCenter/DeviceStateSynchronizer.cs`
+- `DeviceCenter/DeviceHealthMonitor.cs`
+
+**修改文件：** `DeviceManager.cs`
+
+`IDeviceManager` 接口完全保持兼容，`DeviceManager` 内部委托给 4 个子组件。
+
+---
+
+## 验证方式
+
+1. `dotnet build` — 0 errors (each phase)
+2. `dotnet test` — 全部通过（已有 108 个测试 + 新增测试）
+3. WaitNode 双保险覆盖 State 命中 + 事件订阅两条路径
+4. FenceToken 覆盖 TTL 过期 + 旧 token 拒绝场景
+5. ReservedPosition 覆盖双托盘冲突检测
+6. AlarmMask 覆盖屏蔽生效/取消/到期
+7. EventReplay 白名单变更后确认不再重放实时事件
+8. docs/step-09-v3-upgrade.md + docs/flow-overview.md 更新
+
+---
+
+## 修改文件总览
+
+| 文件 | Phase | Action |
+|------|-------|--------|
+| `PlcSubsystem/SignalMapper/ISignalMapper.cs` | P1 | 新建 |
+| `PlcSubsystem/SignalMapper/SignalDefinition.cs` | P1 | 新建 |
+| `PlcSubsystem/SignalMapper/SignalMapperEngine.cs` | P1 | 新建 |
+| `StateCenter/DeviceStateManager.cs` | P2 | 新建 |
+| `StateCenter/TaskStateManager.cs` | P2 | 新建 |
+| `StateCenter/AlarmStateManager.cs` | P2 | 新建 |
+| `StateCenter/ObjectStateManager.cs` | P2 | 新建 |
+| `StateCenter/Implementation/StateCenter.cs` | P2 | 重构委托 |
+| `TaskEngine/Chain/ChainExecutionEngine.cs` | P3 | 加 State+Event 双保险 |
+| `ResourceLock/ResourceLockManager.cs` | P4 | 加 FenceToken |
+| `TaskEngine/Context/TaskContext.cs` | P5 | 加 Priority enum, Category |
+| `TaskEngine/Scheduler/TaskScheduler.cs` | P5 | 双维排序 |
+| `AlarmCenter/Masking/AlarmMaskRule.cs` | P6 | 新建 |
+| `AlarmCenter/Masking/AlarmMaskManager.cs` | P6 | 新建 |
+| `AlarmCenter/AlarmCenter.cs` | P6 | 集成屏蔽检查 |
+| `StateCenter/Models/StateModels.cs` | P7 | ObjectState 加 ReservedNodeId/Route |
+| `ObjectTracking/ObjectTrackingCenter.cs` | P7 | 加 Reserve/Confirm/Cancel |
+| `ObjectTracking/Topology/TopologyGraph.cs` | P7 | 加预留状态查询 |
+| `EventBus/Persistence/EventReplayService.cs` | P8 | 精炼白名单 |
+| `DeviceCenter/DeviceRegistry.cs` | P9 | 新建 |
+| `DeviceCenter/DeviceCommandDispatcher.cs` | P9 | 新建 |
+| `DeviceCenter/DeviceStateSynchronizer.cs` | P9 | 新建 |
+| `DeviceCenter/DeviceHealthMonitor.cs` | P9 | 新建 |
+| `DeviceCenter/DeviceManager.cs` | P9 | 重构委托 |
+| `Application/DependencyInjection.cs` | P1,P6 | 注册新服务 |
+| `docs/flow-overview.md` | 全部 | 更新为 V3 架构说明 |
+| `docs/step-09-v3-upgrade.md` | 全部 | 新建 V3 升级文档 |

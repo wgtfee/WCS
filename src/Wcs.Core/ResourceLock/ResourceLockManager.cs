@@ -67,6 +67,11 @@ public interface IResourceLockManager
     /// 手动清理过期锁
     /// </summary>
     int CleanupExpiredLocks(TimeSpan maxAge);
+
+    /// <summary>
+    /// 校验 Fence Token 是否仍然有效（防止旧锁持有者继续操作）
+    /// </summary>
+    bool ValidateFenceToken(string resourceId, long fenceToken);
 }
 
 /// <summary>
@@ -79,10 +84,12 @@ public class LockAcquireResult
     public string? OwnerId { get; set; }
     public DateTime? ExpiryTime { get; set; }
     public string? FailureReason { get; set; }
+    /// <summary>单调递增的 Fence Token，用于防误用</summary>
+    public long FenceToken { get; set; }
 }
 
 /// <summary>
-/// 资源锁条目 — 含 TTL/Lease 支持
+/// 资源锁条目 — 含 TTL/Lease/FenceToken 支持
 /// </summary>
 internal class LockEntry
 {
@@ -93,17 +100,20 @@ internal class LockEntry
     public DateTime? ExpiryTime { get; set; }
     public DateTime? LastHeartbeat { get; set; }
     public string? LeaseToken { get; set; }
+    /// <summary>单调递增的 Fence Token，用于防误用</summary>
+    public long FenceToken { get; set; }
 }
 
 /// <summary>
 /// 资源锁管理器实现 - 基于 ConcurrentDictionary
-/// 增强：TTL/Lease、异步获取、心跳续约、后台自动清理
+/// 增强：TTL/Lease、异步获取、心跳续约、后台自动清理、FenceToken
 /// </summary>
 public class ResourceLockManager : IResourceLockManager, IDisposable
 {
     private readonly ConcurrentDictionary<string, LockEntry> _locks = new();
     private readonly Timer _cleanupTimer;
     private readonly TimeSpan _cleanupInterval = TimeSpan.FromSeconds(5);
+    private long _fenceCounter;
     private bool _disposed;
 
     public ResourceLockManager()
@@ -116,21 +126,21 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
 
     public bool TryAcquire(string resourceId, string ownerId, int timeoutMs = 0)
     {
+        var fenceToken = Interlocked.Increment(ref _fenceCounter);
         var entry = new LockEntry
         {
             ResourceId = resourceId,
             OwnerId = ownerId,
-            AcquireTime = DateTime.UtcNow
+            AcquireTime = DateTime.UtcNow,
+            FenceToken = fenceToken
         };
 
         if (timeoutMs <= 0)
         {
-            // 先检查是否有未过期的锁
             if (_locks.TryGetValue(resourceId, out var existing))
             {
                 if (existing.ExpiryTime.HasValue && existing.ExpiryTime < DateTime.UtcNow)
                 {
-                    // 锁已过期，尝试替换
                     var replaced = _locks.TryUpdate(resourceId, entry, existing);
                     if (replaced) return true;
                 }
@@ -139,7 +149,6 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
             return _locks.TryAdd(resourceId, entry);
         }
 
-        // 带超时的同步等待（兼容旧行为）
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
@@ -165,6 +174,7 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
     public async Task<LockAcquireResult> TryAcquireAsync(string resourceId, string ownerId,
         TimeSpan? ttl = null, CancellationToken ct = default)
     {
+        var fenceToken = Interlocked.Increment(ref _fenceCounter);
         var leaseToken = Guid.NewGuid().ToString("N");
         var now = DateTime.UtcNow;
         var entry = new LockEntry
@@ -175,10 +185,10 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
             Ttl = ttl,
             ExpiryTime = ttl.HasValue ? now.Add(ttl.Value) : null,
             LeaseToken = leaseToken,
-            LastHeartbeat = now
+            LastHeartbeat = now,
+            FenceToken = fenceToken
         };
 
-        // 尝试直接添加
         if (_locks.TryAdd(resourceId, entry))
         {
             return new LockAcquireResult
@@ -186,11 +196,11 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
                 Success = true,
                 LeaseToken = leaseToken,
                 OwnerId = ownerId,
-                ExpiryTime = entry.ExpiryTime
+                ExpiryTime = entry.ExpiryTime,
+                FenceToken = fenceToken
             };
         }
 
-        // 检查现有锁是否已过期
         if (_locks.TryGetValue(resourceId, out var existing) &&
             existing.ExpiryTime.HasValue &&
             existing.ExpiryTime < DateTime.UtcNow)
@@ -203,12 +213,12 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
                     Success = true,
                     LeaseToken = leaseToken,
                     OwnerId = ownerId,
-                    ExpiryTime = entry.ExpiryTime
+                    ExpiryTime = entry.ExpiryTime,
+                    FenceToken = fenceToken
                 };
             }
         }
 
-        // 获取当前锁的剩余时间用于 FailureReason
         var currentOwner = GetOwner(resourceId);
         var remaining = GetRemainingTtl(resourceId);
 
@@ -217,7 +227,8 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
             Success = false,
             FailureReason = $"Resource '{resourceId}' already locked by '{currentOwner}'",
             OwnerId = currentOwner,
-            ExpiryTime = existing?.ExpiryTime
+            ExpiryTime = existing?.ExpiryTime,
+            FenceToken = -1
         };
     }
 
@@ -254,13 +265,28 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
 
         lock (entry)
         {
-            if (entry.LeaseToken != leaseToken) // double-check after lock
+            if (entry.LeaseToken != leaseToken)
                 return false;
 
             entry.ExpiryTime = DateTime.UtcNow.Add(extension);
             entry.LastHeartbeat = DateTime.UtcNow;
             return true;
         }
+    }
+
+    // ==================== Fence Token 校验 ====================
+
+    public bool ValidateFenceToken(string resourceId, long fenceToken)
+    {
+        if (!_locks.TryGetValue(resourceId, out var entry))
+            return false;
+
+        // 过期锁视为无效
+        if (entry.ExpiryTime.HasValue && entry.ExpiryTime < DateTime.UtcNow)
+            return false;
+
+        // 校验 fence token 是否仍然匹配当前锁持有者
+        return entry.FenceToken == fenceToken;
     }
 
     // ==================== 查询 ====================
@@ -270,7 +296,6 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
         if (!_locks.TryGetValue(resourceId, out var entry))
             return false;
 
-        // 检查锁是否已过期
         if (entry.ExpiryTime.HasValue && entry.ExpiryTime < DateTime.UtcNow)
             return false;
 
@@ -294,7 +319,7 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
             return null;
 
         if (!entry.ExpiryTime.HasValue)
-            return null; // 无限期
+            return null;
 
         var remaining = entry.ExpiryTime.Value - DateTime.UtcNow;
         return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
@@ -344,7 +369,6 @@ public class ResourceLockManager : IResourceLockManager, IDisposable
         var now = DateTime.UtcNow;
         foreach (var kvp in _locks)
         {
-            // 只清理有 TTL 且已过期的锁
             if (kvp.Value.ExpiryTime.HasValue && kvp.Value.ExpiryTime < now)
             {
                 _locks.TryRemove(kvp.Key, out _);
@@ -378,9 +402,6 @@ public class DeadlockDetector
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
     }
 
-    /// <summary>
-    /// 执行死锁检测
-    /// </summary>
     public List<DeadlockCycle> Detect()
     {
         var allLocks = _lockManager.GetAllLocks();

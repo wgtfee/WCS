@@ -14,15 +14,18 @@ public class EventReplayService
     private readonly ILogger<EventReplayService>? _logger;
 
     /// <summary>
-    /// 可重放的事件类型白名单 — 只有影响系统状态的事件才应重放
-    /// 衍生事件（如报警）由状态变化重新触发，不应重放
+    /// 可重放的事件类型白名单 — 只有影响系统状态（且非实时状态）的事件才应重放
+    /// 实时状态（如 PLC 数据、设备状态）由系统重新连接后主动上报，不应重放
     /// </summary>
     private static readonly HashSet<Type> ReplayableEventTypes = new()
     {
-        typeof(DeviceStateChangedEvent),
-        typeof(TaskStateChangedEvent),
-        typeof(ObjectLocationChangedEvent),
-        typeof(PlcBlockChangedEvent)
+        typeof(TaskStateChangedEvent),      // 任务状态需要恢复
+        typeof(ObjectLocationChangedEvent), // 物体位置需要恢复
+        typeof(AlarmRaisedEvent),           // 报警需要恢复
+        typeof(AlarmRecoveredEvent),        // 报警恢复需要恢复
+        // 以下为实时状态事件 — 不重放，由 PLC 重新上报
+        // typeof(DeviceStateChangedEvent),
+        // typeof(PlcBlockChangedEvent),
     };
 
     public EventReplayService(

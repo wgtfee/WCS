@@ -3,6 +3,34 @@ namespace Wcs.Core.TaskEngine.Context;
 using Wcs.Core.StateCenter.Models;
 
 /// <summary>
+/// 任务优先级枚举
+/// </summary>
+public enum TaskPriority
+{
+    /// <summary>低优先级 — 日常维护、日志</summary>
+    Low = 1,
+    /// <summary>正常优先级 — 普通生产任务</summary>
+    Normal = 2,
+    /// <summary>高优先级 — 紧急订单</summary>
+    High = 3,
+    /// <summary>紧急优先级 — 系统紧急任务</summary>
+    Emergency = 4
+}
+
+/// <summary>
+/// 任务类别枚举 — 用于任务调度多维度排序
+/// </summary>
+public enum TaskCategory
+{
+    /// <summary>生产任务（默认）</summary>
+    Production = 0,
+    /// <summary>恢复/重试任务（优先处理）</summary>
+    Recovery = 1,
+    /// <summary>人工触发任务</summary>
+    Manual = 2
+}
+
+/// <summary>
 /// 任务上下文 - 统一的任务信息载体
 /// </summary>
 public class TaskContext
@@ -26,6 +54,16 @@ public class TaskContext
     /// 优先级 (0-4, 4最高)
     /// </summary>
     public int Priority { get; set; } = 2;
+
+    /// <summary>
+    /// 优先级等级（推荐使用，替代 int Priority）
+    /// </summary>
+    public TaskPriority PriorityLevel { get; set; } = TaskPriority.Normal;
+
+    /// <summary>
+    /// 任务类别（用于多维度排序）
+    /// </summary>
+    public TaskCategory Category { get; set; } = TaskCategory.Production;
 
     /// <summary>
     /// 路由 ID
@@ -128,6 +166,8 @@ public class TaskContext
             DeviceId = this.DeviceId,
             Status = TaskStatusEnum.Created,
             Priority = this.Priority,
+            PriorityLevel = this.PriorityLevel,
+            Category = this.Category,
             RouteId = this.RouteId,
             Parameters = new Dictionary<string, object>(this.Parameters),
             RetryCount = this.RetryCount + 1,

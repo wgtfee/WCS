@@ -50,6 +50,10 @@ public class TopologyGraph
     // 邻接表：nodeId → 入边 ID 集合
     private readonly ConcurrentDictionary<string, HashSet<string>> _incomingEdges = new();
 
+    // 节点预留状态（用于防双托盘占位）
+    private readonly ConcurrentDictionary<string, bool> _nodeReservations = new();
+    private readonly ConcurrentDictionary<string, string?> _nodeReservedBy = new();
+
     private readonly object _adjacencyLock = new();
 
     // ==================== 区域操作 ====================
@@ -600,6 +604,60 @@ public class TopologyGraph
         return _edges.Values.Where(e => e.IsOccupied).ToList();
     }
 
+    // ==================== 节点预留管理 ====================
+
+    /// <summary>
+    /// 检查节点是否已被预留
+    /// </summary>
+    public bool IsNodeReserved(string nodeId)
+    {
+        return _nodeReservations.TryGetValue(nodeId, out var reserved) && reserved;
+    }
+
+    /// <summary>
+    /// 获取预留该节点的物料 ID
+    /// </summary>
+    public string? GetNodeReservedBy(string nodeId)
+    {
+        _nodeReservedBy.TryGetValue(nodeId, out var objectId);
+        return objectId;
+    }
+
+    /// <summary>
+    /// 设置节点预留状态
+    /// </summary>
+    public void SetNodeOccupied(string nodeId, bool occupied)
+    {
+        if (!_nodes.ContainsKey(nodeId))
+            return;
+        _nodeReservations[nodeId] = occupied;
+    }
+
+    /// <summary>
+    /// 设置预留该节点的物料 ID
+    /// </summary>
+    public void SetNodeOccupiedBy(string nodeId, string? objectId)
+    {
+        if (!_nodes.ContainsKey(nodeId))
+            return;
+
+        if (objectId != null)
+            _nodeReservedBy[nodeId] = objectId;
+        else
+            _nodeReservedBy.TryRemove(nodeId, out _);
+    }
+
+    /// <summary>
+    /// 获取所有预留节点
+    /// </summary>
+    public IReadOnlyList<string> GetReservedNodes()
+    {
+        return _nodeReservations
+            .Where(kvp => kvp.Value)
+            .Select(kvp => kvp.Key)
+            .ToList();
+    }
+
     // ==================== 快照支持 ====================
 
     /// <summary>
@@ -712,6 +770,8 @@ public class TopologyGraph
         _edges.Clear();
         _outgoingEdges.Clear();
         _incomingEdges.Clear();
+        _nodeReservations.Clear();
+        _nodeReservedBy.Clear();
     }
 
     // ==================== 内部方法 ====================

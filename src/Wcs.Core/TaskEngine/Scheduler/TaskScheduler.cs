@@ -71,6 +71,32 @@ public class TaskScheduler : ITaskScheduler
     /// </summary>
     private const int DefaultConcurrencyLimit = 3;
 
+    /// <summary>
+    /// 计算双维度排序权重：Category 为第一维度，Priority 为第二维度
+    /// Recovery 类任务优先于 Production 任务
+    /// </summary>
+    private static int ComputeSortWeight(TaskContext task)
+    {
+        // Category 权重：Recovery=10000, Manual=5000, Production=0
+        var categoryWeight = task.Category switch
+        {
+            TaskCategory.Recovery => 10000,
+            TaskCategory.Manual => 5000,
+            _ => 0
+        };
+        // Priority 权重：Emergency=4, High=3, Normal=2, Low=1
+        var priorityWeight = task.PriorityLevel switch
+        {
+            TaskPriority.Emergency => 4,
+            TaskPriority.High => 3,
+            TaskPriority.Low => 1,
+            _ => 2
+        };
+        // 兼容旧 int Priority
+        var legacyPriority = task.Priority;
+        return categoryWeight + priorityWeight + legacyPriority;
+    }
+
     public async Task EnqueueAsync(TaskContext task, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(task);
@@ -86,7 +112,8 @@ public class TaskScheduler : ITaskScheduler
         lock (_queueLock)
         {
             // 优先级越高，负值越大，越先被弹出
-            var priority = -task.Priority;
+            var weight = ComputeSortWeight(task);
+            var priority = -weight;
             _queue.Enqueue(task, priority);
         }
 
@@ -115,9 +142,9 @@ public class TaskScheduler : ITaskScheduler
                     }
                     else
                     {
-                        // 设备达到并发限制，任务回到队列
-                        var priority = -task.Priority;
-                        _queue.Enqueue(task, priority);
+                        // 设备达到并发限制，任务回到队列（使用新的排序权重）
+                        var weight = ComputeSortWeight(task);
+                        _queue.Enqueue(task, -weight);
                         return null;
                     }
                 }
