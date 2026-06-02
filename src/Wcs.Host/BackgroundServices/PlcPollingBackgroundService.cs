@@ -2,14 +2,15 @@ namespace Wcs.Host.BackgroundServices;
 
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Wcs.Core.Common.Options;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.PlcSubsystem;
 using Wcs.Core.StateCenter.Interfaces;
-using Wcs.Core.StateCenter.Models;
 
 /// <summary>
-/// PLC 轮询后台服务 - 定时读取 PLC 并驱动 StateCenter
+/// PLC 轮询后台服务
 /// </summary>
 public class PlcPollingBackgroundService : BackgroundService
 {
@@ -18,19 +19,22 @@ public class PlcPollingBackgroundService : BackgroundService
     private readonly IStateCenter _stateCenter;
     private readonly IEventBus _eventBus;
     private readonly ILogger<PlcPollingBackgroundService> _logger;
+    private readonly IOptionsMonitor<WcsOptions> _options;
 
     public PlcPollingBackgroundService(
         IPlcPollingService pollingService,
         IPlcBlockDiffEngine diffEngine,
         IStateCenter stateCenter,
         IEventBus eventBus,
-        ILogger<PlcPollingBackgroundService> logger)
+        ILogger<PlcPollingBackgroundService> logger,
+        IOptionsMonitor<WcsOptions> options)
     {
         _pollingService = pollingService;
         _diffEngine = diffEngine;
         _stateCenter = stateCenter;
         _eventBus = eventBus;
         _logger = logger;
+        _options = options;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -41,14 +45,16 @@ public class PlcPollingBackgroundService : BackgroundService
         {
             await _pollingService.StartAsync(stoppingToken);
 
-            // 轮询循环: 读取 PLC -> 对比变化 -> 更新 StateCenter -> 发布事件
             while (!stoppingToken.IsCancellationRequested)
             {
-                await Task.Delay(50, stoppingToken); // 50ms 快速轮询
+                var interval = _options.CurrentValue.PlcPolling.IntervalMs;
+                await Task.Delay(interval, stoppingToken);
+
+                if (!_options.CurrentValue.PlcPolling.Enabled)
+                    continue;
 
                 foreach (var block in _pollingService.GetAllConnectionStatuses())
                 {
-                    // 通过 PlcBlockDiffEngine 处理变化
                     var cachedBlocks = _diffEngine.GetCachedBlocks();
                     foreach (var cachedBlock in cachedBlocks)
                     {

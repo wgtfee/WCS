@@ -1,25 +1,19 @@
 namespace Wcs.Infrastructure.S7;
 
 using Wcs.Core.PlcSubsystem;
+using S7net = global::S7.Net;
 
-/// <summary>
-/// 真实 S7 连接 - 使用 Sharp7 或 S7netplus
-/// 当前为预留骨架，生产环境需引用 S7netplus 包
-/// </summary>
 public class S7RealClient : IS7Connection
 {
     private readonly S7ConnectionConfig _config;
     private readonly PlcConnectionStatus _status;
+    private S7net.Plc? _plc;
     private readonly object _lock = new();
-    private bool _disposed;
-
-    // 生产环境: private Plc _plc;
-    private bool _isConnected;
 
     public string PlcName => _config.PlcName;
     public bool IsConnected
     {
-        get { lock (_lock) return _isConnected; }
+        get { lock (_lock) return _plc?.IsConnected ?? false; }
     }
 
     public S7RealClient(S7ConnectionConfig config)
@@ -36,22 +30,22 @@ public class S7RealClient : IS7Connection
     {
         lock (_lock)
         {
-            if (_isConnected) return true;
+            if (_plc?.IsConnected == true) return true;
             _status.Status = PlcConnectionStatusEnum.Connecting;
         }
 
         try
         {
-            // 生产环境:
-            // _plc = new Plc(CpuType.S71500, _config.Address, _config.Rack, _config.Slot);
-            // _plc.Timeout = _config.Timeout;
-            // await Task.Run(() => _plc.Open(), cancellationToken);
+            _plc = new S7net.Plc(
+                S7net.CpuType.S71500,
+                _config.Address,
+                (short)_config.Rack,
+                (short)_config.Slot);
 
-            await Task.Delay(50, cancellationToken);
+            await Task.Run(() => _plc.Open(), cancellationToken);
 
             lock (_lock)
             {
-                _isConnected = true;
                 _status.Status = PlcConnectionStatusEnum.Connected;
                 _status.LastConnectTime = DateTime.UtcNow;
                 _status.LastHeartbeat = DateTime.UtcNow;
@@ -63,7 +57,6 @@ public class S7RealClient : IS7Connection
         {
             lock (_lock)
             {
-                _isConnected = false;
                 _status.Status = PlcConnectionStatusEnum.Failed;
                 _status.LastError = ex.Message;
                 _status.FailureCount++;
@@ -72,47 +65,43 @@ public class S7RealClient : IS7Connection
         }
     }
 
-    public async Task<bool> DisconnectAsync(CancellationToken cancellationToken = default)
+    public Task<bool> DisconnectAsync(CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
-            if (!_isConnected) return true;
+            if (_plc?.IsConnected != true) return Task.FromResult(true);
             _status.Status = PlcConnectionStatusEnum.Disconnecting;
         }
 
         try
         {
-            // _plc?.Close();
-            await Task.Delay(30, cancellationToken);
-
+            _plc?.Close();
             lock (_lock)
             {
-                _isConnected = false;
                 _status.Status = PlcConnectionStatusEnum.Disconnected;
             }
-            return true;
+            return Task.FromResult(true);
         }
         catch (Exception ex)
         {
             lock (_lock) { _status.LastError = ex.Message; }
-            return false;
+            return Task.FromResult(false);
         }
     }
 
     public Task<byte[]?> ReadBlockAsync(int blockNumber, int length, CancellationToken ct = default)
     {
-        if (!IsConnected) return Task.FromResult<byte[]?>(null);
+        if (_plc?.IsConnected != true) return Task.FromResult<byte[]?>(null);
 
         try
         {
-            // 生产环境: var result = _plc.ReadBytes(DataType.DataBlock, blockNumber, 0, length);
-            var data = new byte[length];
+            var result = _plc.ReadBytes(S7net.DataType.DataBlock, blockNumber, 0, length);
             lock (_lock)
             {
                 _status.ReadCount++;
                 _status.LastHeartbeat = DateTime.UtcNow;
             }
-            return Task.FromResult<byte[]?>(data);
+            return Task.FromResult<byte[]?>(result);
         }
         catch (Exception ex)
         {
@@ -127,11 +116,11 @@ public class S7RealClient : IS7Connection
 
     public Task<bool> WriteBlockAsync(int blockNumber, byte[] data, CancellationToken ct = default)
     {
-        if (!IsConnected) return Task.FromResult(false);
+        if (_plc?.IsConnected != true) return Task.FromResult(false);
 
         try
         {
-            // _plc.WriteBytes(DataType.DataBlock, blockNumber, 0, data);
+            _plc.WriteBytes(S7net.DataType.DataBlock, blockNumber, 0, data);
             lock (_lock)
             {
                 _status.WriteCount++;
@@ -167,11 +156,24 @@ public class S7RealClient : IS7Connection
             };
         }
     }
+}
 
-    public void Dispose()
+public interface IS7ConnectionFactory
+{
+    IEnumerable<IS7Connection> CreateAll();
+}
+
+public class S7ConnectionFactory : IS7ConnectionFactory
+{
+    private readonly List<S7ConnectionConfig> _configs;
+
+    public S7ConnectionFactory(IEnumerable<S7ConnectionConfig> configs)
     {
-        if (_disposed) return;
-        // _plc?.Dispose();
-        _disposed = true;
+        _configs = configs.ToList();
+    }
+
+    public IEnumerable<IS7Connection> CreateAll()
+    {
+        return _configs.Select(c => new S7RealClient(c)).ToList();
     }
 }

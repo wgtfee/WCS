@@ -2,34 +2,37 @@ namespace Wcs.Host.BackgroundServices;
 
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Wcs.Core.Common.Options;
 using Wcs.Core.Recovery;
 using Wcs.Core.StateCenter.Interfaces;
 
 /// <summary>
-/// 快照后台服务 - 定时保存 StateCenter 快照（默认 5 秒一次）
+/// 快照后台服务 - 定时保存 StateCenter 快照
 /// </summary>
 public class SnapshotBackgroundService : BackgroundService
 {
     private readonly IStateCenter _stateCenter;
     private readonly ISnapshotRepository _snapshotRepo;
     private readonly ILogger<SnapshotBackgroundService> _logger;
-    private readonly TimeSpan _interval;
+    private readonly IOptionsMonitor<WcsOptions> _options;
 
     public SnapshotBackgroundService(
         IStateCenter stateCenter,
         ISnapshotRepository snapshotRepo,
         ILogger<SnapshotBackgroundService> logger,
-        TimeSpan? interval = null)
+        IOptionsMonitor<WcsOptions> options)
     {
         _stateCenter = stateCenter;
         _snapshotRepo = snapshotRepo;
         _logger = logger;
-        _interval = interval ?? TimeSpan.FromSeconds(5);
+        _options = options;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Snapshot service started (interval: {Interval})", _interval);
+        var opts = _options.CurrentValue.Snapshot;
+        _logger.LogInformation("Snapshot service started (interval: {Interval}s)", opts.IntervalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -37,14 +40,15 @@ public class SnapshotBackgroundService : BackgroundService
             {
                 var snapshot = _stateCenter.GetSnapshot();
                 await _snapshotRepo.SaveSnapshotAsync(snapshot, stoppingToken);
-                await _snapshotRepo.CleanupOldSnapshotsAsync(100, stoppingToken);
+                await _snapshotRepo.CleanupOldSnapshotsAsync(
+                    _options.CurrentValue.Snapshot.MaxSnapshots, stoppingToken);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Snapshot save failed");
             }
 
-            await Task.Delay(_interval, stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(_options.CurrentValue.Snapshot.IntervalSeconds), stoppingToken);
         }
     }
 }

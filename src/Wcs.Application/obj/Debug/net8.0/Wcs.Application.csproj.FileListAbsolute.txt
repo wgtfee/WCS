@@ -13,3 +13,4 @@ I:\code\IOT\WCS ENG\src\Wcs.Application\obj\Debug\net8.0\Wcs.Application.dll
 I:\code\IOT\WCS ENG\src\Wcs.Application\obj\Debug\net8.0\refint\Wcs.Application.dll
 I:\code\IOT\WCS ENG\src\Wcs.Application\obj\Debug\net8.0\Wcs.Application.pdb
 I:\code\IOT\WCS ENG\src\Wcs.Application\obj\Debug\net8.0\ref\Wcs.Application.dll
+I:\code\IOT\WCS ENG\src\Wcs.Application\obj\Debug\net8.0\Wcs.Application.sourcelink.json

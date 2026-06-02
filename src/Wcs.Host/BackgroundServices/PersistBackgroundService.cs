@@ -1,36 +1,49 @@
-namespace Wcs.Host.BackgroundServices;
-
+using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Wcs.Core.EventBus.Events;
-using Wcs.Core.EventBus.Publisher;
+using Microsoft.Extensions.Options;
+using Wcs.Core.Common.Options;
 using Wcs.Core.StateCenter.Interfaces;
+using Wcs.Infrastructure.Persistence;
+using Wcs.Infrastructure.Persistence.Repositories;
+
+namespace Wcs.Host.BackgroundServices;
 
 /// <summary>
-/// 持久化后台服务 - 将 StateCenter 中的活跃数据持久化到数据库
+/// 持久化后台服务 - 将 StateCenter 中的活跃数据持久化到 SQL Server
 /// </summary>
 public class PersistBackgroundService : BackgroundService
 {
     private readonly IStateCenter _stateCenter;
-    private readonly IEventBus _eventBus;
+    private readonly TaskRepository _taskRepo;
+    private readonly AlarmRepository _alarmRepo;
     private readonly ILogger<PersistBackgroundService> _logger;
-    private readonly TimeSpan _interval;
+    private readonly IOptionsMonitor<WcsOptions> _options;
+
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        WriteIndented = false,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     public PersistBackgroundService(
         IStateCenter stateCenter,
-        IEventBus eventBus,
+        TaskRepository taskRepo,
+        AlarmRepository alarmRepo,
         ILogger<PersistBackgroundService> logger,
-        TimeSpan? interval = null)
+        IOptionsMonitor<WcsOptions> options)
     {
         _stateCenter = stateCenter;
-        _eventBus = eventBus;
+        _taskRepo = taskRepo;
+        _alarmRepo = alarmRepo;
         _logger = logger;
-        _interval = interval ?? TimeSpan.FromSeconds(10);
+        _options = options;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Persist service started (interval: {Interval})", _interval);
+        var interval = _options.CurrentValue.Persistence.IntervalSeconds;
+        _logger.LogInformation("Persist service started (interval: {Interval}s)", interval);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -38,21 +51,57 @@ public class PersistBackgroundService : BackgroundService
             {
                 var snapshot = _stateCenter.GetSnapshot();
 
-                // 扩展点: 写入 SQL Server
-                // await _taskRepo.SaveTaskRuntimeAsync(...)
-
-                if (snapshot.DeviceStates.Count > 0 || snapshot.TaskRuntimes.Count > 0)
+                foreach (var (deviceId, device) in snapshot.DeviceStates)
                 {
-                    _logger.LogDebug("Persisted {Devices} devices, {Tasks} tasks",
-                        snapshot.DeviceStates.Count, snapshot.TaskRuntimes.Count);
+                    await _taskRepo.SaveDeviceRuntimeAsync(new DeviceRuntimeEntity
+                    {
+                        DeviceId = deviceId,
+                        Status = device.Status.ToString(),
+                        LastUpdateTime = device.LastUpdateTime,
+                        Properties = device.Properties.Count > 0
+                            ? JsonSerializer.Serialize(device.Properties, JsonOpts) : null
+                    });
                 }
+
+                foreach (var (taskId, task) in snapshot.TaskRuntimes)
+                {
+                    await _taskRepo.SaveTaskRuntimeAsync(new TaskRuntimeEntity
+                    {
+                        TaskId = taskId,
+                        Status = task.Status.ToString(),
+                        Priority = task.Priority,
+                        RouteId = task.RouteId,
+                        StartTime = task.StartTime,
+                        EndTime = task.EndTime,
+                        Parameters = task.Parameters.Count > 0
+                            ? JsonSerializer.Serialize(task.Parameters, JsonOpts) : null
+                    });
+                }
+
+                foreach (var (alarmId, alarm) in snapshot.AlarmStates)
+                {
+                    await _alarmRepo.SaveAlarmRuntimeAsync(new AlarmRuntimeEntity
+                    {
+                        AlarmId = alarmId,
+                        AlarmCode = alarm.AlarmCode,
+                        Status = alarm.Status.ToString(),
+                        Level = alarm.Level.ToString(),
+                        Message = alarm.Message,
+                        OccurTime = alarm.OccurTime,
+                        RecoverTime = alarm.RecoverTime
+                    });
+                }
+
+                var total = snapshot.DeviceStates.Count + snapshot.TaskRuntimes.Count + snapshot.AlarmStates.Count;
+                if (total > 0)
+                    _logger.LogDebug("Persisted {Total} records", total);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Persist cycle failed");
             }
 
-            await Task.Delay(_interval, stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(_options.CurrentValue.Persistence.IntervalSeconds), stoppingToken);
         }
     }
 }

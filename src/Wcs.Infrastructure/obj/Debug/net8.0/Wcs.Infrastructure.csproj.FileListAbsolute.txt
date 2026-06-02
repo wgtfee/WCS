@@ -13,3 +13,4 @@ I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.d
 I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\refint\Wcs.Infrastructure.dll
 I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.pdb
 I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\ref\Wcs.Infrastructure.dll
+I:\code\IOT\WCS ENG\src\Wcs.Infrastructure\obj\Debug\net8.0\Wcs.Infrastructure.sourcelink.json

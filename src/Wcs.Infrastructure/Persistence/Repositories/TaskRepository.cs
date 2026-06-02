@@ -41,14 +41,7 @@ public class TaskRepository
         await conn.ExecuteAsync("DELETE FROM TaskRuntimes WHERE TaskId = @TaskId", new { history.TaskId }, tx);
         tx.Commit();
     }
-}
 
-/// <summary>
-/// 报警 Dapper 仓库
-/// </summary>
-    /// <summary>
-    /// 保存设备运行时状态 (upsert)
-    /// </summary>
     public async Task SaveDeviceRuntimeAsync(DeviceRuntimeEntity entity)
     {
         using var conn = new SqlConnection(_connectionString);
@@ -63,8 +56,11 @@ public class TaskRepository
                 VALUES (@DeviceId, @Status, @LastUpdateTime, @Properties);",
             entity);
     }
+}
 
-
+/// <summary>
+/// 报警 Dapper 仓库
+/// </summary>
 public class AlarmRepository
 {
     private readonly string _connectionString;

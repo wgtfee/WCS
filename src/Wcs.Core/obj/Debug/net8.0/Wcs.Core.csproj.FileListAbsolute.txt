@@ -10,3 +10,4 @@ I:\code\IOT\WCS ENG\src\Wcs.Core\obj\Debug\net8.0\Wcs.Core.dll
 I:\code\IOT\WCS ENG\src\Wcs.Core\obj\Debug\net8.0\refint\Wcs.Core.dll
 I:\code\IOT\WCS ENG\src\Wcs.Core\obj\Debug\net8.0\Wcs.Core.pdb
 I:\code\IOT\WCS ENG\src\Wcs.Core\obj\Debug\net8.0\ref\Wcs.Core.dll
+I:\code\IOT\WCS ENG\src\Wcs.Core\obj\Debug\net8.0\Wcs.Core.sourcelink.json
