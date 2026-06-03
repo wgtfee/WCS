@@ -547,3 +547,49 @@ AddWcsPlc() 内部自动做了：
   └─ 启动后每个 DB 块独立 Timer 轮询
   └─ StructDiffEngine 跳过没变化的字段
   └─ 验证管道拒绝的字段不产生事件
+
+
+  Q1：验证案例哪里去了？
+恢复在 PlcSubsystem/Validation/Examples/StationInterlockValidator.cs：
+
+
+var db1 = ctx.RawStruct as DB1_Struct;
+if (db1?.CV01_PalletArrived == true && !db1.LIFT01_Idle)
+    return SignalValidationResult.Defer("LIFT01 忙", 3000);
+
+// 查数据库
+ctx.Db.Queryable<Pallet>().Where(p => p.Barcode == barcode).Any();
+Q2：StateCenter 没更新
+修好了。 StructBridge.ProcessAsync 现在每次字段变化都会：
+
+
+StructDiffEngine 发现变化
+  ↓
+验证管道 (ISignalValidator)
+  ↓ 通过
+StateCenter.UpdateDeviceState(deviceId, status)  ← 之前缺失
+  ↓
+DeviceStateChangedEvent → EventBus → WaitNode / UI / AlarmCenter 接收
+  ↓
+FieldChangedEvent → EventBus → FileEventStore 持久化
+从字段名自动提取设备 ID（CV01_PalletArrived → CV01），状态值 true → Running，false → Idle。
+
+Q3：任务链路还能跑吗？
+能。 TaskEngine/ 下所有文件未被修改：
+
+
+RuleEngine → TaskGenerator → TaskScheduler → TaskOrchestrator
+  → ChainExecutionEngine → ActionNode → CommandCenter → PLC 写
+完整的双向链路现在是：
+
+
+S7PLCPool 读 PLC → StructBridge
+    ├── 验证器（你的业务逻辑）
+    ├── StateCenter 更新（设备状态）
+    ├── DeviceStateChangedEvent → EventBus（通知 WaitNode/UI）
+    └── FieldChangedEvent → EventBus（审计）
+
+TaskEngine（未被修改）
+    ├── RuleEngine → TaskGenerator → TaskScheduler
+    └── ChainExecutionEngine → ActionNode → CommandCenter → PLC 写
+                ↑ WaitNode 通过 StateCenter + EventBus 双保险等待条件

@@ -18,7 +18,6 @@ public class S7PollingService
         _logger = logger;
     }
 
-    /// <summary>启动所有 PLC 所有 DB 块的轮询</summary>
     public void Start()
     {
         if (_running) return;
@@ -33,7 +32,7 @@ public class S7PollingService
                     var pool = _registry.GetPool(reg.PlcName);
                     if (pool == null)
                     {
-                        _logger?.LogWarning("[S7] {Plc} 无连接池，跳过 DB{Block}", reg.PlcName, reg.BlockNumber);
+                        _logger?.LogWarning("[S7] {Plc} 无连接池", reg.PlcName);
                         return;
                     }
 
@@ -51,7 +50,14 @@ public class S7PollingService
                     var current = Struct.FromBytes(reg.StructType, data, reg.Length, 0);
                     if (current == null) return;
 
-                    _bridge.Process(blockKey, reg.PreviousStruct as dynamic, current as dynamic);
+                    // 使用反射调用泛型 ProcessAsync<T>，替代 dynamic（DLR 运行时脆弱）
+                    var result2 = await _bridge.ProcessUntypedAsync(
+                        blockKey, reg.StructType, reg.PreviousStruct, current);
+
+                    if (result2.AcceptedChanges > 0)
+                        _logger?.LogDebug("[S7] {Block}: {Accepted} 字段变化已处理",
+                            blockKey, result2.AcceptedChanges);
+
                     reg.PreviousStruct = current;
                 }
                 catch (Exception ex)
