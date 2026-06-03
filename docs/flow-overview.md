@@ -32,6 +32,7 @@ i:\code\IOT\WCS ENG\
 │   ├── step-08-phase-0.md ~ phase-4.md      # Step8 各阶段文档
 │   ├── step-09-v3-upgrade.md                # V3 升级文档
 │   ├── step-10-v4-roadmap.md                # V4 路线图
+│   ├── step-11-v5-wcs-core.md               # V5 纯 WCS 内核定型
 │   └── flow-overview.md                     # ← 本文档
 │
 ├── src/
@@ -42,6 +43,12 @@ i:\code\IOT\WCS ENG\
 │   │   │   │   ├── AlarmAggregationEngine.cs #   聚合引擎（根因树）
 │   │   │   │   ├── AlarmDebounceEngine.cs    #   防抖引擎
 │   │   │   │   └── AlarmStormGuard.cs        #   风暴抑制引擎
+│   │   │   ├── Masking/                     # V3 新增：报警屏蔽
+│   │   │   │   ├── AlarmMaskRule.cs          #   屏蔽规则
+│   │   │   │   └── AlarmMaskManager.cs       #   屏蔽管理器
+│   │   │   ├── Escalation/                  # ★ V5 新增：报警升级
+│   │   │   │   ├── AlarmEscalationRule.cs    #   升级规则定义
+│   │   │   │   └── AlarmEscalationManager.cs #   升级管理器（Timer驱动）
 │   │   │   └── Models/
 │   │   │       └── AlarmStateMachine.cs      #   状态机（5状态7转移）
 │   │   │
@@ -54,9 +61,14 @@ i:\code\IOT\WCS ENG\
 │   │   │
 │   │   ├── DeviceCenter/                    # ★ 设备管理
 │   │   │   ├── Device.cs                     #   设备抽象基类 + IDevice 接口
-│   │   │   ├── DeviceManager.cs              #   设备管理器（注册/启停/事件）
-│   │   │   ├── ConcreteDevices.cs            #   具体设备实现（输送机/机器人等）
-│   │   │   └── DeviceEventHandlers.cs        #   设备事件处理器
+│   │   │   ├── DeviceManager.cs              #   设备管理器门面（V3: 委托给4子组件）
+│   │   │   ├── DeviceRegistry.cs             #   V3 新增：设备注册表
+│   │   │   ├── DeviceCommandDispatcher.cs    #   V3 新增：命令调度器
+│   │   │   ├── DeviceStateSynchronizer.cs    #   V3 新增：状态同步器
+│   │   │   ├── DeviceHealthMonitor.cs        #   V3 新增：健康监控器
+│   │   │   ├── Capability/                   # ★ V5 新增：设备能力中心
+│   │   │   │   ├── DeviceCapabilityModels.cs
+│   │   │   │   └── DeviceCapabilityCenter.cs
 │   │   │
 │   │   ├── EventBus/                        # ★ 事件总线（系统骨架）
 │   │   │   ├── Events/
@@ -95,6 +107,15 @@ i:\code\IOT\WCS ENG\
 │   │   │   ├── IRuleEngine.cs                 #   规则引擎接口
 │   │   │   ├── RuleEngine.cs                  #   规则引擎实现
 │   │   │   └── TaskGenerator.cs               #   任务生成器
+│   │   │
+│   │   ├── RouteCenter/                      # ★ V5 新增：动态路由
+│   │   │   ├── RouteModels.cs                 #   路由模型（请求/结果/拥塞）
+│   │   │   └── RouteCenter.cs                 #   动态路由中心
+│   │   │
+│   │   ├── WorkflowCenter/                   # ★ V5 新增：业务流程
+│   │   │   ├── WorkflowModels.cs              #   流程定义/实例/阶段
+│   │   │   ├── IWorkflowCenter.cs             #   流程中心接口
+│   │   │   └── WorkflowCenter.cs              #   流程中心实现
 │   │   │
 │   │   ├── Recovery/                        # ★ 系统恢复
 │   │   │   └── RecoveryManager.cs            #   恢复管理器（快照+事件重放）
@@ -967,4 +988,58 @@ SignalMapper → SignalBus(独立通道) →
 ```
 CRC32 哈希扛住大 PLC + SignalBus 隔离事件风暴 +
 RuleEngine 让业务逻辑脱离 PLC 地址 → 换 PLC 不换逻辑
+```
+
+---
+
+## 17. V5 纯 WCS 内核定型（Step 11）
+
+V5 明确 WCS 边界，只做 WCS 该做的事，不跨入 WMS。详见 [step-11-v5-wcs-core.md](step-11-v5-wcs-core.md)。
+
+### V5 新增 4 个模块
+
+| # | 模块 | 文件 | 说明 |
+|---|------|------|------|
+| 1 | **RouteCenter** | `RouteCenter/` | 动态寻路、故障避障、拥塞控制 |
+| 2 | **WorkflowCenter** | `WorkflowCenter/` | 业务流程（入库/出库/移库/盘点） |
+| 3 | **DeviceCapabilityCenter** | `DeviceCenter/Capability/` | 设备能力抽象（任务不关心具体设备） |
+| 4 | **AlarmEscalation** | `AlarmCenter/Escalation/` | 报警超时逐级升级（班长→主管→停线） |
+
+### WCS 边界
+
+```
+WCS 职责（做）                    WMS 职责（不做）
+───────────────────────────      ───────────────────────────
+设备通讯（PLC/机器人/堆垛机）      订单管理
+状态感知（StateCenter）           库存管理
+任务执行（TaskEngine）            库位管理
+设备控制（DeviceManager）         批次管理
+物料追踪（ObjectTracking）        先进先出/FIFO
+路由规划（RouteCenter）           库存冻结/盘点
+业务流程（WorkflowCenter）        波次管理
+报警管理（AlarmCenter+升阶）      入库/出库策略
+系统恢复（RecoveryManager）        ERP/MES 对接
+```
+
+### V5 完整数据流
+
+```
+PLC → PlcPollingService(CRC32) → PlcBlockDiffEngine(CRC32预检) →
+    SignalMapper → SignalBus(独立通道) →
+        RuleEngine.Evaluate() → TaskGenerator
+        │                            │
+        │                     RouteCenter(动态避障)
+        │                            ↓
+        │                     WorkflowCenter(业务流程)
+        │                            │
+        │                     TaskScheduler(双维排序)
+        │                            │
+        └── ChainExecutionEngine(State+Event双保险) →
+                DeviceManager(FenceToken) → IDevice
+                │
+         DeviceCapabilityCenter(FindDevices(x=>CanStore))
+                │
+         AlarmCenter(5层管线+屏蔽+升级)
+                │
+         DomainEventBus → 其他模块
 ```
