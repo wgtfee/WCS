@@ -13,6 +13,7 @@ using Wcs.Infrastructure.Logging;
 using Wcs.Infrastructure.Persistence;
 using Wcs.Infrastructure.SignalR;
 using Microsoft.Extensions.Options;
+using SqlSugar;
 using Wcs.Simulator;
 using Wcs.Simulator.PlcSimulator;
 using Wcs.Simulator.DeviceSimulator;
@@ -34,7 +35,7 @@ try
     // ===== 信号映射（从 appsettings.json → "Signals" 加载）=====
     builder.Services.AddSingleton<SignalMapperEngine>(sp =>
     {
-        var engine = new SignalMapperEngine(sp.GetRequiredService<IStateCenter>());
+        var engine = new SignalMapperEngine(sp.GetRequiredService<IStateCenter>(), sp.GetService<ISqlSugarClient>());
         var signalConfigs = builder.Configuration.GetSection("Signals")
             .Get<List<SignalConfigItem>>();
         if (signalConfigs != null && signalConfigs.Count > 0)

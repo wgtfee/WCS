@@ -1,10 +1,11 @@
-namespace Wcs.Core.PlcSubsystem.SignalMapper;
-
+using SqlSugar;
 using System.Collections.Concurrent;
 using System.Reflection;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.PlcSubsystem.SignalMapper.Validation;
 using Wcs.Core.StateCenter.Interfaces;
+
+namespace Wcs.Core.PlcSubsystem.SignalMapper;
 
 public class SignalMapperEngine : ISignalMapper, IPlcBlockChangeHandler, IDisposable
 {
@@ -12,12 +13,14 @@ public class SignalMapperEngine : ISignalMapper, IPlcBlockChangeHandler, IDispos
     private readonly ConcurrentDictionary<string, List<SignalDefinition>> _blockIndex = new();
     private readonly List<ISignalValidator> _validators = new();
     private readonly IStateCenter _stateCenter;
+    private readonly ISqlSugarClient? _db;
     private readonly object _lock = new();
     private bool _disposed;
 
-    public SignalMapperEngine(IStateCenter stateCenter)
+    public SignalMapperEngine(IStateCenter stateCenter, ISqlSugarClient? db = null)
     {
         _stateCenter = stateCenter ?? throw new ArgumentNullException(nameof(stateCenter));
+        _db = db;
     }
 
     public void RegisterDefinition(SignalDefinition definition)
@@ -70,11 +73,7 @@ public class SignalMapperEngine : ISignalMapper, IPlcBlockChangeHandler, IDispos
     {
         lock (_lock)
         {
-            if (_definitions.TryRemove(signalId, out _))
-            {
-                RebuildBlockIndex();
-                return true;
-            }
+            if (_definitions.TryRemove(signalId, out _)) { RebuildBlockIndex(); return true; }
             return false;
         }
     }
@@ -102,7 +101,7 @@ public class SignalMapperEngine : ISignalMapper, IPlcBlockChangeHandler, IDispos
             var evt = CreateEvent(def, change, diff.NewData);
             if (evt == null) continue;
 
-            var ctx = new ValidatorContext(_stateCenter, def, diff, events);
+            var ctx = new ValidatorContext(_stateCenter, def, diff, events, _db);
             var result = RunValidators(ctx);
             if (result != null && result.Action != SignalValidationAction.Pass) continue;
             events.Add(evt);

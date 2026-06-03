@@ -65,6 +65,10 @@
               "target": "Package",
               "version": "[8.0.0, )"
             },
+            "SqlSugarCore": {
+              "target": "Package",
+              "version": "[5.1.4.214, )"
+            },
             "System.Collections.Concurrent": {
               "target": "Package",
               "version": "[4.3.0, )"
@@ -153,7 +157,7 @@
             },
             "Microsoft.Data.SqlClient": {
               "target": "Package",
-              "version": "[5.2.0, )"
+              "version": "[5.2.2, )"
             },
             "Microsoft.EntityFrameworkCore": {
               "target": "Package",
