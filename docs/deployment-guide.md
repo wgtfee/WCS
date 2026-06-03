@@ -234,3 +234,44 @@ CSV 导入通常是一次性的迁移工具，不在每次启动时执行。导�
 PLC 点位：从博图导出 CSV → SignalCsvImporter 批量导入（几分钟几千个点位）
 工位验证：在 appsettings.json 中配 ValidationRules（AND/OR 多层，不用写代码）
 ```
+
+## 五、现在验证管道的架构是：
+
+两种验证方式，各自解决各自的问题
+
+简单条件（JSON 配置）
+┌───────────────────────────────────────────┐
+│ appsettings.json → "ValidationRules"       │
+│                                           │
+│ "Conditions": {                            │
+│   "Operator": "AND",                       │
+│   "Items": [                               │
+│     { "DeviceId":"LIFT01","Status":"Idle"},│
+│     { "DeviceId":"CV03", "Status":"Idle"}   │
+│   ]                                        │
+│ }                                          │
+└───────────────────────────────────────────┘
+用途：设备状态检查、简单的 AND/OR 条件
+成本：零代码，改 JSON 即可
+
+复杂业务逻辑（代码验证器）
+┌───────────────────────────────────────────┐
+│ 实现 ISignalValidator 接口                 │
+│                                           │
+│ Validate(ValidatorContext ctx) {            │
+│   ctx.StateCenter.GetDeviceState("CV02")   │
+│   ctx.StateCenter.GetDeviceState("LIFT01") │
+│   ctx.Definition.PropertyMappings          │
+│   ctx.RawDiff.Changes                      │
+│   ctx.GeneratedEvents                      │
+│ }                                          │
+└───────────────────────────────────────────┘
+用途：工位互锁、查数据库、路径验证
+成本：写一个类，一行注册（或加 [SignalValidator] 自动发现）
+ValidatorContext 给验证器提供一切它需要的东西——StateCenter、信号定义、原始 PLC 数据、已生成的事件——不依赖外部 DI 注入。
+
+3 个真实场景示例
+示例	验证什么	用到 ValidatorContext 什么
+StationInterlockValidator	上下游设备互锁	StateCenter.GetDeviceState()
+PalletBarcodeDatabaseValidator	条码去重防重复	Definition.PropertyMappings
+RoutePathValidator	目标设备故障检查	StateCenter + Definition

@@ -34,7 +34,7 @@ try
     // ===== 信号映射（从 appsettings.json → "Signals" 加载）=====
     builder.Services.AddSingleton<SignalMapperEngine>(sp =>
     {
-        var engine = new SignalMapperEngine();
+        var engine = new SignalMapperEngine(sp.GetRequiredService<IStateCenter>());
         var signalConfigs = builder.Configuration.GetSection("Signals")
             .Get<List<SignalConfigItem>>();
         if (signalConfigs != null && signalConfigs.Count > 0)
@@ -51,13 +51,12 @@ try
     builder.Services.AddSingleton(sp =>
     {
         var engine = sp.GetRequiredService<SignalMapperEngine>();
-        var stateCenter = sp.GetRequiredService<IStateCenter>();
         var logger = sp.GetRequiredService<ILogger<ConfigurableSignalValidator>>();
         var rules = builder.Configuration.GetSection("ValidationRules")
             .Get<List<ValidationRuleConfig>>();
         if (rules != null && rules.Count > 0)
         {
-            engine.RegisterValidator(new ConfigurableSignalValidator(rules, stateCenter, logger));
+            engine.RegisterValidator(new ConfigurableSignalValidator(rules, logger));
             Log.Logger.Information("🛡️ 已加载 {Count} 条配置化验证规则", rules.Count);
         }
         return engine;

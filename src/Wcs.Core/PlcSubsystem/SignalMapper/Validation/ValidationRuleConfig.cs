@@ -31,8 +31,8 @@ public class ConditionItem
 }
 
 /// <summary>
-/// 配置化信号验证器 — 根据 JSON 规则验证信号，无需写代码
-/// 支持多层 AND/OR 嵌套条件
+/// 配置化验证器 — JSON 规则（简单场景）
+/// 复杂场景：实现 ISignalValidator 接口写代码验证器
 /// </summary>
 public class ConfigurableSignalValidator : ISignalValidator
 {
@@ -41,26 +41,20 @@ public class ConfigurableSignalValidator : ISignalValidator
     public string? SignalId => null;
 
     private readonly List<ValidationRuleConfig> _rules;
-    private readonly IStateCenter _stateCenter;
     private readonly ILogger<ConfigurableSignalValidator> _logger;
 
     public ConfigurableSignalValidator(
         List<ValidationRuleConfig> rules,
-        IStateCenter stateCenter,
         ILogger<ConfigurableSignalValidator> logger)
     {
         _rules = rules;
-        _stateCenter = stateCenter;
         _logger = logger;
     }
 
-    public SignalValidationResult? Validate(
-        SignalDefinition definition,
-        PlcBlockDiff diff,
-        IReadOnlyList<IEvent> generatedEvents)
+    public SignalValidationResult? Validate(ValidatorContext ctx)
     {
-        var signalId = definition.SignalId;
-        var deviceId = definition.PropertyMappings.GetValueOrDefault("DeviceId") ?? "";
+        var signalId = ctx.Definition.SignalId;
+        var deviceId = ctx.Definition.PropertyMappings.GetValueOrDefault("DeviceId") ?? "";
 
         foreach (var rule in _rules)
         {
@@ -68,7 +62,7 @@ public class ConfigurableSignalValidator : ISignalValidator
             if (rule.TargetDeviceId != null && rule.TargetDeviceId != deviceId) continue;
             if (rule.TargetSignalId != null && rule.TargetSignalId != signalId) continue;
 
-            var match = EvalGroup(rule.Conditions);
+            var match = EvalGroup(rule.Conditions, ctx);
             if (!match.Item1)
             {
                 var msg = rule.OnRejectMessage ?? $"验证规则 {rule.RuleId} 拒绝";
@@ -80,12 +74,12 @@ public class ConfigurableSignalValidator : ISignalValidator
         return null;
     }
 
-    private (bool, string?) EvalGroup(ConditionGroup g)
+    private (bool, string?) EvalGroup(ConditionGroup g, ValidatorContext ctx)
     {
         var results = new List<(bool, string?)>();
-        foreach (var item in g.Items) results.Add(EvalItem(item));
+        foreach (var item in g.Items) results.Add(EvalItem(item, ctx));
         if (g.Groups != null)
-            foreach (var sub in g.Groups) results.Add(EvalGroup(sub));
+            foreach (var sub in g.Groups) results.Add(EvalGroup(sub, ctx));
         if (results.Count == 0) return (true, null);
 
         var isAnd = g.Operator.Equals("AND", StringComparison.OrdinalIgnoreCase);
@@ -98,17 +92,18 @@ public class ConfigurableSignalValidator : ISignalValidator
         return p.Item1 ? (true, null) : (false, "OR 条件全部不满足");
     }
 
-    private (bool, string?) EvalItem(ConditionItem item)
+    private (bool, string?) EvalItem(ConditionItem item, ValidatorContext ctx)
     {
         if (item.CheckType == "AlwaysPass") return (true, null);
         if (item.CheckType == "AlwaysReject") return (false, item.ExpectedValue ?? "AlwaysReject");
         if (item.CheckType == "DeviceState")
         {
             if (string.IsNullOrEmpty(item.DeviceId)) return (true, null);
-            var state = _stateCenter.GetDeviceState(item.DeviceId);
+            var state = ctx.StateCenter.GetDeviceState(item.DeviceId);
             var cur = state?.Status.ToString() ?? "Offline";
-            var match = cur.Equals(item.ExpectedStatus, StringComparison.OrdinalIgnoreCase);
-            return match ? (true, null) : (false, $"{item.DeviceId} 状态={cur}≠{item.ExpectedStatus}");
+            return cur.Equals(item.ExpectedStatus, StringComparison.OrdinalIgnoreCase)
+                ? (true, null)
+                : (false, $"{item.DeviceId} 状态={cur}≠{item.ExpectedStatus}");
         }
         return (true, null);
     }
