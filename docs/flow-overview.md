@@ -1,4 +1,4 @@
-# WCS Runtime Engine V6 — 完整数据流详解
+# WCS Runtime Engine V7 — 完整数据流详解
 
 > 本文档从「PLC 数据采集 → 数据汇聚 → 任务调度 → 链式执行 → 设备控制 → 完成」的全链路视角，解释每个环节的代码位置、模块职责和交互方式。
 
@@ -33,6 +33,7 @@ i:\code\IOT\WCS ENG\
 │   ├── step-09-v3-upgrade.md                # V3 升级文档
 │   ├── step-10-v4-roadmap.md                # V4 路线图
 │   ├── V6-pure-wcs-architecture.md          # V6 纯 WCS 架构定型
+│   ├── V7-industrial-observability.md       # V7 工业级可观测性
 │   └── flow-overview.md                     # ← 本文档
 │
 ├── src/
@@ -81,7 +82,10 @@ i:\code\IOT\WCS ENG\
 │   │   │   │   └── EventReplayService.cs     #   事件重放服务
 │   │   │   └── Publisher/
 │   │   │       ├── IEventBus.cs              #   事件总线接口
-│   │   │       └── EventBus.cs               #   事件总线实现
+│   │   │       ├── EventBus.cs               #   业务事件总线（DomainBus）
+│   │   │       ├── ISignalBus.cs             #   V4 新增：信号总线接口
+│   │   │       ├── SignalBus.cs              #   V4 新增：PLC 信号专用通道
+│   │   │       └── AlarmBus.cs               #   V7 新增：报警事件专用通道
 │   │   │
 │   │   ├── ObjectTracking/                  # 物体追踪 + 拓扑
 │   │   │   ├── Models/Location.cs            #   位置模型
@@ -107,6 +111,18 @@ i:\code\IOT\WCS ENG\
 │   │   │   ├── IRuleEngine.cs                 #   规则引擎接口
 │   │   │   ├── RuleEngine.cs                  #   规则引擎实现
 │   │   │   └── TaskGenerator.cs               #   任务生成器
+│   │   │
+│   │   ├── CommandCenter/                    # ★ V7 新增：命令中心
+│   │   │   ├── CommandModels.cs               #   命令状态机（9 状态）
+│   │   │   └── CommandCenter.cs               #   命令追踪/超时/审计
+│   │   │
+│   │   ├── DeadLetterCenter/                 # ★ V7 新增：死信中心
+│   │   │   ├── DeadLetterModels.cs            #   死信模型（8 种类型）
+│   │   │   └── DeadLetterCenter.cs            #   失败记录管理
+│   │   │
+│   │   ├── MetricsCenter/                    # ★ V7 新增：指标中心
+│   │   │   ├── MetricsModels.cs               #   指标模型（Counter/Gauge/Histogram）
+│   │   │   └── MetricsCenter.cs               #   指标收集（内置 9 个默认指标）
 │   │   │
 │   │   ├── TransportRouteCenter/              # ★ V5 新增：运输路由中心
 │   │   │   ├── TransportRouteModels.cs         #   路由模型（请求/结果/拥塞）
@@ -1041,4 +1057,60 @@ PLC → PlcPollingService(CRC32) → PlcBlockDiffEngine(CRC32预检) →
          AlarmCenter(5层管线+Mask+Escalation)
                 │
          DomainEventBus → StateCenter(5Managers) → Desktop UI
+```
+
+---
+
+## 18. V7 工业级可观测性（CommandCenter + DeadLetterCenter + MetricsCenter）
+
+V7 不加新的业务功能，只补生产环境必备的三大基础设施。详见 [V7-industrial-observability.md](V7-industrial-observability.md)。
+
+### V7 新增 3 大模块 + 1 分区
+
+| # | 模块 | 文件 | 价值 |
+|---|------|------|------|
+| 1 | **CommandCenter** | `CommandCenter/` | 写 PLC ≠ 设备执行，追踪完整生命周期 |
+| 2 | **DeadLetterCenter** | `DeadLetterCenter/` | 所有失败集中管理，线上可排查 |
+| 3 | **MetricsCenter** | `MetricsCenter/` | 统一指标（Task TPS/PLC延迟/队列深度） |
+| 4 | **AlarmBus** | `EventBus/Publisher/AlarmBus.cs` | 报警事件独立通道，3 分区隔离 |
+
+### V7 完整数据流
+
+```
+PLC → PlcPollingService(CRC32) → PlcBlockDiffEngine(CRC32预检) →
+    SignalMapper → SignalBus(PLC信号通道) →
+        RuleEngine(信号→运输任务) → TaskGenerator
+        │              │                     │
+        │       DeadLetterCenter ← ─ ─ ─ ─ ─ ┘  ← 失败进死信
+        │                                │
+        │                    TransportRouteCenter(设备路径/避障)
+        │                                ↓
+        │                         TaskScheduler(双维排序)
+        │                                │
+        └── ChainExecutionEngine(State+Event双保险) →
+                │                          │
+          CommandCenter ← ActionNode(写PLC前走CommandCenter)
+                │     └─ Sent→Accepted→Executing→Completed
+                │     └─ Timeout→DeadLetterCenter
+                │
+                DeviceManager(FenceToken) → IDevice
+                │
+         DeviceCapabilityCenter(FindDevices(x=>CanLift))
+                │
+         ObjectTracking(预占位+时间维度)
+                │
+         AlarmCenter(5层管线+Mask+Escalation) → AlarmBus(报警通道)
+                │
+         MetricsCenter(全链路指标收集)
+                │
+         DomainEventBus → StateCenter(5Managers) → Desktop UI
+```
+
+### 全链路可观测性布局
+
+```
+CommandCenter → 每条命令：Created→Sent→Accepted→Executing→Completed/Timeout
+DeadLetterCenter → 每个失败：Type/Source/Summary/Context/是否已处理
+MetricsCenter → 每个指标：task.tps, plc.read_latency_ms, device.active, ...
+EventBus分区 → SignalBus(PLC) + DomainBus(业务) + AlarmBus(报警)
 ```
