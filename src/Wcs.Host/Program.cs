@@ -54,6 +54,15 @@ try
             plant.BuildDefaultTopology();
             return plant;
         });
+
+        // 模拟编排器 — 将 TransportGenerator + DeviceSimulator + SignalBus 串成闭环
+        builder.Services.AddSingleton<SimulatorOrchestrator>(sp =>
+            new SimulatorOrchestrator(
+                sp.GetRequiredService<VirtualPlant>(),
+                sp.GetRequiredService<Wcs.Core.TaskEngine.Scheduler.ITaskScheduler>(),
+                sp.GetRequiredService<Wcs.Core.EventBus.Publisher.IEventBus>(),
+                sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
+                sp.GetRequiredService<ILogger<SimulatorOrchestrator>>()));
         // 虚拟工厂模式下不启动真实 PLC 轮询
         Log.Logger.Information("🧪 虚拟工厂模式已启用 — 无需真实 PLC/设备");
     }
