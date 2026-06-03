@@ -35,6 +35,7 @@ i:\code\IOT\WCS ENG\
 │   ├── V6-pure-wcs-architecture.md          # V6 纯 WCS 架构定型
 │   ├── V7-industrial-observability.md       # V7 工业级可观测性
 │   ├── V8-production-hardening.md           # V8 可靠性增强
+│   ├── V9-architecture-final.md             # V9 架构最终定型
 │   └── flow-overview.md                     # ← 本文档
 │
 ├── src/
@@ -127,6 +128,10 @@ i:\code\IOT\WCS ENG\
 │   │   │
 │   │   ├── TraceCenter/                     # ★ V8 新增：执行轨迹中心
 │   │   │   └── TraceCenter.cs                #   任务/命令/运输轨迹追踪
+│   │   │
+│   │   ├── ExecutionHistoryCenter/          # ★ V9 新增：运输历史追溯
+│   │   │   ├── ExecutionHistoryModels.cs     #   运输执行记录模型
+│   │   │   └── ExecutionHistoryCenter.cs     #   完整的 Pallet Trace 追溯
 │   │   │
 │   │   ├── TransportRouteCenter/              # ★ V5 新增：运输路由中心
 │   │   │   ├── TransportRouteModels.cs         #   路由模型（请求/结果/拥塞）
