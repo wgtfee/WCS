@@ -10,6 +10,9 @@ using Wcs.Infrastructure.Logging;
 using Wcs.Infrastructure.Persistence;
 using Wcs.Infrastructure.SignalR;
 using Microsoft.Extensions.Options;
+using Wcs.Simulator;
+using Wcs.Simulator.PlcSimulator;
+using Wcs.Simulator.DeviceSimulator;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -28,19 +31,50 @@ try
 
     // PLC 子系统
     builder.Services.AddSingleton<IPlcBlockDiffEngine, PlcBlockDiffEngine>();
-    // PLC 真实驱动 - 从配置创建
-    builder.Services.AddSingleton<Wcs.Infrastructure.S7.IS7ConnectionFactory>(sp =>
-    {
-        var configs = builder.Configuration.GetSection("PlcConnections")
-            .Get<List<S7ConnectionConfig>>() ?? new();
-        return new Wcs.Infrastructure.S7.S7ConnectionFactory(configs);
-    });
 
-    builder.Services.AddSingleton<IPlcPollingService>(sp =>
-        new PlcPollingService(sp.GetRequiredService<ILogger<PlcPollingService>>()));
+    // ===== V10: 虚拟工厂 / 真实 PLC 切换 =====
+    // appsettings.json:
+    //   "Simulator": { "Enabled": true }  → 使用虚拟工厂（无需 PLC）
+    //   "Simulator": { "Enabled": false } → 使用真实 PLC
+    var simulatorConfig = builder.Configuration.GetSection("Simulator");
+    var simulatorEnabled = simulatorConfig.GetValue<bool>("Enabled");
+
+    if (simulatorEnabled)
+    {
+        // 虚拟工厂模式 — 无需真实 PLC，ISignalSource 由模拟器提供
+        builder.Services.AddSingleton<SimulatorSignalSource>();
+        builder.Services.AddSingleton<ISignalSource>(sp =>
+            sp.GetRequiredService<SimulatorSignalSource>());
+        builder.Services.AddSingleton<VirtualPlant>(sp =>
+        {
+            var gen = new TransportGenerator(
+                sp.GetRequiredService<Wcs.Core.TaskEngine.Scheduler.ITaskScheduler>(),
+                sp.GetRequiredService<ILogger<TransportGenerator>>());
+            var plant = new VirtualPlant(gen, sp.GetRequiredService<ILogger<VirtualPlant>>());
+            plant.BuildDefaultTopology();
+            return plant;
+        });
+        // 虚拟工厂模式下不启动真实 PLC 轮询
+        Log.Logger.Information("🧪 虚拟工厂模式已启用 — 无需真实 PLC/设备");
+    }
+    else
+    {
+        // 真实 PLC 模式 — 使用 S7 连接工厂
+        builder.Services.AddSingleton<Wcs.Infrastructure.S7.IS7ConnectionFactory>(sp =>
+        {
+            var configs = builder.Configuration.GetSection("PlcConnections")
+                .Get<List<S7ConnectionConfig>>() ?? new();
+            return new Wcs.Infrastructure.S7.S7ConnectionFactory(configs);
+        });
+        builder.Services.AddSingleton<IPlcPollingService>(sp =>
+            new PlcPollingService(sp.GetRequiredService<ILogger<PlcPollingService>>()));
+        Log.Logger.Information("🏭 真实 PLC 模式已启用");
+    }
 
     // 后台服务
-    builder.Services.AddHostedService<PlcPollingBackgroundService>();
+    if (!simulatorEnabled)
+        builder.Services.AddHostedService<PlcPollingBackgroundService>();
+
     builder.Services.AddHostedService<SnapshotBackgroundService>();
     builder.Services.AddHostedService<PersistBackgroundService>();
     builder.Services.AddHostedService<AlarmMonitorBackgroundService>();

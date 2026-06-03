@@ -1,4 +1,4 @@
-# WCS Runtime Engine V7 — 完整数据流详解
+# WCS Runtime Engine V9 — 完整数据流详解
 
 > 本文档从「PLC 数据采集 → 数据汇聚 → 任务调度 → 链式执行 → 设备控制 → 完成」的全链路视角，解释每个环节的代码位置、模块职责和交互方式。
 
@@ -36,6 +36,7 @@ i:\code\IOT\WCS ENG\
 │   ├── V7-industrial-observability.md       # V7 工业级可观测性
 │   ├── V8-production-hardening.md           # V8 可靠性增强
 │   ├── V9-architecture-final.md             # V9 架构最终定型
+│   ├── V10-virtual-plant.md                 # V10 虚拟工厂
 │   └── flow-overview.md                     # ← 本文档
 │
 ├── src/

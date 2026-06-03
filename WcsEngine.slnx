@@ -5,5 +5,6 @@
     <Project Path="src/Wcs.Desktop/Wcs.Desktop.csproj" />
     <Project Path="src/Wcs.Host/Wcs.Host.csproj" />
     <Project Path="src/Wcs.Infrastructure/Wcs.Infrastructure.csproj" />
+    <Project Path="src/Wcs.Simulator/Wcs.Simulator.csproj" />
   </Folder>
 </Solution>

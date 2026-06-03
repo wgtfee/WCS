@@ -85,3 +85,5 @@ I:\code\IOT\WCS ENG\src\Wcs.Host\obj\Debug\net8.0\staticwebassets.development.js
 I:\code\IOT\WCS ENG\src\Wcs.Host\obj\Debug\net8.0\staticwebassets.build.endpoints.json
 I:\code\IOT\WCS ENG\src\Wcs.Host\obj\Debug\net8.0\swae.build.ex.cache
 I:\code\IOT\WCS ENG\src\Wcs.Host\bin\Debug\net8.0\S7.Net.dll
+I:\code\IOT\WCS ENG\src\Wcs.Host\bin\Debug\net8.0\Wcs.Simulator.dll
+I:\code\IOT\WCS ENG\src\Wcs.Host\bin\Debug\net8.0\Wcs.Simulator.pdb
