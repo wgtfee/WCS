@@ -34,6 +34,7 @@ i:\code\IOT\WCS ENG\
 │   ├── step-10-v4-roadmap.md                # V4 路线图
 │   ├── V6-pure-wcs-architecture.md          # V6 纯 WCS 架构定型
 │   ├── V7-industrial-observability.md       # V7 工业级可观测性
+│   ├── V8-production-hardening.md           # V8 可靠性增强
 │   └── flow-overview.md                     # ← 本文档
 │
 ├── src/
@@ -113,7 +114,7 @@ i:\code\IOT\WCS ENG\
 │   │   │   └── TaskGenerator.cs               #   任务生成器
 │   │   │
 │   │   ├── CommandCenter/                    # ★ V7 新增：命令中心
-│   │   │   ├── CommandModels.cs               #   命令状态机（9 状态）
+│   │   │   ├── CommandModels.cs               #   命令状态机（V8: PLC ACK 模型）
 │   │   │   └── CommandCenter.cs               #   命令追踪/超时/审计
 │   │   │
 │   │   ├── DeadLetterCenter/                 # ★ V7 新增：死信中心
@@ -123,6 +124,9 @@ i:\code\IOT\WCS ENG\
 │   │   ├── MetricsCenter/                    # ★ V7 新增：指标中心
 │   │   │   ├── MetricsModels.cs               #   指标模型（Counter/Gauge/Histogram）
 │   │   │   └── MetricsCenter.cs               #   指标收集（内置 9 个默认指标）
+│   │   │
+│   │   ├── TraceCenter/                     # ★ V8 新增：执行轨迹中心
+│   │   │   └── TraceCenter.cs                #   任务/命令/运输轨迹追踪
 │   │   │
 │   │   ├── TransportRouteCenter/              # ★ V5 新增：运输路由中心
 │   │   │   ├── TransportRouteModels.cs         #   路由模型（请求/结果/拥塞）
@@ -1113,4 +1117,45 @@ CommandCenter → 每条命令：Created→Sent→Accepted→Executing→Complet
 DeadLetterCenter → 每个失败：Type/Source/Summary/Context/是否已处理
 MetricsCenter → 每个指标：task.tps, plc.read_latency_ms, device.active, ...
 EventBus分区 → SignalBus(PLC) + DomainBus(业务) + AlarmBus(报警)
+```
+
+---
+
+## 19. V8 Production Hardening（可靠性增强）
+
+V8 不加新功能，只处理 7 个生产环境可靠性问题。详见 [V8-production-hardening.md](V8-production-hardening.md)。
+
+### V8 7 项变更
+
+| # | 变更 | 文件 | 解决什么问题 |
+|---|------|------|-------------|
+| 1 | **ITaskQueueStore** | `TaskEngine/QueueStore/` | 崩溃后调度队列丢失 |
+| 2 | **CommandCenter PLC ACK** | `CommandCenter/` | 写PLC ≠ 设备执行 |
+| 3 | **StateRetentionPolicy** | `StateCenter/Models/` | StateCenter 无限增长 |
+| 4 | **WaitNode Subscribe-Then-Check** | `ChainExecutionEngine` | Check-Then-Subscribe 竞态 |
+| 5 | **Signal 幂等窗口** | `TaskGenerator` | PLC 信号毛刺重复触发 |
+| 6 | **Reservation TTL** | `ObjectTrackingCenter` | 设备故障后预占位永不释放 |
+| 7 | **TraceCenter** | `TraceCenter/` | 任务/命令/运输执行轨迹 |
+
+### V8 完整数据流
+
+```
+PLC → PlcPollingService(CRC32) → PlcBlockDiffEngine(CRC32预检) →
+    SignalMapper → SignalBus → RuleEngine(幂等窗口5s)
+        │                                │
+        │  DeadLetterCenter ← 失败进死信   │
+        │                                ↓
+        │                    TaskScheduler(持久化队列→ITaskQueueStore)
+        │                                ↓
+        └── ChainExecutionEngine(WaitNode: Subscribe-Then-Check 无竞态)
+                │                          │
+          CommandCenter(PLC ACK: Sent→Acked→Executing→Done→Completed)
+                │                          │
+          TraceCenter(全链路执行轨迹) ← ─ ─ ┘
+                │
+         Reservation TTL(5分钟自动释放)
+                │
+         StateRetentionPolicy(24h/7d 自动清理)
+                │
+         MetricsCenter → DomainEventBus → Desktop UI
 ```

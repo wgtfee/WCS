@@ -10,7 +10,7 @@ using Wcs.Core.PlcSubsystem;
 /// ActionNode → CommandCenter.SendCommandAsync() → CommandQueue → PLC
 ///
 /// 功能：
-/// - 命令状态机（Created→Sent→Accepted→Executing→Completed/Failed/Timeout/Rejected）
+/// - 命令状态机（Created→Sent→Acked→Executing→Done→Completed/Failed/Timeout/Rejected）
 /// - 超时检测
 /// - 重试机制
 /// - 审计追踪
@@ -66,14 +66,19 @@ public class CommandCenter : ICommandCenter, IDisposable
         return record;
     }
 
-    public bool ConfirmAccepted(string commandId)
+    public bool ConfirmAcked(string commandId)
     {
-        return UpdateStatus(commandId, DeviceCommandStatus.Accepted);
+        return UpdateStatus(commandId, DeviceCommandStatus.Acked);
     }
 
     public bool ConfirmExecuting(string commandId)
     {
         return UpdateStatus(commandId, DeviceCommandStatus.Executing);
+    }
+
+    public bool ConfirmDone(string commandId)
+    {
+        return UpdateStatus(commandId, DeviceCommandStatus.Done);
     }
 
     public bool ConfirmCompleted(string commandId, string? result = null)
@@ -148,7 +153,7 @@ public class CommandCenter : ICommandCenter, IDisposable
     {
         return _commands.Values
             .Where(c => c.Status == DeviceCommandStatus.Sent
-                     || c.Status == DeviceCommandStatus.Accepted
+                     || c.Status == DeviceCommandStatus.Acked
                      || c.Status == DeviceCommandStatus.Executing);
     }
 

@@ -1,5 +1,6 @@
 namespace Wcs.Core.RuleEngine;
 
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Handlers;
@@ -22,6 +23,10 @@ public class TaskGenerator : IEventHandler<ConveyorReadyChangedEvent>,
     private readonly IRuleEngine _ruleEngine;
     private readonly ITaskScheduler _scheduler;
     private readonly ILogger<TaskGenerator>? _logger;
+
+    // V8: 信号幂等窗口 — 相同信号 5 秒内只处理一次
+    private readonly ConcurrentDictionary<string, DateTime> _idempotencyCache = new();
+    private readonly TimeSpan _idempotencyWindow = TimeSpan.FromSeconds(5);
 
     public TaskGenerator(
         IRuleEngine ruleEngine,
@@ -72,6 +77,14 @@ public class TaskGenerator : IEventHandler<ConveyorReadyChangedEvent>,
     {
         try
         {
+            // V8: 幂等窗口 — 防止连续重复信号生成多个任务
+            if (IsDuplicateSignal(signalEvent))
+            {
+                _logger?.LogDebug("TaskGenerator: duplicate signal {SignalType} ignored (idempotency window {Window}s)",
+                    signalEvent.GetType().Name, _idempotencyWindow.TotalSeconds);
+                return;
+            }
+
             var tasks = _ruleEngine.Evaluate(signalEvent);
 
             foreach (var task in tasks)
@@ -94,5 +107,26 @@ public class TaskGenerator : IEventHandler<ConveyorReadyChangedEvent>,
             _logger?.LogError(ex, "TaskGenerator: error evaluating signal {SignalType}",
                 signalEvent.GetType().Name);
         }
+    }
+
+    /// <summary>
+    /// V8: 检查信号是否在幂等窗口内（5 秒内相同信号只处理一次）
+    /// </summary>
+    private bool IsDuplicateSignal(object signalEvent)
+    {
+        var signalKey = $"{signalEvent.GetType().Name}:{signalEvent.GetHashCode()}";
+        var now = DateTime.UtcNow;
+        if (_idempotencyCache.TryGetValue(signalKey, out var lastTime) && (now - lastTime) < _idempotencyWindow)
+            return true;
+        _idempotencyCache[signalKey] = now;
+        CleanupIdempotencyCache();
+        return false;
+    }
+
+    private void CleanupIdempotencyCache()
+    {
+        var cutoff = DateTime.UtcNow.Subtract(_idempotencyWindow);
+        foreach (var kvp in _idempotencyCache)
+            if (kvp.Value < cutoff) _idempotencyCache.TryRemove(kvp.Key, out _);
     }
 }

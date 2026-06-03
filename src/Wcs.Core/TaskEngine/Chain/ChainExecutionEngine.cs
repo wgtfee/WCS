@@ -336,23 +336,25 @@ public class ChainExecutionEngine
             targetStatus = parts.Length > 1 ? parts[1] : "Running";
         }
 
-        // === State + Event 双保险 ===
-        // 1. 先查 StateCenter：设备当前状态是否已满足条件
+        // === V8: Subscribe-Then-Check 无竞态方案 ===
+        // 先订阅 EventBus，再查 StateCenter，消除 Check-Then-Subscribe 竞态窗口
+        // 竞态场景：Check=NotReady → Ready事件发生 → Subscribe → 永远等不到
+        var handler = new DeviceStateEventHandler(tcs, targetDevice, targetStatus);
+        _eventBus.Subscribe(handler);
+
+        // 订阅后查 StateCenter：设备当前状态是否已满足条件
         if (_stateCenter != null && !string.IsNullOrEmpty(targetDevice))
         {
             var deviceState = _stateCenter.GetDeviceState(targetDevice);
             if (deviceState != null && deviceState.Status.ToString() == targetStatus)
             {
                 _logger?.LogInformation(
-                    "WaitNode {NodeId}: device {Device} already in status {Status}, bypassing event subscription",
+                    "WaitNode {NodeId}: device {Device} already in status {Status} (post-subscribe check)",
                     node.NodeId, targetDevice, targetStatus);
+                _eventBus.Unsubscribe(handler);
                 return true;
             }
         }
-
-        // 2. 不满足则通过 EventBus 订阅状态变化事件
-        var handler = new DeviceStateEventHandler(tcs, targetDevice, targetStatus);
-        _eventBus.Subscribe(handler);
 
         try
         {

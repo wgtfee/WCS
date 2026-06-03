@@ -222,3 +222,15 @@ public class SystemOverview
     public int TrackedObjectCount { get; set; }
     public int ActiveLockCount { get; set; }
 }
+
+/// <summary>
+/// 状态保留策略 — 控制 StateCenter 中各类型状态的保留时间
+/// V8: 防止 StateCenter 无限增长，后台定时清理
+/// </summary>
+public class StateRetentionPolicy
+{
+    public TimeSpan CompletedTaskRetention { get; set; } = TimeSpan.FromHours(24);
+    public TimeSpan RecoveredAlarmRetention { get; set; } = TimeSpan.FromDays(7);
+    public int MaxObjectHistoryPerObject { get; set; } = 1000;
+    public TimeSpan FailedCommandRetention { get; set; } = TimeSpan.FromHours(48);
+}

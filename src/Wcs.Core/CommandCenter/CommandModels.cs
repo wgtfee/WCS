@@ -1,29 +1,25 @@
 namespace Wcs.Core.CommandCenter;
 
 /// <summary>
-/// 设备命令状态机 — Created → Sent → Accepted → Executing → Completed/Failed/Timeout/Rejected
+/// 设备命令状态机 — 完整工业 PLC ACK 模型
+/// V8: Sent → Acked → Executing → Done → Completed
 /// 任务状态 ≠ 设备状态 ≠ 命令状态，三者独立跟踪
 /// </summary>
 public enum DeviceCommandStatus
 {
-    /// <summary>已创建</summary>
     Created = 0,
-    /// <summary>已发送到 PLC/设备</summary>
     Sent = 1,
-    /// <summary>设备已接受</summary>
-    Accepted = 2,
-    /// <summary>设备执行中</summary>
+    /// <summary>PLC 已置 ACK 位，确认收到命令</summary>
+    Acked = 2,
     Executing = 3,
-    /// <summary>执行完成</summary>
-    Completed = 4,
-    /// <summary>执行失败</summary>
-    Failed = 5,
-    /// <summary>超时</summary>
-    Timeout = 6,
-    /// <summary>被设备拒绝</summary>
-    Rejected = 7,
-    /// <summary>已取消</summary>
-    Cancelled = 8
+    /// <summary>PLC 已置 DONE 位，设备执行完成</summary>
+    Done = 4,
+    /// <summary>WCS 确认完成，清理命令位</summary>
+    Completed = 5,
+    Failed = 6,
+    Timeout = 7,
+    Rejected = 8,
+    Cancelled = 9
 }
 
 /// <summary>
@@ -86,14 +82,19 @@ public interface ICommandCenter
         string? payload = null, string? taskId = null, int timeoutMs = 5000, CancellationToken ct = default);
 
     /// <summary>
-    /// 确认命令被设备接受
+    /// 确认 PLC 已 ACK（收到命令）
     /// </summary>
-    bool ConfirmAccepted(string commandId);
+    bool ConfirmAcked(string commandId);
 
     /// <summary>
     /// 确认命令开始执行
     /// </summary>
     bool ConfirmExecuting(string commandId);
+
+    /// <summary>
+    /// 确认 PLC 已 DONE（设备执行完成）
+    /// </summary>
+    bool ConfirmDone(string commandId);
 
     /// <summary>
     /// 确认命令执行完成
