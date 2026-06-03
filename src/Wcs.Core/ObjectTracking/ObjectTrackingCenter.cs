@@ -199,9 +199,26 @@ public class ObjectTrackingCenter : IObjectTrackingCenter, ISnapshotProvider
         if (!_objects.TryGetValue(objectId, out var state))
             return;
 
+        var now = DateTime.UtcNow;
         var oldPosition = state.CurrentPosition;
+
+        // === V4: 更新时间维度 ===
+        state.LastNodeId = oldPosition;
+        state.LeaveTime = state.EnterTime ?? now;
+
+        // 计算移动耗时
+        if (state.EnterTime.HasValue)
+            state.TravelTimeMs = (long)(now - state.EnterTime.Value).TotalMilliseconds;
+
         state.CurrentPosition = newPosition;
-        state.UpdateTime = DateTime.UtcNow;
+        state.EnterTime = now;
+        state.UpdateTime = now;
+
+        // 记录路径历史（最多保留 50 个节点）
+        state.PathHistory ??= new List<string>();
+        state.PathHistory.Add(oldPosition);
+        if (state.PathHistory.Count > 50)
+            state.PathHistory.RemoveAt(0);
 
         // 更新空间索引
         UpdateSpatialIndex(objectId, oldPosition, newPosition);

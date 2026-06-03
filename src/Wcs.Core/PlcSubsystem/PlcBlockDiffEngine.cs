@@ -1,6 +1,7 @@
 namespace Wcs.Core.PlcSubsystem;
 
 using System.Collections.Concurrent;
+using System.Text;
 
 /// <summary>
 /// PLC 块数据变化
@@ -89,12 +90,28 @@ public class PlcBlockDiffEngine : IPlcBlockDiffEngine
     private readonly ConcurrentDictionary<string, PlcBlock> _lastBlocks = new();
 
     /// <summary>
-    /// 对比算法 - 逐字节对比
+    /// 对比算法 - CRC32 哈希预检 + 逐字节对比（二级检测）
+    /// 先比较 CRC32 哈希，不同才做逐字节精确对比
     /// </summary>
     public PlcBlockDiff ComparePlcBlocks(PlcBlock oldBlock, PlcBlock newBlock)
     {
         ArgumentNullException.ThrowIfNull(oldBlock);
         ArgumentNullException.ThrowIfNull(newBlock);
+
+        // === V4 优化：CRC32 哈希预检 ===
+        // 如果两个块都有 CRC32 且相同，跳过逐字节对比
+        if (oldBlock.Crc32 != 0 && newBlock.Crc32 != 0 && oldBlock.Crc32 == newBlock.Crc32)
+        {
+            return new PlcBlockDiff
+            {
+                PlcName = newBlock.PlcName,
+                BlockNumber = newBlock.BlockNumber,
+                OldData = (byte[])oldBlock.Data.Clone(),
+                NewData = (byte[])newBlock.Data.Clone(),
+                CompareTime = DateTime.UtcNow
+                // Changes 为空 → HasChanges = false
+            };
+        }
 
         var diff = new PlcBlockDiff
         {

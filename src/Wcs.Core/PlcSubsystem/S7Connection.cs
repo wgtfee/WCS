@@ -69,6 +69,58 @@ public class PlcBlock
     public DateTime ReadTime { get; set; }
 
     public bool IsValid { get; set; }
+
+    /// <summary>CRC32 哈希 — 用于快速判断块数据是否变化</summary>
+    public uint Crc32 { get; set; }
+}
+
+/// <summary>
+/// CRC32 计算工具 — 用于 PLC 块数据快速哈希比对
+/// </summary>
+public static class Crc32Helper
+{
+    private static readonly uint[] Table = BuildTable();
+
+    private static uint[] BuildTable()
+    {
+        var table = new uint[256];
+        for (uint i = 0; i < 256; i++)
+        {
+            var c = i;
+            for (int j = 0; j < 8; j++)
+            {
+                if ((c & 1) != 0)
+                    c = 0xEDB88320 ^ (c >> 1);
+                else
+                    c >>= 1;
+            }
+            table[i] = c;
+        }
+        return table;
+    }
+
+    /// <summary>
+    /// 计算字节数组的 CRC32 校验值
+    /// </summary>
+    public static uint Compute(byte[] data)
+    {
+        if (data == null || data.Length == 0)
+            return 0;
+
+        var crc = 0xFFFFFFFFu;
+        foreach (var b in data)
+            crc = Table[(crc ^ b) & 0xFF] ^ (crc >> 8);
+        return crc ^ 0xFFFFFFFFu;
+    }
+
+    /// <summary>
+    /// 从 PlcBlock 数据创建带 CRC32 的块
+    /// </summary>
+    public static PlcBlock WithHash(PlcBlock block)
+    {
+        block.Crc32 = Compute(block.Data);
+        return block;
+    }
 }
 
 /// <summary>

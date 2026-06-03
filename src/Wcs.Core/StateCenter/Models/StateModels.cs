@@ -86,6 +86,23 @@ public class ObjectState
 
     /// <summary>完整路径节点列表 — 预约时可指定</summary>
     public List<string>? Route { get; set; }
+
+    // ========== V4: 数字孪生时间维度 ==========
+
+    /// <summary>上一个位置节点 ID</summary>
+    public string? LastNodeId { get; set; }
+
+    /// <summary>进入当前位置的时间</summary>
+    public DateTime? EnterTime { get; set; }
+
+    /// <summary>离开当前位置的时间</summary>
+    public DateTime? LeaveTime { get; set; }
+
+    /// <summary>从上一个位置到当前位置的移动耗时（毫秒）</summary>
+    public long TravelTimeMs { get; set; }
+
+    /// <summary>历史路径（最近经过的节点，用于回溯）</summary>
+    public List<string>? PathHistory { get; set; }
 }
 
 /// <summary>

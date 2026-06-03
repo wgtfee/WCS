@@ -365,14 +365,14 @@ public class PlcPollingService : IPlcPollingService
 
                     if (data != null)
                     {
-                        var block = new PlcBlock
+                        var block = Crc32Helper.WithHash(new PlcBlock
                         {
                             PlcName = config.PlcName,
                             BlockNumber = blockConfig.BlockNumber,
                             Data = data,
                             ReadTime = DateTime.UtcNow,
                             IsValid = true
-                        };
+                        });
 
                         _lastBlocks[GetBlockKey(config.PlcName, blockConfig.BlockNumber)] = block;
                     }

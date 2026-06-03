@@ -25,12 +25,13 @@
 
 ## 1. 项目文件结构
 
-```
 i:\code\IOT\WCS ENG\
 ├── docs/                                    # 文档
 │   ├── step-01-*.md ~ step-08-*.md          # 各 Step 文档
 │   ├── step-08-overview.md                  # Step8 总览
 │   ├── step-08-phase-0.md ~ phase-4.md      # Step8 各阶段文档
+│   ├── step-09-v3-upgrade.md                # V3 升级文档
+│   ├── step-10-v4-roadmap.md                # V4 路线图
 │   └── flow-overview.md                     # ← 本文档
 │
 ├── src/
@@ -81,9 +82,19 @@ i:\code\IOT\WCS ENG\
 │   │   │       └── TopologyGraph.cs           #   拓扑图（BFS/DFS）
 │   │   │
 │   │   ├── PlcSubsystem/                    # ★ PLC 子系统
-│   │   │   ├── S7Connection.cs               #   S7 连接（模拟实现）
-│   │   │   ├── PlcPollingService.cs          #   轮询服务（Timer 驱动）
-│   │   │   └── PlcBlockDiffEngine.cs         #   数据块对比引擎 + 变化发布
+│   │   │   ├── S7Connection.cs               #   S7 连接 + PlcBlock + Crc32Helper
+│   │   │   ├── PlcPollingService.cs          #   轮询服务（Timer 驱动, CRC32）
+│   │   │   ├── PlcBlockDiffEngine.cs         #   数据块对比引擎（V4: CRC32 预检）
+│   │   │   └── SignalMapper/                 #   V3 新增：信号映射层
+│   │   │       ├── ISignalMapper.cs
+│   │   │       ├── SignalDefinition.cs
+│   │   │       └── SignalMapperEngine.cs
+│   │   │
+│   │   ├── RuleEngine/                       # ★ V4 新增：规则引擎
+│   │   │   ├── RuleDefinition.cs              #   规则定义 + 条件 + 动作
+│   │   │   ├── IRuleEngine.cs                 #   规则引擎接口
+│   │   │   ├── RuleEngine.cs                  #   规则引擎实现
+│   │   │   └── TaskGenerator.cs               #   任务生成器
 │   │   │
 │   │   ├── Recovery/                        # ★ 系统恢复
 │   │   │   └── RecoveryManager.cs            #   恢复管理器（快照+事件重放）
@@ -917,3 +928,43 @@ V3 基于 V2 架构审计发现的 9 个工业级风险点进行整改。详见 
 | 7 | **AlarmMask** | 设备级/报警码级动态报警屏蔽 |
 | 8 | **ReservedPosition** | ObjectState 新增 ReservedNodeId/Route，防止双托盘占位 |
 | 9 | **EventReplay 白名单** | 移除实时状态事件，只保留有状态恢复需求的事件 |
+
+---
+
+## 16. V4 架构演进（Step 10）
+
+V4 基于 V3 上线后发现的 5 个新风险点进行整改。详见 [step-10-v4-roadmap.md](step-10-v4-roadmap.md)。
+
+### V4 核心升级
+
+| # | 升级 | 文件 | 说明 |
+|---|------|------|------|
+| 1 | **CRC32 哈希预检** | `PlcBlockDiffEngine` | 先比哈希，不同再逐字节 Diff，大 PLC 性能提升 10-100x |
+| 2 | **EventBus 拆分** | `ISignalBus` + `SignalBus` | 信号事件走独立通道，不与业务事件混流 |
+| 3 | **ObjectTracking 时间维度** | `ObjectState` + `ObjectTrackingCenter` | LastNode/EnterTime/LeaveTime/TravelTime |
+| 4 | **RuleEngine** | `RuleEngine/` 4 个文件 | 业务规则引擎：信号→匹配→生成任务 |
+| 5 | **TaskGenerator** | `RuleEngine/TaskGenerator.cs` | 监听 SignalBus，提交流程到调度器 |
+
+### V4 完整数据流
+
+```
+PLC → PlcPollingService(CRC32) → PlcBlockDiffEngine(CRC32预检) →
+SignalMapper → SignalBus(独立通道) →
+    RuleEngine.Evaluate(signalEvent)
+      ├── 条件匹配（AND 逻辑）
+      ├── ContextKey 分组
+      └── 生成 TaskContext
+           ↓
+    TaskGenerator → TaskScheduler(双维排序) →
+    ChainExecutionEngine(State+Event双保险) →
+    DeviceManager(FenceToken校验) → IDevice
+           ↓
+    DomainEventBus(业务事件通道) → 其他模块
+```
+
+### 一句话总结 V4
+
+```
+CRC32 哈希扛住大 PLC + SignalBus 隔离事件风暴 +
+RuleEngine 让业务逻辑脱离 PLC 地址 → 换 PLC 不换逻辑
+```
