@@ -1,4 +1,4 @@
-# WCS Runtime Engine V3 — 完整数据流详解
+# WCS Runtime Engine V6 — 完整数据流详解
 
 > 本文档从「PLC 数据采集 → 数据汇聚 → 任务调度 → 链式执行 → 设备控制 → 完成」的全链路视角，解释每个环节的代码位置、模块职责和交互方式。
 
@@ -32,7 +32,7 @@ i:\code\IOT\WCS ENG\
 │   ├── step-08-phase-0.md ~ phase-4.md      # Step8 各阶段文档
 │   ├── step-09-v3-upgrade.md                # V3 升级文档
 │   ├── step-10-v4-roadmap.md                # V4 路线图
-│   ├── step-11-v5-wcs-core.md               # V5 纯 WCS 内核定型
+│   ├── V6-pure-wcs-architecture.md          # V6 纯 WCS 架构定型
 │   └── flow-overview.md                     # ← 本文档
 │
 ├── src/
@@ -108,14 +108,9 @@ i:\code\IOT\WCS ENG\
 │   │   │   ├── RuleEngine.cs                  #   规则引擎实现
 │   │   │   └── TaskGenerator.cs               #   任务生成器
 │   │   │
-│   │   ├── RouteCenter/                      # ★ V5 新增：动态路由
-│   │   │   ├── RouteModels.cs                 #   路由模型（请求/结果/拥塞）
-│   │   │   └── RouteCenter.cs                 #   动态路由中心
-│   │   │
-│   │   ├── WorkflowCenter/                   # ★ V5 新增：业务流程
-│   │   │   ├── WorkflowModels.cs              #   流程定义/实例/阶段
-│   │   │   ├── IWorkflowCenter.cs             #   流程中心接口
-│   │   │   └── WorkflowCenter.cs              #   流程中心实现
+│   │   ├── TransportRouteCenter/              # ★ V5 新增：运输路由中心
+│   │   │   ├── TransportRouteModels.cs         #   路由模型（请求/结果/拥塞）
+│   │   │   └── TransportRouteCenter.cs          #   设备级路径规划（V6: 纯WCS）
 │   │   │
 │   │   ├── Recovery/                        # ★ 系统恢复
 │   │   │   └── RecoveryManager.cs            #   恢复管理器（快照+事件重放）
@@ -992,54 +987,58 @@ RuleEngine 让业务逻辑脱离 PLC 地址 → 换 PLC 不换逻辑
 
 ---
 
-## 17. V5 纯 WCS 内核定型（Step 11）
+## 17. V6 纯 WCS 架构定型
 
-V5 明确 WCS 边界，只做 WCS 该做的事，不跨入 WMS。详见 [step-11-v5-wcs-core.md](step-11-v5-wcs-core.md)。
+V6 基于 V5 审查，删除所有 WMS 渗透，只保留最纯粹的 WCS 核心。
+详见 [V6-pure-wcs-architecture.md](V6-pure-wcs-architecture.md)。
 
-### V5 新增 4 个模块
+### V6 相比 V5 的净化
 
-| # | 模块 | 文件 | 说明 |
-|---|------|------|------|
-| 1 | **RouteCenter** | `RouteCenter/` | 动态寻路、故障避障、拥塞控制 |
-| 2 | **WorkflowCenter** | `WorkflowCenter/` | 业务流程（入库/出库/移库/盘点） |
-| 3 | **DeviceCapabilityCenter** | `DeviceCenter/Capability/` | 设备能力抽象（任务不关心具体设备） |
-| 4 | **AlarmEscalation** | `AlarmCenter/Escalation/` | 报警超时逐级升级（班长→主管→停线） |
+| 操作 | 模块 | 原因 |
+|------|------|------|
+| 🗑️ **删除** | **WorkflowCenter** | 入库/出库/移库流程编排属于 WMS |
+| 🔄 **重命名** | **RouteCenter** → **TransportRouteCenter** | 只做设备运输路径，不做库位决策 |
+| ✂️ **缩减** | **DeviceCapability** 移除 `CanStore` | 库位决策属于 WMS |
+| 🚧 **加边界** | **RuleEngine** 注释禁止 WMS 规则 | 防止误用为订单/库存规则 |
 
-### WCS 边界
+### 纯 WCS 边界（V6 最终版）
 
 ```
-WCS 职责（做）                    WMS 职责（不做）
-───────────────────────────      ───────────────────────────
-设备通讯（PLC/机器人/堆垛机）      订单管理
-状态感知（StateCenter）           库存管理
-任务执行（TaskEngine）            库位管理
-设备控制（DeviceManager）         批次管理
-物料追踪（ObjectTracking）        先进先出/FIFO
-路由规划（RouteCenter）           库存冻结/盘点
-业务流程（WorkflowCenter）        波次管理
-报警管理（AlarmCenter+升阶）      入库/出库策略
-系统恢复（RecoveryManager）        ERP/MES 对接
+WCS 只做（保留）                    WMS 不做（删除）
+─────────────────────────────      ─────────────────────────────
+PLC 通讯、信号采集、信号转换              订单管理
+设备注册、启停、状态同步、健康检查         库存管理
+设备能力查询（CanLift/CanConvey）        库位管理
+设备路径规划、避障、拥塞控制              批次管理
+现场实时状态库（StateCenter）            先进先出 FIFO
+任务调度与 DAG 链式执行                 库存冻结/盘点
+事件总线（模块解耦）                     波次管理
+物料追踪（纯运输占位，非库存）             入库/出库策略
+设备互斥锁（FenceToken）               库位分配
+报警管理（5层管线+屏蔽+升级）            ERP/MES 对接
+信号→运输任务映射（RuleEngine）         业务流程编排（WorkflowCenter）
+系统崩溃恢复（快照+事件重放）
 ```
 
-### V5 完整数据流
+### V6 完整数据流
 
 ```
 PLC → PlcPollingService(CRC32) → PlcBlockDiffEngine(CRC32预检) →
     SignalMapper → SignalBus(独立通道) →
-        RuleEngine.Evaluate() → TaskGenerator
-        │                            │
-        │                     RouteCenter(动态避障)
-        │                            ↓
-        │                     WorkflowCenter(业务流程)
-        │                            │
-        │                     TaskScheduler(双维排序)
-        │                            │
+        RuleEngine(信号→运输任务) → TaskGenerator
+        │                                │
+        │                    TransportRouteCenter(设备路径/避障)
+        │                                ↓
+        │                         TaskScheduler(双维排序)
+        │                                │
         └── ChainExecutionEngine(State+Event双保险) →
                 DeviceManager(FenceToken) → IDevice
                 │
-         DeviceCapabilityCenter(FindDevices(x=>CanStore))
+         DeviceCapabilityCenter(FindDevices(x=>CanLift))
                 │
-         AlarmCenter(5层管线+屏蔽+升级)
+         ObjectTracking(预占位+时间维度)
                 │
-         DomainEventBus → 其他模块
+         AlarmCenter(5层管线+Mask+Escalation)
+                │
+         DomainEventBus → StateCenter(5Managers) → Desktop UI
 ```

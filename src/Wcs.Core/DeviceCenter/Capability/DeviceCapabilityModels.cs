@@ -1,7 +1,10 @@
 namespace Wcs.Core.DeviceCenter.Capability;
 
 /// <summary>
-/// 设备能力枚举 — 描述设备能做什么
+/// 设备能力枚举 — 描述设备的运输/处理能力
+///
+/// 纯 WCS 边界：只包含设备的物理运输和处理能力
+/// 不含：CanStore（库位决策属于 WMS）、CanAllocate、CanReserveLocation
 /// </summary>
 [Flags]
 public enum DeviceCapability
@@ -14,22 +17,18 @@ public enum DeviceCapability
     CanLift = 1 << 1,
     /// <summary>可旋转（转台/旋转台）</summary>
     CanRotate = 1 << 2,
-    /// <summary>可存储（堆垛机/立体库）</summary>
-    CanStore = 1 << 3,
     /// <summary>可分拣（分拣机）</summary>
-    CanSort = 1 << 4,
+    CanSort = 1 << 3,
     /// <summary>可抓取（机器人/机械手）</summary>
-    CanGrip = 1 << 5,
+    CanGrip = 1 << 4,
     /// <summary>可扫描（条码/RFID 读取）</summary>
-    CanScan = 1 << 6,
-    /// <summary>可称重</summary>
-    CanWeigh = 1 << 7,
-    /// <summary>可测量尺寸</summary>
-    CanMeasure = 1 << 8,
+    CanScan = 1 << 5,
     /// <summary>可转移（与其他设备交接）</summary>
-    CanTransfer = 1 << 9,
-    /// <summary>可暂存（缓存位）</summary>
-    CanBuffer = 1 << 10
+    CanTransfer = 1 << 6,
+    /// <summary>可称重（称重台）</summary>
+    CanWeigh = 1 << 7,
+    /// <summary>可测量尺寸（测量站）</summary>
+    CanMeasure = 1 << 8
 }
 
 /// <summary>
@@ -121,7 +120,6 @@ public class DeviceCapabilityStats
     public int TotalDevices { get; set; }
     public int Conveyors { get; set; }
     public int Lifts { get; set; }
-    public int Storages { get; set; }
     public int Robots { get; set; }
     public int Sorters { get; set; }
 }

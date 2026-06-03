@@ -92,7 +92,6 @@ public class DeviceCapabilityCenter : IDeviceCapabilityCenter
             TotalDevices = all.Count,
             Conveyors = all.Count(r => r.Capabilities.HasFlag(DeviceCapability.CanConvey)),
             Lifts = all.Count(r => r.Capabilities.HasFlag(DeviceCapability.CanLift)),
-            Storages = all.Count(r => r.Capabilities.HasFlag(DeviceCapability.CanStore)),
             Robots = all.Count(r => r.Capabilities.HasFlag(DeviceCapability.CanGrip)),
             Sorters = all.Count(r => r.Capabilities.HasFlag(DeviceCapability.CanSort))
         };

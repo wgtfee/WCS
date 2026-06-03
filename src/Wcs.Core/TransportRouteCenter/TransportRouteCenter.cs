@@ -4,15 +4,17 @@ using System.Collections.Concurrent;
 using Wcs.Core.ObjectTracking.Topology;
 
 /// <summary>
-/// 动态路由中心 — 寻路、避障、拥塞控制
+/// 运输路由中心 — 设备级路径规划、故障避障、拥塞控制
 ///
-/// 在 TopologyGraph 的基础上增加：
-/// - 动态拥塞检测
-/// - 故障节点/边自动回避
+/// 在 TopologyGraph 基础上增加动态路由能力：
+/// - 拥塞检测（边占用计数）
+/// - 故障设备节点自动绕行
 /// - 多策略寻路（最短/最空/平衡）
-/// - 路径占用管理
+/// - 运输路径占用管理
+///
+/// 纯 WCS 边界：只做设备 A→设备 B 的运输路径规划
 /// </summary>
-public sealed class RouteCenter : IRouteCenter
+public sealed class TransportRouteCenter : ITransportRouteCenter
 {
     private readonly TopologyGraph _graph;
     private readonly ConcurrentDictionary<string, int> _edgeOccupancy = new();
@@ -23,48 +25,34 @@ public sealed class RouteCenter : IRouteCenter
 
     private long _totalRoutes;
     private long _totalFailures;
-    private readonly object _statsLock = new();
 
-    private const int CongestionThresholdPerEdge = 2;
-
-    public RouteCenter(TopologyGraph graph)
+    public TransportRouteCenter(TopologyGraph graph)
     {
         _graph = graph ?? throw new ArgumentNullException(nameof(graph));
     }
 
-    /// <summary>
-    /// 计算最优路径 — 自动避开故障节点/边，考虑拥塞
-    /// </summary>
-    public RouteResult FindRoute(RouteRequest request)
+    public TransportRouteResult FindRoute(TransportRouteRequest request)
     {
-        lock (_statsLock) _totalRoutes++;
+        Interlocked.Increment(ref _totalRoutes);
 
-        // 1. 检查起点终点有效性
         if (!_graph.HasNode(request.FromNodeId))
-            return RouteResult.NotFound($"FromNode '{request.FromNodeId}' not found");
+            return TransportRouteResult.NotFound($"FromNode '{request.FromNodeId}' not found");
         if (!_graph.HasNode(request.ToNodeId))
-            return RouteResult.NotFound($"ToNode '{request.ToNodeId}' not found");
+            return TransportRouteResult.NotFound($"ToNode '{request.ToNodeId}' not found");
 
-        // 2. 检查故障节点
         if (_faultedNodes.TryGetValue(request.FromNodeId, out var fromFaulted) && fromFaulted)
-            return RouteResult.NotFound($"FromNode '{request.FromNodeId}' is faulted");
+            return TransportRouteResult.NotFound($"FromNode '{request.FromNodeId}' is faulted");
         if (_faultedNodes.TryGetValue(request.ToNodeId, out var toFaulted) && toFaulted)
-            return RouteResult.NotFound($"ToNode '{request.ToNodeId}' is faulted");
+            return TransportRouteResult.NotFound($"ToNode '{request.ToNodeId}' is faulted");
 
-        // 3. BFS 寻路（考虑拥塞权重）
         var result = FindPathWithStrategy(request);
 
         if (!result.Found)
-        {
-            lock (_statsLock) _totalFailures++;
-        }
+            Interlocked.Increment(ref _totalFailures);
 
         return result;
     }
 
-    /// <summary>
-    /// 标记路径占用的边
-    /// </summary>
     public void OccupyPath(IReadOnlyList<string> edgeIds, string? objectId)
     {
         foreach (var edgeId in edgeIds)
@@ -76,9 +64,6 @@ public sealed class RouteCenter : IRouteCenter
         }
     }
 
-    /// <summary>
-    /// 释放路径占用的边
-    /// </summary>
     public void ReleasePath(IReadOnlyList<string> edgeIds, string? objectId)
     {
         foreach (var edgeId in edgeIds)
@@ -89,31 +74,18 @@ public sealed class RouteCenter : IRouteCenter
         }
     }
 
-    /// <summary>
-    /// 标记节点故障
-    /// </summary>
     public void MarkNodeFault(string nodeId, bool isFaulted)
     {
-        if (isFaulted)
-            _faultedNodes[nodeId] = true;
-        else
-            _faultedNodes.TryRemove(nodeId, out _);
+        if (isFaulted) _faultedNodes[nodeId] = true;
+        else _faultedNodes.TryRemove(nodeId, out _);
     }
 
-    /// <summary>
-    /// 标记边故障
-    /// </summary>
     public void MarkEdgeFault(string edgeId, bool isFaulted)
     {
-        if (isFaulted)
-            _faultedEdges[edgeId] = true;
-        else
-            _faultedEdges.TryRemove(edgeId, out _);
+        if (isFaulted) _faultedEdges[edgeId] = true;
+        else _faultedEdges.TryRemove(edgeId, out _);
     }
 
-    /// <summary>
-    /// 获取拥塞状态
-    /// </summary>
     public CongestionLevel GetCongestion(string edgeId)
     {
         var count = _edgeOccupancy.TryGetValue(edgeId, out var c) ? c : 0;
@@ -126,9 +98,6 @@ public sealed class RouteCenter : IRouteCenter
         };
     }
 
-    /// <summary>
-    /// 获取全图拥塞报告
-    /// </summary>
     public IReadOnlyList<CongestionRecord> GetCongestionReport()
     {
         return _edgeOccupancy
@@ -144,9 +113,6 @@ public sealed class RouteCenter : IRouteCenter
             .ToList();
     }
 
-    /// <summary>
-    /// 清空所有动态状态
-    /// </summary>
     public void Reset()
     {
         _edgeOccupancy.Clear();
@@ -156,33 +122,25 @@ public sealed class RouteCenter : IRouteCenter
         _edgeTimestamps.Clear();
     }
 
-    /// <summary>
-    /// 统计信息
-    /// </summary>
-    public RouteCenterStats GetStats()
+    public TransportRouteStats GetStats()
     {
-        return new RouteCenterStats
+        return new TransportRouteStats
         {
-            AvgPathLength = 0,
             TotalRoutesCalculated = (int)Interlocked.Read(ref _totalRoutes),
             TotalRouteFailures = (int)Interlocked.Read(ref _totalFailures),
             FaultedNodes = _faultedNodes.Count,
             FaultedEdges = _faultedEdges.Count,
-            CongestedEdges = _edgeOccupancy.Count(kvp => kvp.Value >= CongestionThresholdPerEdge)
+            CongestedEdges = _edgeOccupancy.Count(kvp => kvp.Value >= 2)
         };
     }
 
-    // ==================== 内部寻路 ====================
-
-    private RouteResult FindPathWithStrategy(RouteRequest request)
+    private TransportRouteResult FindPathWithStrategy(TransportRouteRequest request)
     {
-        // 收集故障节点用于排除
         var faultedNodes = new HashSet<string>(
             _faultedNodes.Where(kvp => kvp.Value).Select(kvp => kvp.Key));
         var faultedEdges = new HashSet<string>(
             _faultedEdges.Where(kvp => kvp.Value).Select(kvp => kvp.Key));
 
-        // BFS 带拥塞权重的寻路
         var queue = new Queue<(string NodeId, int Weight)>();
         var visited = new Dictionary<string, (string? PrevNode, string? EdgeId, int Weight)>();
         var congestionCache = new Dictionary<string, int>();
@@ -193,32 +151,20 @@ public sealed class RouteCenter : IRouteCenter
         while (queue.Count > 0)
         {
             var (current, currentWeight) = queue.Dequeue();
-            if (current == request.ToNodeId)
-                break;
+            if (current == request.ToNodeId) break;
 
-            var outgoing = _graph.GetOutgoingEdges(current);
-            foreach (var edge in outgoing)
+            foreach (var edge in _graph.GetOutgoingEdges(current))
             {
-                // 跳过故障边
-                if (faultedEdges.Contains(edge.EdgeId))
-                    continue;
-
-                // 跳过被占用的边
-                if (edge.IsOccupied)
-                    continue;
+                if (faultedEdges.Contains(edge.EdgeId)) continue;
+                if (edge.IsOccupied) continue;
 
                 var next = edge.ToNodeId;
+                if (faultedNodes.Contains(next)) continue;
 
-                // 跳过故障节点
-                if (faultedNodes.Contains(next))
-                    continue;
-
-                // 能力过滤
                 if (request.RequiredCapability.HasValue &&
                     (edge.Capability & request.RequiredCapability.Value) != request.RequiredCapability.Value)
                     continue;
 
-                // 计算拥塞附加权重
                 var congestionWeight = GetCongestionWeight(edge.EdgeId, congestionCache, request.Strategy);
                 var newWeight = currentWeight + edge.Weight + congestionWeight;
 
@@ -230,25 +176,22 @@ public sealed class RouteCenter : IRouteCenter
             }
         }
 
-        // 回溯路径
         if (!visited.TryGetValue(request.ToNodeId, out _))
-            return RouteResult.NotFound("No path found (obstacle or congestion)");
+            return TransportRouteResult.NotFound("No path found (obstacle or congestion)");
 
         return ReconstructPath(request, visited, faultedNodes);
     }
 
-    private int GetCongestionWeight(string edgeId, Dictionary<string, int> cache, RouteStrategy strategy)
+    private int GetCongestionWeight(string edgeId, Dictionary<string, int> cache, TransportRouteStrategy strategy)
     {
-        if (strategy == RouteStrategy.Shortest)
-            return 0;
-
+        if (strategy == TransportRouteStrategy.Shortest) return 0;
         if (!cache.TryGetValue(edgeId, out var weight))
         {
             var count = _edgeOccupancy.TryGetValue(edgeId, out var c) ? c : 0;
             weight = strategy switch
             {
-                RouteStrategy.LeastCongested => count * 10,
-                RouteStrategy.Balanced => count * 3,
+                TransportRouteStrategy.LeastCongested => count * 10,
+                TransportRouteStrategy.Balanced => count * 3,
                 _ => 0
             };
             cache[edgeId] = weight;
@@ -256,7 +199,7 @@ public sealed class RouteCenter : IRouteCenter
         return weight;
     }
 
-    private RouteResult ReconstructPath(RouteRequest request,
+    private TransportRouteResult ReconstructPath(TransportRouteRequest request,
         Dictionary<string, (string? PrevNode, string? EdgeId, int Weight)> visited,
         HashSet<string> faultedNodes)
     {
@@ -268,8 +211,7 @@ public sealed class RouteCenter : IRouteCenter
         while (current != null)
         {
             nodePath.Add(current);
-            if (!visited.TryGetValue(current, out var info) || info.PrevNode == null)
-                break;
+            if (!visited.TryGetValue(current, out var info) || info.PrevNode == null) break;
             edgePath.Add(info.EdgeId!);
             current = info.PrevNode;
         }
@@ -277,20 +219,16 @@ public sealed class RouteCenter : IRouteCenter
         nodePath.Reverse();
         edgePath.Reverse();
 
-        // 检测绕过的故障节点
         foreach (var fn in faultedNodes)
         {
-            if (_graph.HasNode(fn))
-                bypassed.Add(fn);
+            if (_graph.HasNode(fn)) bypassed.Add(fn);
         }
 
-        // 计算拥塞级别
         var maxCongestion = edgePath
             .Select(e => (int)GetCongestion(e))
-            .DefaultIfEmpty(0)
-            .Max();
+            .DefaultIfEmpty(0).Max();
 
-        return new RouteResult
+        return new TransportRouteResult
         {
             Found = true,
             NodePath = nodePath,

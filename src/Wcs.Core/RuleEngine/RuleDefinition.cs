@@ -1,7 +1,21 @@
 namespace Wcs.Core.RuleEngine;
 
 /// <summary>
-/// 规则条件 — 匹配业务信号的属性
+/// 纯 WCS 规则引擎 — 只允许「信号 → 运输任务」映射
+///
+/// ✅ WCS 允许：
+///   - PLC 信号（托盘到位/输送线就绪）→ 生成 TransportTask
+///   - 设备故障信号 → 生成 RecoveryTask
+///   - 条件满足 → 生成 MoveTask
+///
+/// ❌ WMS 禁止：
+///   - 订单规则（OrderRule）
+///   - 库存规则（InventoryRule）
+///   - 批次规则（BatchRule）
+///   - 波次规则（WaveRule）
+///   - 库位分配（LocationAllocation）
+///   - 入库策略（PutawayStrategy）
+///   - 出库策略（PickingStrategy）
 /// </summary>
 public class RuleCondition
 {
