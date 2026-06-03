@@ -275,3 +275,275 @@ ValidatorContext 给验证器提供一切它需要的东西——StateCenter、�
 StationInterlockValidator	上下游设备互锁	StateCenter.GetDeviceState()
 PalletBarcodeDatabaseValidator	条码去重防重复	Definition.PropertyMappings
 RoutePathValidator	目标设备故障检查	StateCenter + Definition
+
+
+## 六、现在验证器可以查数据库了。用法：
+
+
+// 在自定义验证器中：
+public SignalValidationResult? Validate(ValidatorContext ctx)
+{
+    var db = ctx.Db;  // ISqlSugarClient
+
+    // 查业务表
+    var pallet = db.Queryable<PalletTable>()
+        .Where(p => p.Barcode == barcode).First();
+
+    // 查状态表
+    var exists = db.Queryable<ProcessTable>()
+        .Where(p => p.TaskId == taskId).Any();
+
+    // 查配置表
+    var config = db.Queryable<StationConfig>()
+        .Where(s => s.StationId == deviceId).First();
+}
+现场部署时在 Program.cs 中注册 SqlSugar：
+
+
+// 注册 SqlSugar（一行）
+builder.Services.AddSingleton<ISqlSugarClient>(sp =>
+    new SqlSugarClient(new ConnectionConfig
+    {
+        ConnectionString = builder.Configuration.GetConnectionString("WcsDb"),
+        DbType = DbType.SqlServer,
+        IsAutoCloseConnection = true
+    }));
+
+// SignalMapperEngine 自动获取 ISqlSugarClient
+builder.Services.AddSingleton<SignalMapperEngine>(sp =>
+    new SignalMapperEngine(
+        sp.GetRequiredService<IStateCenter>(),
+        sp.GetService<ISqlSugarClient>()  // 可选，为 null 时验证器不查库
+    ));
+改动总结：
+
+文件	改了什么
+Wcs.Core.csproj	添加 SqlSugarCore 包引用
+ValidatorContext.cs	新增 ISqlSugarClient? Db 属性
+SignalMapperEngine.cs	新增 ISqlSugarClient? 参数，传入 ValidatorContext
+Program.cs	注册时传入 ISqlSugarClient
+Wcs.Infrastructure.csproj	升级 Microsoft.Data.SqlClient 到 5.2.2
+PalletBarcodeDatabaseValidator.cs	改为例展示真实 ctx.Db.Queryable<T>() 查库
+
+## 七、现在点位从 CSV 导入后到验证器使用的完整链路是：
+
+CSV 导入（一次性工具）
+─────────────────────────────────────────────────
+var result = new SignalCsvImporter()
+    .ImportFromCsv(csvContent, CsvColumnMap.TiaPortal());
+
+// result.Definitions  ← 现在这里有完整的 List<SignalDefinition>
+// result.Imported     ← 导入成功数
+// result.Errors       ← 错误列表
+
+// 批量注册到 SignalMapperEngine（内存）
+signalMapper.RegisterDefinitions(result.Definitions);
+点位存储在 SignalMapperEngine 内存中（三个地方可查）：
+
+
+1. 通过 ISignalMapper 接口查全部定义
+   signalMapper.GetDefinitions()  → IReadOnlyList<SignalDefinition>
+
+2. 通过 ValidatorContext 查当前触发的信号定义
+   ctx.Definition  → 当前信号
+   ctx.Definition.PropertyMappings  → 属性映射
+
+3. 验证器中通过 ctx.Db 查数据库
+   业务表（PalletRegistration / TaskTable / StationMaterialConfig 等）
+   ctx.Db.Queryable<T>().Where(...).First()
+CSV 导入是一次性的迁移工具（只在项目开始时跑一次）。导入后所有点位都注册到 SignalMapperEngine 内存里，运行时验证器通过 ValidatorContext.Definition 拿到当前信号的完整定义——SignalId、PlcName、BlockNumber、PropertyMappings 等。
+
+验证器中查库用 ctx.Db 直接写 LINQ，不需要手动注入：
+
+
+public SignalValidationResult? Validate(ValidatorContext ctx)
+{
+    var db = ctx.Db;  // ISqlSugarClient，由 SignalMapperEngine 自动注入
+
+    // 查业务表确认条码有效性
+    var pallet = db.Queryable<PalletRegistrationTable>()
+        .Where(p => p.Barcode == barcode).First();
+}
+
+
+现在代码回到你的架构上，完整链路是：
+
+
+S7PLCPool.ReadPLCDataAsync() → byte[]
+    ↓
+Struct.FromBytes<T>(bytes) → 强类型 struct ← 你定义的 C# class，字段=PLC地址
+    ↓
+StructDiffEngine.Compare<T>(old, cur) → 字段级变化
+    ↓
+StructBridge.Process(blockName, previous, current)
+    ├── 验证管道 (ISignalValidator + ValidatorContext)
+    │     ctx.StateCenter → 设备状态
+    │     ctx.Db          → SqlSugar 查库
+    │     ctx.RawStruct   → 完整 DB 块结构体，强类型访问
+    │     ctx.PreviousStruct → 上一次的数据，可对比
+    │
+    ├── 拒绝 → 日志记录原因
+    └── 通过 → 发布 FieldChangedEvent 到 EventBus
+你定义一个 DB 块 struct，Struct.FromBytes<T>() 按字段顺序自动映射：
+
+
+// 你只需要定义这个 class，其余全部自动
+public class DB1_Struct
+{
+    public bool CV01_DriveReady { get; set; }      // DB1.DBX0.0
+    public bool CV01_PalletArrived { get; set; }   // DB1.DBX0.1
+    public bool LIFT01_Idle { get; set; }           // DB1.DBX0.2
+    public short CV01_Speed { get; set; }           // DB1.DBW2
+}
+验证器中强类型访问：
+
+
+public SignalValidationResult? Validate(ValidatorContext ctx)
+{
+    var db1 = ctx.RawStruct as DB1_Struct;
+    if (db1?.CV01_PalletArrived == true && db1?.LIFT01_Idle == false)
+        return SignalValidationResult.Reject("提升机未空闲");
+
+    // 查数据库
+    var pallet = ctx.Db?.Queryable<Pallet>()
+        .Where(p => p.Barcode == barcode).First();
+}
+删除的噪音： 整个 SignalMapper/Import/、SignalMapperEngine、ISignalMapper、SignalDefinition、ValidationRuleConfig、BuiltInValidators、BusinessSignals（后恢复）。
+
+保留的核心： ISignalValidator + ValidatorContext + SignalValidationResult（移到 PlcSubsystem/Validation/）、StructDiffEngine + StructBridge（已在 PlcSubsystem/S7/）。
+
+
+多个 PLC 的处理方式——用 PlcStructRegistry 注册，一个循环跑所有 PLC 所有块：
+
+
+// ===== 定义 struct（每种 DB 块一个 C# class）=====
+public class DB1_Struct
+{
+    public bool CV01_DriveReady { get; set; }
+    public bool CV01_PalletArrived { get; set; }
+    ...
+}
+
+public class PLC2_DB1_Struct
+{
+    public bool Robot01_Busy { get; set; }
+    public short Robot01_Speed { get; set; }
+    ...
+}
+
+// ===== 注册表：PLC1 的 DB1 → DB1_Struct，PLC2 的 DB1 → PLC2_DB1_Struct ====
+var registry = new PlcStructRegistry();
+registry.Register<DB1_Struct>("PLC1", blockNumber: 1, length: 200, pollIntervalMs: 100);
+registry.Register<PLC2_DB1_Struct>("PLC2", blockNumber: 1, length: 256, pollIntervalMs: 200);
+
+// ===== S7PollingService 自动循环所有 PLC + 所有块 ====
+var service = new S7PollingService(registry, logger);
+service.Start(pool, bridge);
+
+// 内部自动为每个注册项启动一个 Timer，各自按 pollIntervalMs 轮询：
+// PLC1.DB1  → 每 100ms → Struct.FromBytes<DB1_Struct>(bytes) → StructBridge → EventBus
+// PLC2.DB1  → 每 200ms → Struct.FromBytes<PLC2_DB1_Struct>(bytes) → StructBridge → EventBus
+完整链路：
+
+
+PlcStructRegistry
+  ├── PLC1.DB1 → DB1_Struct        → 100ms 轮询 → StructDiff → StructBridge → EventBus
+  ├── PLC1.DB2 → DB2_Struct        → 100ms 轮询 → StructDiff → StructBridge → EventBus
+  ├── PLC2.DB1 → PLC2_DB1_Struct   → 200ms 轮询 → StructDiff → StructBridge → EventBus
+  └── PLC3.DB1 → PLC3_DB1_Struct   → 500ms 轮询 → StructDiff → StructBridge → EventBus
+验证器通过 ctx.RawStruct as DB1_Struct 拿到强类型数据，不管数据来自哪个 PLC
+
+
+根本问题解决了。现在的完整流程：
+
+
+传统轮询（错误）：
+  每 100ms 读 200 字节 → 2000 字节/秒/块 → PLC 负载高 ✅ 已废弃
+
+触发模式（正确）：
+  每 100ms 读 2 字节计数器 → 20 字节/秒/块 → PLC 负载 ≈ 0
+  计数器变了 → 读 200 字节全块 → 正常负载（仅发生变化的瞬间）
+  计数器没变 → 跳过（零负载）
+PLC 侧的协议约定
+每个 DB 块的 byte[0..1] 需要 PLC 维护一个 ushort GenerationCounter：
+
+
+PLC 程序逻辑（梯形图/SCL）：
+  IF "DataChanged" THEN
+      "DB1".GenerationCounter := "DB1".GenerationCounter + 1;
+  END_IF;
+WCS 端的注册：
+
+
+registry.Register<DB1_Struct>("PLC1", blockNumber: 1, length: 200, pollIntervalMs: 100);
+// byte[0..1] = GenerationCounter → 自动检测
+// byte[2..]  = 实际字段 → 只有变化时才读
+如果 PLC 不能改程序（已有项目）
+TriggerMode = false 即可回到全量模式，但每次读完后会自动跳过 CRC32 没变的块：
+
+
+var svc = new S7TriggerPollingService(registry, logger);
+svc.TriggerMode = false; // 不依赖 PLC 计数器，但每次读全块
+svc.Start(pool, bridge);
+推荐新项目用触发模式，已有项目尽量争取加 2 字节计数器，通讯负载降低 99%。
+
+
+
+
+现在现场部署只需要：
+
+1. 定义你的 DB 块 struct（一个类一个块）
+
+
+public class DB1_Struct
+{
+    public bool CV01_DriveReady { get; set; }       // DB1.DBX0.0
+    public bool CV01_PalletArrived { get; set; }    // DB1.DBX0.1
+    public short CV01_Speed { get; set; }            // DB1.DBW2
+}
+
+public class DB2_Struct
+{
+    public bool LIFT01_AtFloor { get; set; }         // DB2.DBX0.0
+    public bool LIFT01_GoingUp { get; set; }        // DB2.DBX0.1
+}
+2. 改 appsettings.json（不改代码）
+
+
+{
+  "PlcConnections": [
+    { "PlcName":"PLC1", "Address":"192.168.0.1", "Rack":0, "Slot":1 },
+    { "PlcName":"PLC2", "Address":"192.168.0.2", "Rack":0, "Slot":1 }
+  ],
+  "PlcBlocks": [
+    { "PlcName":"PLC1", "BlockNumber":1, "Length":200, "PollIntervalMs":100,
+      "StructType":"Wcs.MyApp.DB1_Struct, Wcs.MyApp" },
+    { "PlcName":"PLC1", "BlockNumber":2, "Length":100, "PollIntervalMs":500,
+      "StructType":"Wcs.MyApp.DB2_Struct, Wcs.MyApp" },
+    { "PlcName":"PLC2", "BlockNumber":1, "Length":256, "PollIntervalMs":200,
+      "StructType":"Wcs.MyApp.PLC2_DB1_Struct, Wcs.MyApp" }
+  ]
+}
+3. Program.cs 就一行
+
+
+builder.Services.AddWcsPlc(builder.Configuration);
+// 自动完成：创建连接池 → 注册 struct → 启动轮询 → Diff → 验证管道 → EventBus
+AddWcsPlc() 内部自动做了：
+
+
+读取 PlcConnections
+  └─ S7PLCPool.GetInstance("PLC1", "192.168.0.1", ...)
+  └─ S7PLCPool.GetInstance("PLC2", "192.168.0.2", ...)
+
+读取 PlcBlocks
+  └─ registry.RegisterFromConfig(cfg) → Type.GetType("Wcs.MyApp.DB1_Struct,...")
+  └─ 反射加载类型，与 plcName + blockNumber 绑定
+
+注册 StructBridge（验证管道）
+  └─ 自定义验证器在扩展点注册
+
+注册 S7PollingService
+  └─ 启动后每个 DB 块独立 Timer 轮询
+  └─ StructDiffEngine 跳过没变化的字段
+  └─ 验证管道拒绝的字段不产生事件

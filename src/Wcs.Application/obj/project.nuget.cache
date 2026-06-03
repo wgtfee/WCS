@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "a+Mn4QboWfM=",
+  "dgSpecHash": "epBuydiT0pc=",
   "success": true,
   "projectFilePath": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Application\\Wcs.Application.csproj",
   "expectedPackageFiles": [
@@ -13,6 +13,7 @@
     "F:\\_packages\\microsoft.data.sqlite\\9.0.0\\microsoft.data.sqlite.9.0.0.nupkg.sha512",
     "F:\\_packages\\microsoft.data.sqlite.core\\9.0.0\\microsoft.data.sqlite.core.9.0.0.nupkg.sha512",
     "F:\\_packages\\microsoft.extensions.configuration.abstractions\\8.0.0\\microsoft.extensions.configuration.abstractions.8.0.0.nupkg.sha512",
+    "F:\\_packages\\microsoft.extensions.configuration.binder\\8.0.0\\microsoft.extensions.configuration.binder.8.0.0.nupkg.sha512",
     "F:\\_packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
     "F:\\_packages\\microsoft.extensions.diagnostics.abstractions\\8.0.0\\microsoft.extensions.diagnostics.abstractions.8.0.0.nupkg.sha512",
     "F:\\_packages\\microsoft.extensions.fileproviders.abstractions\\8.0.0\\microsoft.extensions.fileproviders.abstractions.8.0.0.nupkg.sha512",

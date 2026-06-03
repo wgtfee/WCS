@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Wcs.Host")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+77d049c767e37898f4456c398b034861f226342b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+dd2c832b8a81fb01490c6ab7a23c447cd4b904cc")]
 [assembly: System.Reflection.AssemblyProductAttribute("Wcs.Host")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Wcs.Host")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

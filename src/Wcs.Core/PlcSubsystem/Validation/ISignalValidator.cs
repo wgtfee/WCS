@@ -1,4 +1,4 @@
-namespace Wcs.Core.PlcSubsystem.SignalMapper.Validation;
+namespace Wcs.Core.PlcSubsystem.Validation;
 
 using Wcs.Core.EventBus.Events;
 

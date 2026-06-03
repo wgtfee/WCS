@@ -3,20 +3,15 @@ using Wcs.Application;
 using Wcs.Core.AlarmCenter;
 using Wcs.Core.Common.Options;
 using Wcs.Core.PlcSubsystem;
-using Wcs.Core.PlcSubsystem.SignalMapper;
-using Wcs.Core.PlcSubsystem.SignalMapper.Validation;
 using Wcs.Core.Recovery;
-using Wcs.Core.StateCenter.Interfaces;
 using Wcs.Host.BackgroundServices;
 using Wcs.Infrastructure;
 using Wcs.Infrastructure.Logging;
 using Wcs.Infrastructure.Persistence;
 using Wcs.Infrastructure.SignalR;
 using Microsoft.Extensions.Options;
-using SqlSugar;
 using Wcs.Simulator;
 using Wcs.Simulator.PlcSimulator;
-using Wcs.Simulator.DeviceSimulator;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -29,39 +24,13 @@ try
     builder.Services.AddWcsInfrastructure(builder.Configuration);
     builder.Services.Configure<WcsOptions>(builder.Configuration.GetSection("WcsOptions"));
 
-    // PLC 子系统
+    // PLC 子系统（旧的 DiffEngine 保留兼容）
     builder.Services.AddSingleton<IPlcBlockDiffEngine, PlcBlockDiffEngine>();
 
-    // ===== 信号映射（从 appsettings.json → "Signals" 加载）=====
-    builder.Services.AddSingleton<SignalMapperEngine>(sp =>
-    {
-        var engine = new SignalMapperEngine(sp.GetRequiredService<IStateCenter>(), sp.GetService<ISqlSugarClient>());
-        var signalConfigs = builder.Configuration.GetSection("Signals")
-            .Get<List<SignalConfigItem>>();
-        if (signalConfigs != null && signalConfigs.Count > 0)
-        {
-            engine.LoadFromConfig(signalConfigs);
-            Log.Logger.Information("📋 已加载 {Count} 个信号映射定义", signalConfigs.Count);
-        }
-        return engine;
-    });
-    builder.Services.AddSingleton<ISignalMapper>(sp => sp.GetRequiredService<SignalMapperEngine>());
-
-    // ===== 工位验证规则（从 appsettings.json → "ValidationRules" 加载）=====
-    // 纯 JSON 配置，支持 AND/OR 多层嵌套，无需写代码
-    builder.Services.AddSingleton(sp =>
-    {
-        var engine = sp.GetRequiredService<SignalMapperEngine>();
-        var logger = sp.GetRequiredService<ILogger<ConfigurableSignalValidator>>();
-        var rules = builder.Configuration.GetSection("ValidationRules")
-            .Get<List<ValidationRuleConfig>>();
-        if (rules != null && rules.Count > 0)
-        {
-            engine.RegisterValidator(new ConfigurableSignalValidator(rules, logger));
-            Log.Logger.Information("🛡️ 已加载 {Count} 条配置化验证规则", rules.Count);
-        }
-        return engine;
-    });
+    // ===== 配置驱动 PLC 注册 =====
+    // PlcConnections + PlcBlocks 从 appsettings.json 自动加载
+    // 不需要改代码，改配置即可
+    builder.Services.AddWcsPlc(builder.Configuration);
 
     // ===== 虚拟工厂 / 真实 PLC 切换 =====
     var simulatorEnabled = builder.Configuration.GetSection("Simulator").GetValue<bool>("Enabled");
@@ -90,22 +59,15 @@ try
     }
     else
     {
-        builder.Services.AddSingleton<Wcs.Infrastructure.S7.IS7ConnectionFactory>(sp =>
-        {
-            var configs = builder.Configuration.GetSection("PlcConnections")
-                .Get<List<S7ConnectionConfig>>() ?? new();
-            return new Wcs.Infrastructure.S7.S7ConnectionFactory(configs);
-        });
-        builder.Services.AddSingleton<IPlcPollingService>(sp =>
-            new PlcPollingService(sp.GetRequiredService<ILogger<PlcPollingService>>()));
-        Log.Logger.Information("🏭 真实 PLC 模式已启用");
+        Log.Logger.Information("🏭 真实 PLC 模式已启用（配置驱动 {Count} 个连接）",
+            builder.Configuration.GetSection("PlcConnections").GetChildren().Count());
     }
 
     // 后台服务
     if (simulatorEnabled)
         builder.Services.AddHostedService<SimulatorBackgroundService>();
     else
-        builder.Services.AddHostedService<PlcPollingBackgroundService>();
+        builder.Services.AddHostedService<S7PollingBackgroundService>();
 
     builder.Services.AddHostedService<SnapshotBackgroundService>();
     builder.Services.AddHostedService<PersistBackgroundService>();
