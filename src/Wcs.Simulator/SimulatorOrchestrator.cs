@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.StateCenter.Interfaces;
+using Wcs.Core.StateCenter.Models;
 using Wcs.Core.TaskEngine.Context;
 using Wcs.Core.TaskEngine.Scheduler;
 using Wcs.Simulator.DeviceSimulator;
@@ -16,56 +17,60 @@ using Wcs.Simulator.PlcSimulator;
 /// TransportGenerator → TaskScheduler
 ///     → Orchestrator 出队任务 → 沿路径触发 DeviceSimulator
 ///     → DeviceSimulator 发出信号到 SimulatorSignalSource
-///     → Orchestrator 读取信号 → 发布到 SignalBus
-///     → RuleEngine → TaskGenerator → StateCenter → DB
+///     → Orchestrator 读取信号 → 发布到 EventBus
+///     → StateCenter + PersistBackgroundService → DB
 /// </summary>
 public class SimulatorOrchestrator
 {
     private readonly VirtualPlant _plant;
     private readonly ITaskScheduler _scheduler;
-    private readonly IEventBus _signalBus;
+    private readonly IEventBus _eventBus;
     private readonly IStateCenter? _stateCenter;
     private readonly ILogger<SimulatorOrchestrator>? _logger;
     private bool _running;
+    private long _executed;
+    private long _completed;
+    private long _signalsBridged;
 
-    // 预定义路径模板: (起点 → 途经设备 → 终点)
     private static readonly List<string> DefaultRoute = new()
     {
         "RECV_DOCK", "CV01", "CV02", "LIFT01", "CV03", "ASRS01"
     };
 
-    // 设备 ID → 模拟器 映射
     private readonly Dictionary<string, DeviceSimulatorBase> _deviceMap = new();
+
+    public long Executed => Interlocked.Read(ref _executed);
+    public long Completed => Interlocked.Read(ref _completed);
+    public long SignalsBridged => Interlocked.Read(ref _signalsBridged);
 
     public SimulatorOrchestrator(
         VirtualPlant plant,
         ITaskScheduler scheduler,
-        IEventBus signalBus,
+        IEventBus eventBus,
         IStateCenter? stateCenter = null,
         ILogger<SimulatorOrchestrator>? logger = null)
     {
         _plant = plant;
         _scheduler = scheduler;
-        _signalBus = signalBus;
+        _eventBus = eventBus;
         _stateCenter = stateCenter;
         _logger = logger;
 
-        // 构建设备映射
         foreach (var cv in plant.Conveyors) _deviceMap[cv.DeviceId] = cv;
         foreach (var l in plant.Lifts) _deviceMap[l.DeviceId] = l;
         foreach (var a in plant.AsrsMachines) _deviceMap[a.DeviceId] = a;
         foreach (var r in plant.Robots) _deviceMap[r.DeviceId] = r;
     }
 
-    /// <summary>
-    /// 启动完整模拟闭环
-    /// </summary>
     public async Task RunAsync(CancellationToken ct = default)
     {
         _running = true;
-        _logger?.LogInformation("SimulatorOrchestrator 启动 — 创建模拟执行闭环");
+        _logger?.LogInformation("===========================================");
+        _logger?.LogInformation(" SimulatorOrchestrator 启动 — 3 线程闭环");
+        _logger?.LogInformation(" 设备数: {Count}, 映射设备: {Mapped}",
+            _plant.DeviceCount, _deviceMap.Count);
+        _logger?.LogInformation("===========================================");
 
-        // 并行运行三个核心循环
         var tasks = new[]
         {
             Task.Run(() => SignalReaderLoopAsync(ct), ct),
@@ -73,49 +78,53 @@ public class SimulatorOrchestrator
             Task.Run(() => MetricsLogLoopAsync(ct), ct),
         };
 
-        await Task.WhenAny(tasks); // 任一退出则整体退出
+        await Task.WhenAny(tasks);
         _running = false;
     }
 
     public void Stop() => _running = false;
 
-    /// <summary>
-    /// 循环 1: 读取模拟 PLC 信号 → 发布到 SignalBus → 进入真实管线
-    /// </summary>
+    // ==========================
+    // 循环 1: 模拟信号 → EventBus
+    // ==========================
     private async Task SignalReaderLoopAsync(CancellationToken ct)
     {
-        _logger?.LogInformation("SignalReaderLoop 启动: 模拟信号 → SignalBus");
+        _logger?.LogInformation("[信号桥接] 线程启动: SimulatorSignalSource → EventBus");
 
         while (!ct.IsCancellationRequested && _running)
         {
             try
             {
                 var signals = await _plant.SignalSource.ReadAsync(ct);
+                if (signals.Count > 0)
+                {
+                    _logger?.LogInformation("[信号桥接] 读取到 {Count} 个模拟信号", signals.Count);
+                }
                 foreach (var signal in signals)
                 {
-                    // 将模拟信号发布到 SignalBus，让真实管线处理
                     var wcsEvent = ConvertToEvent(signal);
-                    await _signalBus.PublishAsync(wcsEvent, ct);
-
-                    _logger?.LogDebug("SignalBus <- {SignalId} = {Value}", signal.SignalId, signal.Value);
+                    await _eventBus.PublishAsync(wcsEvent, ct);
+                    Interlocked.Increment(ref _signalsBridged);
+                    _logger?.LogInformation("[信号桥接] ⚡ {SignalId}={Value} → EventBus (累计 {Total})",
+                        signal.SignalId, signal.Value, _signalsBridged);
                 }
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger?.LogWarning(ex, "SignalReaderLoop 异常");
+                _logger?.LogError(ex, "[信号桥接] 异常");
             }
-
-            await Task.Delay(50, ct); // 50ms 轮询间隔
+            await Task.Delay(50, ct);
         }
     }
 
-    /// <summary>
-    /// 循环 2: 出队任务 → 模拟运输执行 → 触发设备模拟器
-    /// </summary>
+    // ==========================
+    // 循环 2: 出队 + 模拟运输（并发度 5）
+    // ==========================
     private async Task TaskExecutorLoopAsync(CancellationToken ct)
     {
-        _logger?.LogInformation("TaskExecutorLoop 启动: 出队任务 → 模拟运输");
+        _logger?.LogInformation("[任务执行] 线程启动: TaskScheduler → DeviceSimulator (并发度=5)");
+        var semaphore = new SemaphoreSlim(5);
 
         while (!ct.IsCancellationRequested && _running)
         {
@@ -124,102 +133,153 @@ public class SimulatorOrchestrator
                 var task = await _scheduler.DequeueAsync(ct);
                 if (task == null)
                 {
-                    await Task.Delay(200, ct);
+                    var q = _scheduler.GetQueueCount();
+                    if (q > 0)
+                        _logger?.LogInformation("[任务执行] 队列 {Count} 个任务但 Dequeue=null (设备并发限制)", q);
+                    await Task.Delay(500, ct);
                     continue;
                 }
 
-                // 异步执行模拟运输（不阻塞出队循环）
-                _ = SimulateTransportAsync(task, ct);
+                Interlocked.Increment(ref _executed);
+                var palletId = task.Tags.TryGetValue("PalletId", out var p) ? p : "?";
+                _logger?.LogInformation("[任务执行] ▶ #{Exec}  {TaskId}  Pallet={Pallet}  Route={Route}  队列={Queue}",
+                    _executed, task.TaskId, palletId, task.RouteId, _scheduler.GetQueueCount());
+
+                await semaphore.WaitAsync(ct);
+                _ = ExecuteWithSemaphore(semaphore, task, ct);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger?.LogWarning(ex, "TaskExecutorLoop 异常");
+                _logger?.LogError(ex, "[任务执行] 出队异常");
+                await Task.Delay(1000, ct);
             }
         }
     }
 
+    private async Task ExecuteWithSemaphore(SemaphoreSlim semaphore, TaskContext task, CancellationToken ct)
+    {
+        try
+        {
+            await SimulateTransportAsync(task, ct);
+            _scheduler.ReleaseDeviceSlot(task.DeviceId);
+            _logger?.LogInformation("[任务执行] ✅ 释放设备槽 {Device}", task.DeviceId);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "[任务执行] 🔴 任务执行异常 {TaskId}", task.TaskId);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
     /// <summary>
-    /// 模拟一个任务的完整运输过程
+    /// 模拟运输 + 发事件到 EventBus 确保持久化
     /// </summary>
     private async Task SimulateTransportAsync(TaskContext task, CancellationToken ct)
     {
         var palletId = task.Tags.TryGetValue("PalletId", out var p) ? p : task.TaskId;
-        _logger?.LogInformation("🚚 模拟运输: {Pallet} ({Route})", palletId, task.RouteId);
+        _logger?.LogInformation("[运输] 🚚 启动: Pallet={Pallet}  Route={Route}", palletId, task.RouteId);
 
-        // 更新 StateCenter 状态
-        _stateCenter?.UpdateTaskRuntime(task.TaskId, new()
+        // Phase 1: Running → StateCenter + EventBus
+        _logger?.LogInformation("[运输] Phase1: 标记 Running → UpdateTaskRuntime + Publish TaskStateChangedEvent");
+        _stateCenter?.UpdateTaskRuntime(task.TaskId, new TaskRuntime
         {
             TaskId = task.TaskId,
-            Status = Wcs.Core.StateCenter.Models.TaskStatusEnum.Running,
+            Status = TaskStatusEnum.Running,
             StartTime = DateTime.UtcNow
         });
+        await _eventBus.PublishAsync(new TaskStateChangedEvent
+        {
+            TaskId = task.TaskId,
+            NewStatus = TaskStatusEnum.Running,
+            OldStatus = TaskStatusEnum.Created
+        }, ct);
+        _logger?.LogInformation("[运输] ✅ Running 事件已发布 → EventBus");
 
-        // 沿路径逐个触发设备模拟器
-        foreach (var nodeId in DefaultRoute)
+        // Phase 2: 逐个经过路径节点
+        for (int i = 0; i < DefaultRoute.Count; i++)
         {
             if (ct.IsCancellationRequested) break;
+            var nodeId = DefaultRoute[i];
 
-            // 查找该节点对应的设备模拟器
             if (_deviceMap.TryGetValue(nodeId, out var device))
             {
-                _logger?.LogDebug("  → {Device} 开始运输 {Pallet}...", nodeId, palletId);
+                _logger?.LogInformation("[运输]   Step {I}/{Total}: {Dev} 启动 (耗时 {T}ms)",
+                    i + 1, DefaultRoute.Count, nodeId, device.TransportTimeMs);
                 await device.StartAsync(ct);
-                _logger?.LogDebug("  → {Device} 完成运输 {Pallet}", nodeId, palletId);
+                _logger?.LogInformation("[运输]   Step {I}/{Total}: {Dev} ✅ 完成, 信号已入模拟队列",
+                    i + 1, DefaultRoute.Count, nodeId);
             }
             else
             {
-                // 非设备节点（如 RECV_DOCK），模拟耗时
+                _logger?.LogInformation("[运输]   Step {I}/{Total}: {Node} (非设备, 模拟 1s)", i + 1, DefaultRoute.Count, nodeId);
                 await Task.Delay(1000, ct);
             }
         }
 
-        // 任务完成
-        _stateCenter?.UpdateTaskRuntime(task.TaskId, new()
+        // Phase 3: Completed → StateCenter + EventBus
+        _stateCenter?.UpdateTaskRuntime(task.TaskId, new TaskRuntime
         {
             TaskId = task.TaskId,
-            Status = Wcs.Core.StateCenter.Models.TaskStatusEnum.Completed,
+            Status = TaskStatusEnum.Completed,
+            StartTime = DateTime.UtcNow,
             EndTime = DateTime.UtcNow
         });
+        await _eventBus.PublishAsync(new TaskStateChangedEvent
+        {
+            TaskId = task.TaskId,
+            NewStatus = TaskStatusEnum.Completed,
+            OldStatus = TaskStatusEnum.Running
+        }, ct);
 
-        _logger?.LogInformation("✅ 运输完成: {Pallet} ({Route})", palletId, task.RouteId);
+        Interlocked.Increment(ref _completed);
+        _logger?.LogInformation("[运输] ✅ 完成: Pallet={Pallet}  Route={Route}  累计完成={Completed}",
+            palletId, task.RouteId, _completed);
     }
 
-    /// <summary>
-    /// 循环 3: 定期输出指标日志（可观测性）
-    /// </summary>
+    // ==========================
+    // 循环 3: 指标日志（15s）
+    // ==========================
     private async Task MetricsLogLoopAsync(CancellationToken ct)
     {
-        var lastGen = 0L;
+        long lastGen = 0, lastExec = 0, lastComp = 0, lastSig = 0;
         while (!ct.IsCancellationRequested && _running)
         {
-            await Task.Delay(10000, ct);
+            await Task.Delay(15000, ct);
             var gen = _plant.Generator.Generated;
-            var tps = gen - lastGen;
-            lastGen = gen;
-            _logger?.LogInformation("📊 模拟指标: 已生成 {Total} 任务, 最近 10s TPS = {Tps}", gen, tps / 10);
+            var exec = Interlocked.Read(ref _executed);
+            var comp = Interlocked.Read(ref _completed);
+            var sig = Interlocked.Read(ref _signalsBridged);
+            var q = _scheduler.GetQueueCount();
+
+            _logger?.LogInformation("====== [指标 15s] ======");
+            _logger?.LogInformation("生成:{Gen}  (TPS:{Tps})  出队:{Exec}  完成:{Comp}  信号:{Sig}  队列:{Q}",
+                gen, (gen - lastGen) / 15, exec, comp, sig, q);
+
+            if (gen > 0 && exec == 0 && comp == 0)
+                _logger?.LogWarning("⚠️  任务已生成但未出队！检查 TaskScheduler.DequeueAsync");
+            if (exec > 0 && comp == 0)
+                _logger?.LogWarning("⚠️  任务已出队但未完成！");
+
+            lastGen = gen; lastExec = exec; lastComp = comp; lastSig = sig;
         }
     }
 
-    /// <summary>
-    /// 将模拟信号转换为业务事件（简化版：统一用 DeviceStateChangedEvent）
-    /// </summary>
     private static IEvent ConvertToEvent(SignalChangedEvent signal)
     {
-        // 提取 DeviceId（信号名如 "CV01.Arrived" → "CV01"）
         var deviceId = signal.SignalId.Contains('.')
             ? signal.SignalId.Split('.')[0]
             : signal.SignalId;
 
-        var status = signal.SignalId.EndsWith("Arrived") || signal.SignalId.EndsWith("Ready")
-            ? "Running"
-            : "Idle";
-
         return new DeviceStateChangedEvent
         {
             DeviceId = deviceId,
-            NewStatus = Wcs.Core.StateCenter.Models.DeviceStatusEnum.Running,
-            OldStatus = Wcs.Core.StateCenter.Models.DeviceStatusEnum.Idle
+            NewStatus = DeviceStatusEnum.Running,
+            OldStatus = DeviceStatusEnum.Idle
         };
     }
 }

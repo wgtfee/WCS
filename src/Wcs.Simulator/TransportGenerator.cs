@@ -7,8 +7,6 @@ using Wcs.Core.TaskEngine.Scheduler;
 
 /// <summary>
 /// 运输生成器 — 模拟 WMS 下发任务，随机生成运输任务
-///
-/// 用于压力测试和长时间稳定性测试。
 /// 每秒生成 N 个随机运输任务，覆盖不同起终点组合。
 /// </summary>
 public class TransportGenerator
@@ -18,15 +16,11 @@ public class TransportGenerator
     private readonly Random _rng = new();
     private readonly List<string> _sourceNodes = new() { "RECV_DOCK_A", "RECV_DOCK_B", "RECV_DOCK_C" };
     private readonly List<string> _targetNodes = new() { "ASRS_01", "ASRS_02", "ASRS_03", "ASRS_04", "ASRS_05", "OUT_DOCK" };
-    private readonly List<string> _palletPool = new();
     private int _palletCounter;
     private bool _running;
     private long _generated;
 
-    /// <summary>每秒生成任务数</summary>
     public int TasksPerSecond { get; set; } = 1;
-
-    /// <summary>已生成任务总数</summary>
     public long Generated => Interlocked.Read(ref _generated);
 
     public TransportGenerator(ITaskScheduler scheduler, ILogger<TransportGenerator>? logger = null)
@@ -35,13 +29,11 @@ public class TransportGenerator
         _logger = logger;
     }
 
-    /// <summary>
-    /// 启动生成器
-    /// </summary>
     public async Task StartAsync(CancellationToken ct = default)
     {
         _running = true;
-        _logger?.LogInformation("TransportGenerator started: {Tps} tasks/s", TasksPerSecond);
+        _logger?.LogInformation("====== TransportGenerator: {Tps} tasks/s ======", TasksPerSecond);
+        var logged = 0L;
 
         while (!ct.IsCancellationRequested && _running)
         {
@@ -49,25 +41,34 @@ public class TransportGenerator
             {
                 var task = CreateRandomTransport();
                 await _scheduler.EnqueueAsync(task, ct);
-                Interlocked.Increment(ref _generated);
+                var total = Interlocked.Increment(ref _generated);
+                logged++;
+
+                // 每秒首条任务输出 Info 日志
+                if (logged <= 3 || total <= 10 || total % 50 == 0)
+                {
+                    _logger?.LogInformation(
+                        "[生成] 📦 #{Total}  Task={TaskId}  Pallet={Pallet}  Route={Route}  Device={Device}",
+                        total,
+                        task.TaskId,
+                        task.Tags.TryGetValue("PalletId", out var p) ? p : "?",
+                        task.RouteId,
+                        task.DeviceId);
+                }
             }
+
+            if (_generated > 0 && _generated % 50 == 0)
+                _logger?.LogInformation("[生成] 📊 已生成 {Total} 个运输任务", _generated);
+
             await Task.Delay(1000, ct);
         }
     }
 
-    /// <summary>
-    /// 停止生成器
-    /// </summary>
     public void Stop() => _running = false;
 
-    /// <summary>
-    /// 创建随机运输任务
-    /// </summary>
     private TaskContext CreateRandomTransport()
     {
         var palletId = $"PALLET_{++_palletCounter:D6}";
-        _palletPool.Add(palletId);
-
         var source = _sourceNodes[_rng.Next(_sourceNodes.Count)];
         var target = _targetNodes[_rng.Next(_targetNodes.Count)];
 
@@ -93,9 +94,6 @@ public class TransportGenerator
         return task;
     }
 
-    /// <summary>
-    /// 注册自定义节点（用于扩展运输拓扑）
-    /// </summary>
     public void RegisterNode(string node, bool isSource)
     {
         if (isSource) _sourceNodes.Add(node);

@@ -81,7 +81,9 @@ try
     }
 
     // 后台服务
-    if (!simulatorEnabled)
+    if (simulatorEnabled)
+        builder.Services.AddHostedService<SimulatorBackgroundService>();
+    else
         builder.Services.AddHostedService<PlcPollingBackgroundService>();
 
     builder.Services.AddHostedService<SnapshotBackgroundService>();

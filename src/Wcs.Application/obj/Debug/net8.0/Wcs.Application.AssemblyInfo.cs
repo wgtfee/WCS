@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Wcs.Application")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8ecd03505f5ebf9af7318034b5c685e797861ad8")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8e50f914c54e919bf58232f225ec27712b0931d9")]
 [assembly: System.Reflection.AssemblyProductAttribute("Wcs.Application")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Wcs.Application")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
