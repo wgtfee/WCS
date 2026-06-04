@@ -68,8 +68,7 @@ public class PersistBackgroundService : BackgroundService
                             DeviceId = deviceId,
                             Status = device.Status.ToString(),
                             LastUpdateTime = device.LastUpdateTime,
-                            Properties = device.Properties.Count > 0
-                                ? JsonSerializer.Serialize(device.Properties, JsonOpts) : null
+                            Properties = device.Properties.Count > 0 ? JsonSerializer.Serialize(device.Properties, JsonOpts) : null
                         }).ExecuteCommandAsync(stoppingToken);
                     else
                         await db.Insertable(new DeviceRuntimeEntity
@@ -77,8 +76,7 @@ public class PersistBackgroundService : BackgroundService
                             DeviceId = deviceId,
                             Status = device.Status.ToString(),
                             LastUpdateTime = device.LastUpdateTime,
-                            Properties = device.Properties.Count > 0
-                                ? JsonSerializer.Serialize(device.Properties, JsonOpts) : null
+                            Properties = device.Properties.Count > 0 ? JsonSerializer.Serialize(device.Properties, JsonOpts) : null
                         }).ExecuteCommandAsync(stoppingToken);
                 }
 
@@ -96,8 +94,7 @@ public class PersistBackgroundService : BackgroundService
                             RouteId = task.RouteId,
                             StartTime = task.StartTime,
                             EndTime = task.EndTime,
-                            Parameters = task.Parameters.Count > 0
-                                ? JsonSerializer.Serialize(task.Parameters, JsonOpts) : null
+                            Parameters = task.Parameters.Count > 0 ? JsonSerializer.Serialize(task.Parameters, JsonOpts) : null
                         }).ExecuteCommandAsync(stoppingToken);
                     else
                         await db.Insertable(new TaskRuntimeEntity
@@ -108,8 +105,7 @@ public class PersistBackgroundService : BackgroundService
                             RouteId = task.RouteId,
                             StartTime = task.StartTime,
                             EndTime = task.EndTime,
-                            Parameters = task.Parameters.Count > 0
-                                ? JsonSerializer.Serialize(task.Parameters, JsonOpts) : null
+                            Parameters = task.Parameters.Count > 0 ? JsonSerializer.Serialize(task.Parameters, JsonOpts) : null
                         }).ExecuteCommandAsync(stoppingToken);
                 }
 

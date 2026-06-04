@@ -89,6 +89,28 @@ public class EventPersistenceService : BackgroundService
             finally { _throttle.Release(); }
         });
 
+        _eventBus.Subscribe<AlarmRecoveredEvent>(async (evt, ct) =>
+        {
+            if (!await _throttle.WaitAsync(1000, ct)) return;
+            try
+            {
+                using var db = CreateDb();
+                await db.Insertable(new AlarmHistoryEntity
+                {
+                    AlarmCode = evt.AlarmCode,
+                    Level = "Warning",
+                    Message = $"Alarm {evt.AlarmCode} recovered",
+                    StartTime = evt.OccurTime,
+                    EndTime = evt.RecoverTime
+                }).ExecuteCommandAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "写入 AlarmHistory 失败");
+            }
+            finally { _throttle.Release(); }
+        });
+
         _logger.LogInformation("EventPersistenceService 已启动");
         return Task.CompletedTask;
     }

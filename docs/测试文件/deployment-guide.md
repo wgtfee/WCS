@@ -739,3 +739,17 @@ Wcs_TransportHistory  ✅ TaskExecutionWorker → ArchiveTaskAsync
 Wcs_CommandLog        ✅ PlcWriter
 Wcs_DeviceStateLog    ✅ EventPersistenceService
 Wcs_PlcWriteLog       ✅ PlcWriter
+
+SqlSugar 新表（由 DatabaseInitializer CodeFirst 创建）
+═════════════════════════════════════════════════════
+Wcs_DeviceRuntime   ✅ PersistBackgroundService     ← 每 10s 写入
+Wcs_TaskRuntime     ✅ PersistBackgroundService     ← 每 10s 写入
+Wcs_AlarmRuntime    ✅ PersistBackgroundService     ← 每 10s 写入
+Wcs_TaskEvent       ✅ TaskExecutionWorker           ← 任务状态变更
+Wcs_TaskHistory     ✅ TaskExecutionWorker           ← 任务完成归档
+Wcs_TaskRun         ✅ TaskExecutionWorker           ← 任务完成时
+Wcs_TransportHistory ✅ TaskExecutionWorker          ← 任务完成时
+Wcs_CommandLog      ✅ PlcWriter                     ← 每次写入 PLC
+Wcs_DeviceStateLog  ✅ EventPersistenceService       ← 每个信号变化
+Wcs_PlcWriteLog     ✅ PlcWriter                     ← 每次写入 PLC
+Wcs_AlarmHistory    ✅ 刚加入 EventPersistenceService ← 报警恢复时

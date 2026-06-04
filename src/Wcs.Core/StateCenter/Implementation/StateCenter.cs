@@ -32,7 +32,7 @@ public class StateCenter : IStateCenter, ISnapshotProvider
     {
         DeviceStateManager = new DeviceStateManager(eventBus);
         TaskStateManager = new TaskStateManager(eventBus);
-        AlarmStateManager = new AlarmStateManager();
+        AlarmStateManager = new AlarmStateManager(eventBus);
         ObjectStateManager = new ObjectStateManager();
         PlcBlockStateManager = new PlcBlockStateManager();
     }

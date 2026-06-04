@@ -27,6 +27,7 @@ public class PlcWriter
         if (conn == null)
         {
             _logger?.LogInformation("[Write] {Plc} DB{Block}: 无写连接(模拟模式)", plcName, dbBlock);
+            await WriteLogsAsync(plcName, dbBlock, startByte, commandType ?? "Write", deviceId, taskId, null, 0, conn == null, conn == null ? "模拟模式" : null);
             return false;
         }
 

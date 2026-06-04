@@ -4,7 +4,8 @@ using System.Collections.Concurrent;
 using Wcs.Core.StateCenter.Features;
 using Wcs.Core.StateCenter.Interfaces;
 using Wcs.Core.StateCenter.Models;
-
+using Wcs.Core.EventBus.Events;
+using Wcs.Core.EventBus.Publisher;
 /// <summary>
 /// 报警状态管理器
 /// </summary>
@@ -14,6 +15,12 @@ public class AlarmStateManager
     private readonly List<IStateChangeListener> _listeners = new();
     private readonly object _listenerLock = new();
     private readonly KeyedEventChannel<AlarmState> _channel = new();
+    private readonly IEventBus? _eventBus;
+
+    public AlarmStateManager(IEventBus? eventBus = null)
+    {
+        _eventBus = eventBus;
+    }
 
     public void RegisterListener(IStateChangeListener listener)
     {

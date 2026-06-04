@@ -73,6 +73,7 @@ public class CommandLogEntity
 
     /// <summary>Created=0 Sent=1 Acked=2 Executing=3 Done=4 Completed=5 Failed=6 Timeout=7</summary>
     public int Status { get; set; }
+         [SugarColumn(IsNullable = true)]
     public string? Payload { get; set; }
     public DateTime CreatedTime { get; set; }
         [SugarColumn(IsNullable = true)]
