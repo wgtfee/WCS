@@ -106,3 +106,26 @@ public class DeviceStateLogEntity
     [SugarColumn(IsNullable = true)]
     public string? ValidatorReason { get; set; }
 }
+
+/// <summary>PLC 写入记录表 — 记录每次写入 PLC 的操作</summary>
+[SugarTable("Wcs_PlcWriteLog")]
+public class PlcWriteLogEntity
+{
+    [SugarColumn(IsPrimaryKey = true)]
+    public long Id { get; set; }
+    public string PlcName { get; set; } = string.Empty;
+    public int DbBlock { get; set; }
+    public int StartByte { get; set; }
+    public string CommandType { get; set; } = string.Empty;
+    [SugarColumn(IsNullable = true)]
+    public string? DeviceId { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public string? TaskId { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public string? DataHex { get; set; }
+    public int DataLength { get; set; }
+    public bool Success { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public string? ErrorMessage { get; set; }
+    public DateTime WriteTime { get; set; } = DateTime.UtcNow;
+}

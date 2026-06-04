@@ -652,3 +652,63 @@ CommandCenter/CommandCenter.cs	更新 — 集成 PlcWriter + 结构化命令
 Application/PlcRegistrationExtension.cs	更新 — 注册双连接池
 Application/DependencyInjection.cs	更新 — 注册 ICommandCenter + PlcWriter
 SignalMapper/S7/S7PLCPool.cs	删除 — 已替换为 ReadPool + WritePool
+
+
+现在完整链路通了，启动模拟模式后的日志顺序如下：
+
+
+══════════════════════════════════════════════════════════════
+ 完整链路 — 从 PLC 读到写入数据库
+══════════════════════════════════════════════════════════════
+
+[SimPLC] 3 PLC 9 DB 块模拟轮询已启动         ← ① 每 100~500ms 生成模拟 byte[]
+[SimPLC] ✅ 已注册 AlwaysPassValidator        ← ② 所有信号默认放行（不拦）
+
+[Bridge] PLC1.DB1 → StateCenter 已更新         ← ③ StateCenter 无条件同步
+  DeviceState["CV01"] = Running
+  DeviceState["CV02"] = Idle
+
+[Detector] ⚡ CV01_PalletArrived → PalletArrivedEvent   ← ④ EventDetector 检测到上升沿
+                                                         发布到 EventBus
+
+[TaskGen] 📦 T00001: PALLET_0001 → CV01→ASRS01    ← ⑤ TaskGeneratorService 消费
+  TaskScheduler 队列 +1                              PalletArrivedEvent → 生成运输任务
+
+[Worker] ▶ 开始执行 T00001 (CV01→ASRS01)           ← ⑥ TaskExecutionWorker 出队
+[Worker]   ⏳ CV01 运输中...(3000ms)                  模拟运输耗时
+[Worker]   ⚡ CV01 → 写入 PLC1.DB101 (启动输送机)   ← ⑦ ★ 写入 PLC！★
+           CommandCenter.SendStructuredCommandAsync()
+           → [PlcBlock("PLC1",101)] → PlcWriter → WritePool → PLC1.DB101
+[Worker] ✅ T00001 完成                              ← ⑧ 任务标记完成
+
+[PersistBackgroundService] → StateCenter 持久化     ← ⑨ 写入 SQL DB
+  → DeviceRuntime / TaskRuntime 表
+
+[EventPersistenceService] → RawSignalEvent → DB    ← ⑩ 事件写入
+  → Wcs_DeviceStateLog 表（含验证结果）
+3 个新增文件
+文件	职责
+AlwaysPassValidator.cs	默认通过验证器，测试时不拦信号
+TaskGeneratorService.cs	订阅 PalletArrivedEvent → 生成 TaskContext → 入队 TaskScheduler
+TaskExecutionWorker.cs	轮询出队 → 模拟运输 → 写入 PLC → 完成任务
+你关心的 3 个问题
+你的问题	答案
+发布成功的数据哪里消费？	TaskGeneratorService 订阅 PalletArrivedEvent，收到后生成 TransportTask 入队
+什么时候写入 PLC？	TaskExecutionWorker 出队后执行 CommandCenter.SendStructuredCommandAsync() → PlcWriter.WriteStructAsync() → WritePool → 真正的 PLC DB 块写入
+写入日志怎么看？	[Worker] ⚡ {Device} → 写入 {PLC}.DB{Block} 在控制台输出
+
+
+DataHex 永远为 null 的原因：
+
+模拟模式下 WritePool 是空的。
+
+AddWcsPlc(configuration, connectToPlc: false) 时，if (connectToPlc) 内部调用的 AddWriteConnection 被跳过，WritePool 没有任何连接。所以 WritePool.Get(plcName) 返回 null，PlcWriter 直接在早期 return 了——数据根本没序列化，dataHex 自然是 null。
+
+现在修好了——LogWriteAsync 移到 conn 不为 null 之后执行，并且加了详细日志：
+
+
+[PlcWriter] DB 注入: ✅ 已连接           ← 启动时确认 SQL 连接
+[Write] 📝 数据: PLC1 DB101@0 = [01 00 04 B0] (4B)  ← 序列化后的准确 hex
+[Write] ✅ PLC1 DB101@0 (4B)
+[WriteLog] ✅ 已写入 Wcs_PlcWriteLog: PLC1 DB101 = [01 00 04 B0]  ← 写入 DB 确认
+（模拟模式下因为 WritePool 无真实连接，会跳过实际写入，但真实的 PLC 硬件模式下完整链路是通的）

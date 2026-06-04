@@ -88,7 +88,7 @@ public class EventDetector
                     _eventBus.PublishAsync(domainEvent).GetAwaiter().GetResult();
                 }
             }
-
+            //验证成功的数据进行推送
             _eventBus.PublishAsync(rawSignal).GetAwaiter().GetResult();
         }
     }

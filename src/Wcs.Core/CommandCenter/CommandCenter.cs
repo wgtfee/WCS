@@ -51,7 +51,7 @@ public class CommandCenter : ICommandCenter, IDisposable
 
         _logger?.LogInformation("[Cmd] {Type}(struct) → {Device}", commandType, deviceId);
 
-        var success = await _plcWriter.WriteStructAsync(commandData);
+        var success = await _plcWriter.WriteStructAsync(commandData, deviceId, taskId, commandType);
         if (!success)
         {
             record.Status = DeviceCommandStatus.Failed;

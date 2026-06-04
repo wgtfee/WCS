@@ -127,8 +127,14 @@ public enum DeviceStatusEnum
     Offline = 0,
     Online = 1,
     Running = 2,
+    /// <summary>
+    /// 空闲，可接收任务
+    /// </summary>
     Idle = 3,
     Error = 4,
+    /// <summary>
+    /// 维护模式
+    /// </summary>
     Maintenance = 5
 }
 

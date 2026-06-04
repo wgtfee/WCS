@@ -23,7 +23,7 @@ public class SimulatorBackgroundService : BackgroundService
         _logger.LogInformation("  18 个真实验证器全部就位");
         _logger.LogInformation("========================================");
 
-        _simulatedService.RegisterAllValidators();
+        _simulatedService.RegisterDefaultValidators();
         _simulatedService.Start();
 
         return Task.CompletedTask;

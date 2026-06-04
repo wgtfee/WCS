@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Wcs.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+97bd379545542aee4e7632b50926425586662803")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+453e8bd12a062898ac4a45c64bb8c3986ccef006")]
 [assembly: System.Reflection.AssemblyProductAttribute("Wcs.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Wcs.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

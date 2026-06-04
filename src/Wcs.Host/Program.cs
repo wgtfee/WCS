@@ -59,6 +59,8 @@ try
     builder.Services.AddHostedService<PersistBackgroundService>();
     builder.Services.AddHostedService<AlarmMonitorBackgroundService>();
     builder.Services.AddHostedService<EventPersistenceService>();
+    builder.Services.AddHostedService<TaskGeneratorService>();
+    builder.Services.AddHostedService<TaskExecutionWorker>();
 
     builder.Services.AddWindowsService(options => options.ServiceName = "WCS Runtime Engine");
     builder.Services.AddSignalR();
@@ -91,7 +93,8 @@ try
                     typeof(TaskRunEntity),
                     typeof(TransportHistoryEntity),
                     typeof(CommandLogEntity),
-                    typeof(DeviceStateLogEntity));
+                    typeof(DeviceStateLogEntity),
+                    typeof(PlcWriteLogEntity));
                 logger.LogInformation("WCS 业务表已就绪");
             }
         }
