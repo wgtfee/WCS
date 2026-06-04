@@ -1,136 +1,190 @@
 namespace Wcs.Host.BackgroundServices;
 
+using SqlSugar;
 using Wcs.Core.CommandCenter;
 using Wcs.Core.PlcSubsystem.Examples;
 using Wcs.Core.TaskEngine.Context;
 using Wcs.Core.TaskEngine.Orchestrator;
 using Wcs.Core.TaskEngine.Scheduler;
+using Wcs.Infrastructure.Persistence;
+using Wcs.Infrastructure.Persistence.Repositories;
 
-/// <summary>
-/// 任务执行工人 — 从 TaskScheduler 出队任务并执行
-///
-/// 执行流程：
-///   TaskScheduler.DequeueAsync() → 获取任务
-///     → TaskOrchestrator.StartTaskAsync() → 标记 Running
-///     → (模拟运输耗时)
-///     → PlcWriter.WriteStructAsync() → 写入 PLC ← 你关心的写入时机！
-///     → TaskOrchestrator.CompleteTaskAsync() → 标记 Completed
-///
-/// 每秒轮询一次任务队列，有任务则执行
-/// </summary>
 public class TaskExecutionWorker : BackgroundService
 {
     private readonly ITaskScheduler _scheduler;
     private readonly ITaskOrchestrator _orchestrator;
     private readonly ICommandCenter _commandCenter;
+    private readonly ISqlSugarClient? _db;
+    private readonly string _connStr;
     private readonly ILogger<TaskExecutionWorker> _logger;
 
     public TaskExecutionWorker(
         ITaskScheduler scheduler,
         ITaskOrchestrator orchestrator,
         ICommandCenter commandCenter,
+        ISqlSugarClient? db,
+        IConfiguration config,
         ILogger<TaskExecutionWorker> logger)
     {
         _scheduler = scheduler;
         _orchestrator = orchestrator;
         _commandCenter = commandCenter;
+        _db = db;
+        _connStr = config.GetConnectionString("WcsDb") ?? "";
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("TaskExecutionWorker 启动 — 开始轮询任务队列");
+        _logger.LogInformation("TaskExecutionWorker 启动 — 轮询任务队列");
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 var task = await _scheduler.DequeueAsync(stoppingToken);
-                if (task == null)
-                {
-                    await Task.Delay(500, stoppingToken);
-                    continue;
-                }
+                if (task == null) { await Task.Delay(500, stoppingToken); continue; }
 
-                _logger.LogInformation("[Worker] ▶ 开始执行 {TaskId} ({Route})", task.TaskId, task.RouteId);
+                var palletId = task.Tags.GetValueOrDefault("PalletId") ?? task.TaskId;
+                var fromNode = task.Tags.GetValueOrDefault("SourceNode") ?? task.DeviceId;
+                var toNode = task.Tags.GetValueOrDefault("TargetNode") ?? "ASRS01";
 
-                // 1. 标记任务开始
+                _logger.LogInformation("[Worker] ▶ {TaskId} ({Route})", task.TaskId, task.RouteId);
+
+                // == 1. 标记运行 ==
                 await _orchestrator.StartTaskAsync(task, stoppingToken);
+                await LogTaskEventAsync(task.TaskId, "TaskRunning", "Started execution");
 
-                // 2. 根据任务来源设备发送 PLC 命令
+                // == 2. 模拟运输 ==
+                await Task.Delay(3000, stoppingToken);
+
+                // == 3. 写入 PLC ==
                 await ExecuteTaskAsync(task, stoppingToken);
 
-                // 3. 标记任务完成
+                // == 4. 标记完成 ==
                 await _orchestrator.CompleteTaskAsync(task.TaskId, true);
+                await LogTaskEventAsync(task.TaskId, "TaskCompleted", "Completed successfully");
 
-                _logger.LogInformation("[Worker] ✅ {TaskId} 完成", task.TaskId);
+                // == 5. 写入历史 ==
+                await ArchiveTaskAsync(task, true, palletId, fromNode, toNode);
 
-                // 释放设备并发槽位
                 _scheduler.ReleaseDeviceSlot(task.DeviceId);
+                _logger.LogInformation("[Worker] ✅ {TaskId} 完成", task.TaskId);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[Worker] 执行异常");
+                _logger.LogError(ex, "[Worker] 异常");
                 await Task.Delay(1000, stoppingToken);
             }
         }
     }
 
-    /// <summary>
-    /// 执行任务 — 根据不同设备类型发送不同命令写入 PLC
-    /// 这里就是你要看的 "什么时候写入 PLC"
-    /// </summary>
     private async Task ExecuteTaskAsync(TaskContext task, CancellationToken ct)
     {
-        var deviceId = task.DeviceId;
-        var isRecovery = task.Category == TaskCategory.Recovery;
+        var d = task.DeviceId;
+        await Task.Delay(2000, ct);
 
-        // 模拟运输耗时（2~5 秒）
-        var delay = isRecovery ? 2000 : 3000;
-        _logger.LogInformation("[Worker]   ⏳ {Device} 运输中...({Delay}ms)", deviceId, delay);
-        await Task.Delay(delay, ct);
-
-        // ===== 写入 PLC — 这就是你关心的写入时机！=====
-        // 根据设备类型发送不同的命令到不同的 PLC
-
-        if (deviceId.StartsWith("CV"))
+        if (d.StartsWith("CV"))
         {
-            // 输送线 → 写入 PLC1.DB101
-            _logger.LogInformation("[Worker]   ⚡ {Device} → 写入 PLC1.DB101 (启动输送机)", deviceId);
-            var cmd = new ConveyorControlCommand
+            _logger.LogInformation("[Worker] ⚡ {Device} → PLC1.DB101", d);
+            await _commandCenter.SendStructuredCommandAsync(d, "StartConveyor",
+                new ConveyorControlCommand { StartStation1 = true, SpeedSetpoint1 = 1200 }, task.TaskId, ct);
+        }
+        else if (d.StartsWith("LIFT"))
+        {
+            _logger.LogInformation("[Worker] ⚡ {Device} → PLC1.DB102", d);
+            var liftCmd = (Wcs.Core.PlcSubsystem.Examples.LiftCommand)
+                Activator.CreateInstance(typeof(Wcs.Core.PlcSubsystem.Examples.LiftCommand))!;
+            await _commandCenter.SendStructuredCommandAsync(d, "LiftUp", liftCmd, task.TaskId, ct);
+        }
+        else if (d.StartsWith("ASRS"))
+        {
+            _logger.LogInformation("[Worker] ⚡ {Device} → PLC2.DB201", d);
+            await _commandCenter.SendStructuredCommandAsync(d, "Store",
+                new StackerControlCommand { StoreCmd1 = true }, task.TaskId, ct);
+        }
+        else if (d.StartsWith("ROBOT"))
+        {
+            _logger.LogInformation("[Worker] ⚡ {Device} → PLC3.DB101", d);
+            await _commandCenter.SendStructuredCommandAsync(d, "Grip",
+                new RobotControlCommand { GripCmd1 = true }, task.TaskId, ct);
+        }
+    }
+
+    /// <summary>写入 TaskEvents（EF Core 表）</summary>
+    private async Task LogTaskEventAsync(string taskId, string eventType, string payload)
+    {
+        try
+        {
+            var repo = new TaskEventRepository(_connStr);
+            await repo.AppendAsync(new TaskEventEntity
             {
-                StartStation1 = true,
-                SpeedSetpoint1 = 1200
-            };
-            await _commandCenter.SendStructuredCommandAsync(deviceId, "StartConveyor", cmd, task.TaskId, ct);
-            _logger.LogInformation("[Worker]   ✅ {Device} PLC 写入完成", deviceId);
+                TaskId = taskId,
+                EventType = eventType,
+                Payload = payload,
+                CreateTime = DateTime.UtcNow
+            });
         }
-        else if (deviceId.StartsWith("LIFT"))
+        catch (Exception ex) { _logger.LogWarning(ex, "写入 TaskEvents 失败"); }
+    }
+
+    /// <summary>写入 TaskHistories + Wcs_TaskRun + Wcs_TransportHistory</summary>
+    private async Task ArchiveTaskAsync(TaskContext task, bool success, string palletId,
+        string fromNode, string toNode)
+    {
+        try
         {
-            // 提升机 → 写入 PLC1.DB102
-            _logger.LogInformation("[Worker]   ⚡ {Device} → 写入 PLC1.DB102 (启动提升机)", deviceId);
-            var cmd = new LiftCommand { GoUp = true, TargetFloor = 2 };
-            await _commandCenter.SendStructuredCommandAsync(deviceId, "LiftUp", cmd, task.TaskId, ct);
+            // EF Core TaskHistories
+            var repo = new TaskRepository(_connStr);
+            await repo.ArchiveTaskAsync(new TaskHistoryEntity
+            {
+                TaskId = task.TaskId,
+                RouteId = task.RouteId,
+                Priority = task.Priority,
+                StartTime = task.StartTime,
+                EndTime = task.EndTime,
+                Success = success,
+                ErrorMessage = task.ErrorMessage
+            });
         }
-        else if (deviceId.StartsWith("ASRS"))
+        catch (Exception ex) { _logger.LogWarning(ex, "写入 TaskHistories 失败"); }
+
+        if (_db == null) return;
+
+        try
         {
-            // 堆垛机 → 写入 PLC2.DB201
-            _logger.LogInformation("[Worker]   ⚡ {Device} → 写入 PLC2.DB201 (堆垛机入库)", deviceId);
-            var cmd = new StackerControlCommand { StoreCmd1 = true, TargetCol1 = 15, TargetRow1 = 8 };
-            await _commandCenter.SendStructuredCommandAsync(deviceId, "Store", cmd, task.TaskId, ct);
+            // SqlSugar Wcs_TaskRun
+            await _db.Insertable(new TaskRunEntity
+            {
+                TaskId = task.TaskId,
+                DeviceId = task.DeviceId,
+                RouteId = task.RouteId,
+                PalletId = palletId,
+                Status = (int)(success ? Wcs.Core.StateCenter.Models.TaskStatusEnum.Completed : Wcs.Core.StateCenter.Models.TaskStatusEnum.Failed),
+                Priority = task.Priority,
+                CreatedTime = task.CreatedTime,
+                StartTime = task.StartTime,
+                EndTime = task.EndTime,
+                ErrorMessage = success ? null : task.ErrorMessage,
+                RetryCount = task.RetryCount
+            }).ExecuteCommandAsync();
+
+            // SqlSugar Wcs_TransportHistory
+            await _db.Insertable(new TransportHistoryEntity
+            {
+                TaskId = task.TaskId,
+                PalletId = palletId,
+                SourceNode = fromNode,
+                TargetNode = toNode,
+                Route = task.RouteId,
+                StartTime = task.StartTime ?? DateTime.UtcNow,
+                EndTime = task.EndTime,
+                Success = success,
+                FailureReason = success ? null : task.ErrorMessage,
+                TotalDurationMs = task.StartTime.HasValue ? (long)(DateTime.UtcNow - task.StartTime.Value).TotalMilliseconds : 0
+            }).ExecuteCommandAsync();
         }
-        else if (deviceId.StartsWith("ROBOT"))
-        {
-            // 机器人 → 写入 PLC3.DB101
-            _logger.LogInformation("[Worker]   ⚡ {Device} → 写入 PLC3.DB101 (机器人抓取)", deviceId);
-            var cmd = new RobotControlCommand { GripCmd1 = true, TargetPos1 = 3 };
-            await _commandCenter.SendStructuredCommandAsync(deviceId, "Grip", cmd, task.TaskId, ct);
-        }
-        else
-        {
-            _logger.LogInformation("[Worker]   ⚡ {Device} → 通用命令", deviceId);
-            await Task.Delay(1000, ct);
-        }
+        catch (Exception ex) { _logger.LogWarning(ex, "写入 Wcs_TaskRun/TransportHistory 失败"); }
     }
 }

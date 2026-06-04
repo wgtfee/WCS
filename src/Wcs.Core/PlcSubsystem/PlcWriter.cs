@@ -18,7 +18,6 @@ public class PlcWriter
         _registry = registry;
         _db = db;
         _logger = logger;
-        _logger?.LogInformation("[PlcWriter] DB 注入: {Status}", db != null ? "✅ 已连接" : "⚠️ 未连接");
     }
 
     public async Task<bool> WriteCommandAsync(string plcName, int dbBlock, int startByte, object command,
@@ -27,7 +26,7 @@ public class PlcWriter
         var conn = _registry.WritePool.Get(plcName);
         if (conn == null)
         {
-            _logger?.LogInformation("[Write] {Plc} DB{Block}: 无写连接(模拟模式)，跳过实际写入", plcName, dbBlock);
+            _logger?.LogInformation("[Write] {Plc} DB{Block}: 无写连接(模拟模式)", plcName, dbBlock);
             return false;
         }
 
@@ -35,30 +34,20 @@ public class PlcWriter
         {
             var size = PlcSerializer.CalculateBufferSize(command.GetType());
             var data = PlcSerializer.Serialize(command, startByte + size);
-
             var hexLen = Math.Max(0, Math.Min(191, data.Length * 3 - 1));
             var dataHex = data.Length > 0 ? BitConverter.ToString(data).Replace("-", " ")[..hexLen] : "";
 
-            _logger?.LogInformation("[Write] 📝 数据: {Plc} DB{Block}@{Start} = [{Data}] ({Size}B)",
-                plcName, dbBlock, startByte, dataHex, data.Length);
-
             var (result, error) = await conn.WriteAsync(dbBlock, startByte, data);
+            await WriteLogsAsync(plcName, dbBlock, startByte, commandType ?? "Write", deviceId, taskId, dataHex, data.Length, result == 0, result == 0 ? null : error);
 
-            await LogWriteAsync(plcName, dbBlock, startByte, commandType ?? "Write", deviceId, taskId, dataHex, data.Length, result == 0, result == 0 ? null : error);
-
-            if (result == 0)
-            {
-                _logger?.LogInformation("[Write] ✅ {Plc} DB{Block}@{Start} ({Size}B)", plcName, dbBlock, startByte, data.Length);
-                return true;
-            }
-
+            if (result == 0) { _logger?.LogInformation("[Write] ✅ {Plc} DB{Block} ({Size}B)", plcName, dbBlock, data.Length); return true; }
             _logger?.LogWarning("[Write] ❌ {Plc} DB{Block}: {Error}", plcName, dbBlock, error);
             return false;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "[Write] {Plc} DB{Block}", plcName, dbBlock);
-            await LogWriteAsync(plcName, dbBlock, startByte, commandType ?? "Write", deviceId, taskId, null, 0, false, ex.Message);
+            await WriteLogsAsync(plcName, dbBlock, startByte, commandType ?? "Write", deviceId, taskId, null, 0, false, ex.Message);
             return false;
         }
     }
@@ -76,34 +65,40 @@ public class PlcWriter
             command, deviceId, taskId, commandType ?? typeof(T).Name);
     }
 
-    private async Task LogWriteAsync(string plcName, int dbBlock, int startByte, string commandType,
+    /// <summary>写入 Wcs_PlcWriteLog + Wcs_CommandLog</summary>
+    private async Task WriteLogsAsync(string plcName, int dbBlock, int startByte, string commandType,
         string? deviceId, string? taskId, string? dataHex, int dataLength, bool success, string? error)
     {
-        if (_db == null)
-        {
-            _logger?.LogInformation("[WriteLog] DB 未连接，跳过日志写入");
-            return;
-        }
+        if (_db == null) return;
         try
         {
+            var now = DateTime.UtcNow;
+            var id = now.Ticks + Random.Shared.Next(0, 9999);
+
+            // Wcs_PlcWriteLog
             await _db.Insertable(new PlcWriteLogEntity
             {
-                Id = DateTime.UtcNow.Ticks + Random.Shared.Next(0, 9999),
-                PlcName = plcName,
-                DbBlock = dbBlock,
-                StartByte = startByte,
-                CommandType = commandType,
-                DeviceId = deviceId,
-                TaskId = taskId,
-                DataHex = dataHex,
-                DataLength = dataLength,
-                Success = success,
-                ErrorMessage = error,
-                WriteTime = DateTime.UtcNow
+                Id = id, PlcName = plcName, DbBlock = dbBlock, StartByte = startByte,
+                CommandType = commandType, DeviceId = deviceId, TaskId = taskId,
+                DataHex = dataHex, DataLength = dataLength, Success = success,
+                ErrorMessage = error, WriteTime = now
             }).ExecuteCommandAsync();
-            if (dataHex != null)
-                _logger?.LogInformation("[WriteLog] ✅ 已写入 Wcs_PlcWriteLog: {Plc} DB{Block} = [{Hex}]",
-                    plcName, dbBlock, dataHex);
+
+            // Wcs_CommandLog
+            await _db.Insertable(new CommandLogEntity
+            {
+                CommandId = Guid.NewGuid().ToString("N"),
+                CommandType = commandType,
+                DeviceId = deviceId ?? "",
+                TaskId = taskId,
+                Status = success ? 5 : 6,
+                Payload = dataHex,
+                CreatedTime = now,
+                SentTime = now,
+                CompletedTime = success ? now : null,
+                TimeoutMs = 5000,
+                ErrorMessage = error
+            }).ExecuteCommandAsync();
         }
         catch (Exception ex)
         {
