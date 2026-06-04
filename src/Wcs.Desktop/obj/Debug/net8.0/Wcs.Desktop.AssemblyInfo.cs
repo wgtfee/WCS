@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Wcs.Desktop")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0b09040d63c0fa7b5306e4af012e98343ce84dcd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fe06bc25092f3f00c7d0b007c0d80f92907dc491")]
 [assembly: System.Reflection.AssemblyProductAttribute("Wcs.Desktop")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Wcs.Desktop")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -52,7 +52,7 @@ public class EventPersistenceService : BackgroundService
                     PlcName = evt.PlcName,
                     DbBlock = evt.DbBlock,
                     ValidatorPassed = evt.ValidatorPassed,
-                    ValidatorReason = evt.ValidatorReason,
+                    ValidatorReason = evt.ValidatorReason ?? "",
                     DomainEventType = evt.DomainEventType ?? ""
                 }).ExecuteCommandAsync(ct);
             }

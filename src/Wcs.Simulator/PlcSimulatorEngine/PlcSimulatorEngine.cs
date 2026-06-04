@@ -102,7 +102,7 @@ public static class PlcSimulatorEngine
     /// <summary>PLC2.DB3: 堆垛机报警 (14 字节)</summary>
     public static byte[] GeneratePlc2_Alarms()
     {
-        var data = new byte[14];
+        var data = new byte[16];
         for (int i = 0; i < 4; i++)
         {
             int offset = i * 4; // 2B header + 2B fault
