@@ -712,3 +712,30 @@ AddWcsPlc(configuration, connectToPlc: false) 时，if (connectToPlc) 内部调�
 [Write] ✅ PLC1 DB101@0 (4B)
 [WriteLog] ✅ 已写入 Wcs_PlcWriteLog: PLC1 DB101 = [01 00 04 B0]  ← 写入 DB 确认
 （模拟模式下因为 WritePool 无真实连接，会跳过实际写入，但真实的 PLC 硬件模式下完整链路是通的）
+
+EF Core 的全部替换完成：
+
+操作	文件
+🗑️ 删除	WcsDbContext.cs — EF Core DbContext
+🗑️ 删除	TaskRepository.cs — Dapper 仓库
+🗑️ 删除	Microsoft.EntityFrameworkCore 包引用
+🗑️ 删除	Dapper 包引用
+🔄 重写	DatabaseInitializer.cs — SqlSugar CodeFirst，建 11 张表
+🔄 重写	PersistBackgroundService.cs — 直接用 ISqlSugarClient
+🔄 重写	DependencyInjection.cs — 移除旧仓库注册
+🔄 重写	TaskExecutionWorker.cs — 全用 SqlSugar
+➕ 新增	6 个 SqlSugar 实体（Wcs_DeviceRuntime/TaskRuntime/AlarmRuntime/TaskHistory/AlarmHistory/TaskEvent）
+启动后 DatabaseInitializer 自动建 11 张表：
+
+
+Wcs_DeviceRuntime     ✅ PersistBackgroundService
+Wcs_TaskRuntime       ✅ PersistBackgroundService
+Wcs_AlarmRuntime      ✅ PersistBackgroundService
+Wcs_TaskHistory       ✅ TaskExecutionWorker → ArchiveTaskAsync
+Wcs_AlarmHistory      ⏳ (预留)
+Wcs_TaskEvent         ✅ TaskExecutionWorker → LogEventAsync
+Wcs_TaskRun           ✅ TaskExecutionWorker → ArchiveTaskAsync
+Wcs_TransportHistory  ✅ TaskExecutionWorker → ArchiveTaskAsync
+Wcs_CommandLog        ✅ PlcWriter
+Wcs_DeviceStateLog    ✅ EventPersistenceService
+Wcs_PlcWriteLog       ✅ PlcWriter

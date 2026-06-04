@@ -1,43 +1,45 @@
 namespace Wcs.Host.BackgroundServices;
 
-using Microsoft.Extensions.Configuration;
 using SqlSugar;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.PlcSubsystem.Examples;
 
 /// <summary>
-/// 事件持久化服务 — 订阅 EventBus 中的关键事件，写入 SqlSugar 业务表
-/// 每次写入创建独立连接（避免 singleton ISqlSugarClient 并发冲突）
+/// 事件持久化服务 — 订阅 EventBus 关键事件写入 SqlSugar
+///
+/// 重要：不共享 DI 单例 ISqlSugarClient。
+/// 使用独立短连接 + 连接池（Max Pool Size=200），
+/// 避免并发写入争用同一个连接导致的 MARS/Connecting 异常。
 /// </summary>
 public class EventPersistenceService : BackgroundService
 {
     private readonly IEventBus _eventBus;
-    private readonly string _connectionString;
+    private readonly string _connStr;
+    private readonly SemaphoreSlim _throttle = new(5, 10);
     private readonly ILogger<EventPersistenceService> _logger;
 
     public EventPersistenceService(IEventBus eventBus, IConfiguration config, ILogger<EventPersistenceService> logger)
     {
         _eventBus = eventBus;
-        _connectionString = config.GetConnectionString("WcsDb") ?? "";
+        _connStr = config.GetConnectionString("WcsDb") ?? "";
         _logger = logger;
     }
 
-    /// <summary>每次写入创建独立 SqlSugarClient（避免 singleton 并发连接冲突）</summary>
+    /// <summary>独立连接，不共享 DI 单例</summary>
     private ISqlSugarClient CreateDb()
-    {
-        return new SqlSugarClient(new ConnectionConfig
+        => new SqlSugarClient(new ConnectionConfig
         {
-            ConnectionString = _connectionString,
+            ConnectionString = _connStr,
             DbType = DbType.SqlServer,
             IsAutoCloseConnection = true
         });
-    }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _eventBus.Subscribe<RawSignalEvent>(async (evt, ct) =>
         {
+            if (!await _throttle.WaitAsync(1000, ct)) return;
             try
             {
                 using var db = CreateDb();
@@ -60,10 +62,12 @@ public class EventPersistenceService : BackgroundService
             {
                 _logger.LogWarning(ex, "写入 DeviceStateLog 失败");
             }
+            finally { _throttle.Release(); }
         });
 
         _eventBus.Subscribe<PalletArrivedEvent>(async (evt, ct) =>
         {
+            if (!await _throttle.WaitAsync(1000, ct)) return;
             try
             {
                 using var db = CreateDb();
@@ -82,6 +86,7 @@ public class EventPersistenceService : BackgroundService
             {
                 _logger.LogWarning(ex, "写入 PalletArrivedEvent 失败");
             }
+            finally { _throttle.Release(); }
         });
 
         _logger.LogInformation("EventPersistenceService 已启动");

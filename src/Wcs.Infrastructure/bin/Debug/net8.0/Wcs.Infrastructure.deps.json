@@ -8,10 +8,7 @@
     ".NETCoreApp,Version=v8.0": {
       "Wcs.Infrastructure/1.0.0": {
         "dependencies": {
-          "Dapper": "2.1.1",
           "Microsoft.Data.SqlClient": "5.2.2",
-          "Microsoft.EntityFrameworkCore": "8.0.0",
-          "Microsoft.EntityFrameworkCore.SqlServer": "8.0.0",
           "S7netplus": "0.20.0",
           "Serilog": "4.0.0",
           "Serilog.Enrichers.Thread": "3.1.0",
@@ -48,14 +45,6 @@
           "lib/netstandard2.0/Azure.Identity.dll": {
             "assemblyVersion": "1.11.4.0",
             "fileVersion": "1.1100.424.31005"
-          }
-        }
-      },
-      "Dapper/2.1.1": {
-        "runtime": {
-          "lib/net5.0/Dapper.dll": {
-            "assemblyVersion": "2.0.0.0",
-            "fileVersion": "2.1.1.44751"
           }
         }
       },
@@ -170,48 +159,6 @@
           "lib/net8.0/Microsoft.Data.Sqlite.dll": {
             "assemblyVersion": "9.0.0.0",
             "fileVersion": "9.0.24.52902"
-          }
-        }
-      },
-      "Microsoft.EntityFrameworkCore/8.0.0": {
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore.Abstractions": "8.0.0"
-        },
-        "runtime": {
-          "lib/net8.0/Microsoft.EntityFrameworkCore.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.23.53103"
-          }
-        }
-      },
-      "Microsoft.EntityFrameworkCore.Abstractions/8.0.0": {
-        "runtime": {
-          "lib/net8.0/Microsoft.EntityFrameworkCore.Abstractions.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.23.53103"
-          }
-        }
-      },
-      "Microsoft.EntityFrameworkCore.Relational/8.0.0": {
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore": "8.0.0"
-        },
-        "runtime": {
-          "lib/net8.0/Microsoft.EntityFrameworkCore.Relational.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.23.53103"
-          }
-        }
-      },
-      "Microsoft.EntityFrameworkCore.SqlServer/8.0.0": {
-        "dependencies": {
-          "Microsoft.Data.SqlClient": "5.2.2",
-          "Microsoft.EntityFrameworkCore.Relational": "8.0.0"
-        },
-        "runtime": {
-          "lib/net8.0/Microsoft.EntityFrameworkCore.SqlServer.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.23.53103"
           }
         }
       },
@@ -768,13 +715,6 @@
       "path": "azure.identity/1.11.4",
       "hashPath": "azure.identity.1.11.4.nupkg.sha512"
     },
-    "Dapper/2.1.1": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-Av6CG0KMZIYBIsvontMo2xzKqMHOpriJpCtHxubuIC81pPaSQC8zrpYbjjEf2kKuMSs6RnGaehc5+Q5dQ4U7UA==",
-      "path": "dapper/2.1.1",
-      "hashPath": "dapper.2.1.1.nupkg.sha512"
-    },
     "Microsoft.Bcl.AsyncInterfaces/1.1.1": {
       "type": "package",
       "serviceable": true,
@@ -809,34 +749,6 @@
       "sha512": "sha512-cFfZjFL+tqzGYw9lB31EkV1IWF5xRQNk2k+MQd+Cf86Gl6zTeAoiZIFw5sRB1Z8OxpEC7nu+nTDsLSjieBAPTw==",
       "path": "microsoft.data.sqlite.core/9.0.0",
       "hashPath": "microsoft.data.sqlite.core.9.0.0.nupkg.sha512"
-    },
-    "Microsoft.EntityFrameworkCore/8.0.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-SoODat83pGQUpWB9xULdMX6tuKpq/RTXDuJ2WeC1ldUKcKzLkaFJD1n+I0nOLY58odez/e7z8b6zdp235G/kyg==",
-      "path": "microsoft.entityframeworkcore/8.0.0",
-      "hashPath": "microsoft.entityframeworkcore.8.0.0.nupkg.sha512"
-    },
-    "Microsoft.EntityFrameworkCore.Abstractions/8.0.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-VR22s3+zoqlVI7xauFKn1znSIFHO8xuILT+noSwS8bZCKcHz0ydkTDQMuaxSa5WBaQrZmwtTz9rmRvJ7X8mSPQ==",
-      "path": "microsoft.entityframeworkcore.abstractions/8.0.0",
-      "hashPath": "microsoft.entityframeworkcore.abstractions.8.0.0.nupkg.sha512"
-    },
-    "Microsoft.EntityFrameworkCore.Relational/8.0.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-fFKkr24cYc7Zw5T6DC4tEyOEPgPbq23BBmym1r9kn4ET9F3HKaetpOeQtV2RryYyUxEeNkJuxgfiZHTisqZc+A==",
-      "path": "microsoft.entityframeworkcore.relational/8.0.0",
-      "hashPath": "microsoft.entityframeworkcore.relational.8.0.0.nupkg.sha512"
-    },
-    "Microsoft.EntityFrameworkCore.SqlServer/8.0.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-GeOmafQn64HyQtYcI/Omv/D/YVHd1zEkWbP3zNQu4oC+usE9K0qOp0R8KgWWFEf8BU4tXuYbok40W0SjfbaK/A==",
-      "path": "microsoft.entityframeworkcore.sqlserver/8.0.0",
-      "hashPath": "microsoft.entityframeworkcore.sqlserver.8.0.0.nupkg.sha512"
     },
     "Microsoft.Identity.Client/4.61.3": {
       "type": "package",

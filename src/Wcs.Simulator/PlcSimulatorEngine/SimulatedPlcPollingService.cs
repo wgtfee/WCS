@@ -16,7 +16,7 @@ public class SimulatedPlcPollingService
     private readonly SignalSnapshotCenter _snapshotCenter;
     private readonly ILogger<SimulatedPlcPollingService>? _logger;
     private readonly List<Timer> _timers = new();
-    private readonly Dictionary<string, object> _previousStructs = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _previousStructs = new();
     private bool _running;
     private static readonly Random _rng = new();
 

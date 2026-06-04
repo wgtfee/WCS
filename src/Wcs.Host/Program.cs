@@ -31,7 +31,7 @@ try
     var dbConnStr = builder.Configuration.GetConnectionString("WcsDb");
     if (!string.IsNullOrEmpty(dbConnStr))
         builder.Services.AddSingleton<ISqlSugarClient>(_ => new SqlSugarClient(
-            new ConnectionConfig { ConnectionString = dbConnStr, DbType = DbType.SqlServer, IsAutoCloseConnection = true }));
+            new ConnectionConfig { ConnectionString = dbConnStr + ";MultipleActiveResultSets=True;Max Pool Size=200", DbType = DbType.SqlServer, IsAutoCloseConnection = false }));
 
     // ===== PLC 核心注册 =====
     var connectToPlc = !builder.Configuration.GetSection("Simulator").GetValue<bool>("Enabled");
@@ -79,29 +79,6 @@ try
         await dbInit.EnsureDatabaseAsync();
         logger.LogInformation("数据库就绪");
 
-        try
-        {
-            if (!string.IsNullOrEmpty(dbConnStr))
-            {
-                using var sugarDb = new SqlSugarClient(new ConnectionConfig
-                {
-                    ConnectionString = dbConnStr,
-                    DbType = DbType.SqlServer,
-                    IsAutoCloseConnection = true
-                });
-                sugarDb.CodeFirst.InitTables(
-                    typeof(TaskRunEntity),
-                    typeof(TransportHistoryEntity),
-                    typeof(CommandLogEntity),
-                    typeof(DeviceStateLogEntity),
-                    typeof(PlcWriteLogEntity));
-                logger.LogInformation("WCS 业务表已就绪");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "SqlSugar 表初始化失败");
-        }
     }
     catch (Exception ex)
     {

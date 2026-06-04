@@ -129,3 +129,102 @@ public class PlcWriteLogEntity
     public string? ErrorMessage { get; set; }
     public DateTime WriteTime { get; set; } = DateTime.UtcNow;
 }
+
+// ====================================================================
+// 以下为原 EF Core 实体转为 SqlSugar CodeFirst
+// (Former: WcsDbContext → DbSet)
+// ====================================================================
+
+/// <summary>设备运行时表 — 持久化 StateCenter 中的设备状态</summary>
+[SugarTable("Wcs_DeviceRuntime")]
+public class DeviceRuntimeEntity
+{
+    [SugarColumn(IsPrimaryKey = true)]
+    public string DeviceId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime LastUpdateTime { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public string? Properties { get; set; }
+}
+
+/// <summary>任务运行时表 — 持久化 StateCenter 中的任务状态</summary>
+[SugarTable("Wcs_TaskRuntime")]
+public class TaskRuntimeEntity
+{
+    [SugarColumn(IsPrimaryKey = true)]
+    public string TaskId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public int Priority { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public string? RouteId { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public DateTime? StartTime { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public DateTime? EndTime { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public string? Parameters { get; set; }
+}
+
+/// <summary>报警运行时表 — 持久化 StateCenter 中的报警状态</summary>
+[SugarTable("Wcs_AlarmRuntime")]
+public class AlarmRuntimeEntity
+{
+    [SugarColumn(IsPrimaryKey = true)]
+    public string AlarmId { get; set; } = string.Empty;
+    public string AlarmCode { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string Level { get; set; } = string.Empty;
+    [SugarColumn(IsNullable = true)]
+    public string? Message { get; set; }
+    public DateTime OccurTime { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public DateTime? RecoverTime { get; set; }
+}
+
+/// <summary>任务历史表 — 完成任务归档</summary>
+[SugarTable("Wcs_TaskHistory")]
+public class TaskHistoryEntity
+{
+    [SugarColumn(IsPrimaryKey = true, IsIdentity = true)]
+    public long Id { get; set; }
+    public string TaskId { get; set; } = string.Empty;
+    [SugarColumn(IsNullable = true)]
+    public string? RouteId { get; set; }
+    public int Priority { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public DateTime? StartTime { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public DateTime? EndTime { get; set; }
+    public bool Success { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public string? ErrorMessage { get; set; }
+}
+
+/// <summary>报警历史表</summary>
+[SugarTable("Wcs_AlarmHistory")]
+public class AlarmHistoryEntity
+{
+    [SugarColumn(IsPrimaryKey = true, IsIdentity = true)]
+    public long Id { get; set; }
+    public string AlarmCode { get; set; } = string.Empty;
+    [SugarColumn(IsNullable = true)]
+    public string? Level { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public string? Message { get; set; }
+    public DateTime StartTime { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public DateTime? EndTime { get; set; }
+}
+
+/// <summary>任务事件表 — 只追加</summary>
+[SugarTable("Wcs_TaskEvent")]
+public class TaskEventEntity
+{
+    [SugarColumn(IsPrimaryKey = true, IsIdentity = true)]
+    public long Id { get; set; }
+    public string TaskId { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    [SugarColumn(IsNullable = true)]
+    public string? Payload { get; set; }
+    public DateTime CreateTime { get; set; } = DateTime.UtcNow;
+}

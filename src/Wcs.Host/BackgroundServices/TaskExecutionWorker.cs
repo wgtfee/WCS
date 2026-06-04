@@ -3,11 +3,10 @@ namespace Wcs.Host.BackgroundServices;
 using SqlSugar;
 using Wcs.Core.CommandCenter;
 using Wcs.Core.PlcSubsystem.Examples;
+using Wcs.Core.StateCenter.Models;
 using Wcs.Core.TaskEngine.Context;
 using Wcs.Core.TaskEngine.Orchestrator;
 using Wcs.Core.TaskEngine.Scheduler;
-using Wcs.Infrastructure.Persistence;
-using Wcs.Infrastructure.Persistence.Repositories;
 
 public class TaskExecutionWorker : BackgroundService
 {
@@ -15,7 +14,6 @@ public class TaskExecutionWorker : BackgroundService
     private readonly ITaskOrchestrator _orchestrator;
     private readonly ICommandCenter _commandCenter;
     private readonly ISqlSugarClient? _db;
-    private readonly string _connStr;
     private readonly ILogger<TaskExecutionWorker> _logger;
 
     public TaskExecutionWorker(
@@ -23,20 +21,18 @@ public class TaskExecutionWorker : BackgroundService
         ITaskOrchestrator orchestrator,
         ICommandCenter commandCenter,
         ISqlSugarClient? db,
-        IConfiguration config,
         ILogger<TaskExecutionWorker> logger)
     {
         _scheduler = scheduler;
         _orchestrator = orchestrator;
         _commandCenter = commandCenter;
         _db = db;
-        _connStr = config.GetConnectionString("WcsDb") ?? "";
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("TaskExecutionWorker 启动 — 轮询任务队列");
+        _logger.LogInformation("TaskExecutionWorker 启动");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -49,23 +45,16 @@ public class TaskExecutionWorker : BackgroundService
                 var fromNode = task.Tags.GetValueOrDefault("SourceNode") ?? task.DeviceId;
                 var toNode = task.Tags.GetValueOrDefault("TargetNode") ?? "ASRS01";
 
-                _logger.LogInformation("[Worker] ▶ {TaskId} ({Route})", task.TaskId, task.RouteId);
+                _logger.LogInformation("[Worker] ▶ {TaskId}", task.TaskId);
 
-                // == 1. 标记运行 ==
                 await _orchestrator.StartTaskAsync(task, stoppingToken);
-                await LogTaskEventAsync(task.TaskId, "TaskRunning", "Started execution");
+                await LogEventAsync(task.TaskId, "TaskRunning", "started");
 
-                // == 2. 模拟运输 ==
                 await Task.Delay(3000, stoppingToken);
-
-                // == 3. 写入 PLC ==
                 await ExecuteTaskAsync(task, stoppingToken);
 
-                // == 4. 标记完成 ==
                 await _orchestrator.CompleteTaskAsync(task.TaskId, true);
-                await LogTaskEventAsync(task.TaskId, "TaskCompleted", "Completed successfully");
-
-                // == 5. 写入历史 ==
+                await LogEventAsync(task.TaskId, "TaskCompleted", "completed");
                 await ArchiveTaskAsync(task, true, palletId, fromNode, toNode);
 
                 _scheduler.ReleaseDeviceSlot(task.DeviceId);
@@ -84,7 +73,6 @@ public class TaskExecutionWorker : BackgroundService
     {
         var d = task.DeviceId;
         await Task.Delay(2000, ct);
-
         if (d.StartsWith("CV"))
         {
             _logger.LogInformation("[Worker] ⚡ {Device} → PLC1.DB101", d);
@@ -94,9 +82,8 @@ public class TaskExecutionWorker : BackgroundService
         else if (d.StartsWith("LIFT"))
         {
             _logger.LogInformation("[Worker] ⚡ {Device} → PLC1.DB102", d);
-            var liftCmd = (Wcs.Core.PlcSubsystem.Examples.LiftCommand)
-                Activator.CreateInstance(typeof(Wcs.Core.PlcSubsystem.Examples.LiftCommand))!;
-            await _commandCenter.SendStructuredCommandAsync(d, "LiftUp", liftCmd, task.TaskId, ct);
+            await _commandCenter.SendStructuredCommandAsync(d, "LiftUp",
+                new LiftCommand { GoUp = true, TargetFloor = 2 }, task.TaskId, ct);
         }
         else if (d.StartsWith("ASRS"))
         {
@@ -112,79 +99,65 @@ public class TaskExecutionWorker : BackgroundService
         }
     }
 
-    /// <summary>写入 TaskEvents（EF Core 表）</summary>
-    private async Task LogTaskEventAsync(string taskId, string eventType, string payload)
+    /// <summary>写入 Wcs_TaskEvent（SqlSugar）</summary>
+    private async Task LogEventAsync(string taskId, string eventType, string payload)
     {
+        if (_db == null) return;
         try
         {
-            var repo = new TaskEventRepository(_connStr);
-            await repo.AppendAsync(new TaskEventEntity
+            await _db.Insertable(new TaskEventEntity
             {
                 TaskId = taskId,
                 EventType = eventType,
                 Payload = payload,
                 CreateTime = DateTime.UtcNow
-            });
+            }).ExecuteCommandAsync();
         }
-        catch (Exception ex) { _logger.LogWarning(ex, "写入 TaskEvents 失败"); }
+        catch (Exception ex) { _logger.LogWarning(ex, "写入 TaskEvent 失败"); }
     }
 
-    /// <summary>写入 TaskHistories + Wcs_TaskRun + Wcs_TransportHistory</summary>
+    /// <summary>写入 TaskHistory + Wcs_TaskRun + Wcs_TransportHistory</summary>
     private async Task ArchiveTaskAsync(TaskContext task, bool success, string palletId,
         string fromNode, string toNode)
     {
+        if (_db == null) return;
+        var now = DateTime.UtcNow;
         try
         {
-            // EF Core TaskHistories
-            var repo = new TaskRepository(_connStr);
-            await repo.ArchiveTaskAsync(new TaskHistoryEntity
+            // Wcs_TaskHistory
+            await _db.Insertable(new TaskHistoryEntity
             {
                 TaskId = task.TaskId,
                 RouteId = task.RouteId,
                 Priority = task.Priority,
                 StartTime = task.StartTime,
-                EndTime = task.EndTime,
+                EndTime = task.EndTime ?? now,
                 Success = success,
-                ErrorMessage = task.ErrorMessage
-            });
-        }
-        catch (Exception ex) { _logger.LogWarning(ex, "写入 TaskHistories 失败"); }
+                ErrorMessage = success ? null : task.ErrorMessage
+            }).ExecuteCommandAsync();
 
-        if (_db == null) return;
-
-        try
-        {
-            // SqlSugar Wcs_TaskRun
+            // Wcs_TaskRun
             await _db.Insertable(new TaskRunEntity
             {
                 TaskId = task.TaskId,
-                DeviceId = task.DeviceId,
-                RouteId = task.RouteId,
-                PalletId = palletId,
-                Status = (int)(success ? Wcs.Core.StateCenter.Models.TaskStatusEnum.Completed : Wcs.Core.StateCenter.Models.TaskStatusEnum.Failed),
-                Priority = task.Priority,
-                CreatedTime = task.CreatedTime,
-                StartTime = task.StartTime,
-                EndTime = task.EndTime,
-                ErrorMessage = success ? null : task.ErrorMessage,
-                RetryCount = task.RetryCount
+                DeviceId = task.DeviceId, RouteId = task.RouteId, PalletId = palletId,
+                Status = (int)(success ? TaskStatusEnum.Completed : TaskStatusEnum.Failed),
+                Priority = task.Priority, CreatedTime = task.CreatedTime,
+                StartTime = task.StartTime, EndTime = task.EndTime ?? now,
+                ErrorMessage = success ? null : task.ErrorMessage, RetryCount = task.RetryCount
             }).ExecuteCommandAsync();
 
-            // SqlSugar Wcs_TransportHistory
+            // Wcs_TransportHistory
             await _db.Insertable(new TransportHistoryEntity
             {
-                TaskId = task.TaskId,
-                PalletId = palletId,
-                SourceNode = fromNode,
-                TargetNode = toNode,
-                Route = task.RouteId,
-                StartTime = task.StartTime ?? DateTime.UtcNow,
-                EndTime = task.EndTime,
-                Success = success,
-                FailureReason = success ? null : task.ErrorMessage,
-                TotalDurationMs = task.StartTime.HasValue ? (long)(DateTime.UtcNow - task.StartTime.Value).TotalMilliseconds : 0
+                TaskId = task.TaskId, PalletId = palletId,
+                SourceNode = fromNode, TargetNode = toNode, Route = task.RouteId,
+                StartTime = task.StartTime ?? now, EndTime = task.EndTime ?? now,
+                Success = success, FailureReason = success ? null : task.ErrorMessage,
+                TotalDurationMs = task.StartTime.HasValue
+                    ? (long)(now - task.StartTime.Value).TotalMilliseconds : 0
             }).ExecuteCommandAsync();
         }
-        catch (Exception ex) { _logger.LogWarning(ex, "写入 Wcs_TaskRun/TransportHistory 失败"); }
+        catch (Exception ex) { _logger.LogWarning(ex, "归档失败"); }
     }
 }
