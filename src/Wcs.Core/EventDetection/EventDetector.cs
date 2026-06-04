@@ -110,12 +110,12 @@ public class EventDetector
                 if (domainEvent != null)
                 {
                     rawSignal.DomainEventType = domainEvent.GetType().Name;
-                    _eventBus.PublishAsync(domainEvent);
+                    _eventBus.PublishAsync(domainEvent).GetAwaiter().GetResult();
                 }
             }
 
             // 发布 RawSignalEvent（始终发布，供 TraceCenter 记录）
-            _eventBus.PublishAsync(rawSignal);
+            _eventBus.PublishAsync(rawSignal).GetAwaiter().GetResult();
         }
     }
 

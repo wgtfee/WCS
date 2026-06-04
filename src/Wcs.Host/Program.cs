@@ -1,8 +1,10 @@
 using Serilog;
+using SqlSugar;
 using Wcs.Application;
 using Wcs.Core.AlarmCenter;
 using Wcs.Core.Common.Options;
 using Wcs.Core.PlcSubsystem;
+using Wcs.Core.PlcSubsystem.Examples;
 using Wcs.Core.Recovery;
 using Wcs.Host.BackgroundServices;
 using Wcs.Infrastructure;
@@ -24,9 +26,10 @@ try
     builder.Services.AddWcsInfrastructure(builder.Configuration);
     builder.Services.Configure<WcsOptions>(builder.Configuration.GetSection("WcsOptions"));
 
-    // PLC 子系统（旧的 DiffEngine 保留兼容）
     builder.Services.AddSingleton<IPlcBlockDiffEngine, PlcBlockDiffEngine>();
 
+    // ===== 配置驱动 PLC 注册（必须始终执行，PlcWriter/PlcStructRegistry 依赖）=====
+    builder.Services.AddWcsPlc(builder.Configuration);
 
     // ===== 虚拟工厂 / 真实 PLC 切换 =====
     var simulatorEnabled = builder.Configuration.GetSection("Simulator").GetValue<bool>("Enabled");
@@ -52,25 +55,13 @@ try
                 sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
                 sp.GetRequiredService<ILogger<SimulatorOrchestrator>>()));
         Log.Logger.Information("🧪 虚拟工厂模式已启用");
+        builder.Services.AddHostedService<SimulatorBackgroundService>();
     }
     else
     {
-        Log.Logger.Information("🏭 真实 PLC 模式已启用（配置驱动 {Count} 个连接）",
-            builder.Configuration.GetSection("PlcConnections").GetChildren().Count());
+        Log.Logger.Information("🏭 真实 PLC 模式已启用");
+        builder.Services.AddHostedService<S7PollingBackgroundService>();
     }
-
-    // 后台服务
-    if (simulatorEnabled)
-        builder.Services.AddHostedService<SimulatorBackgroundService>();
-    else
-    {        
-      // ===== 配置驱动 PLC 注册 =====
-      // PlcConnections + PlcBlocks 从 appsettings.json 自动加载
-      // 不需要改代码，改配置即可
-      builder.Services.AddWcsPlc(builder.Configuration);
-      builder.Services.AddHostedService<S7PollingBackgroundService>();
-    }
-
 
     builder.Services.AddHostedService<SnapshotBackgroundService>();
     builder.Services.AddHostedService<PersistBackgroundService>();
@@ -92,6 +83,30 @@ try
         var dbInit = app.Services.GetRequiredService<IDatabaseInitializer>();
         await dbInit.EnsureDatabaseAsync();
         logger.LogInformation("数据库就绪");
+
+        try
+        {
+            var connStr = builder.Configuration.GetConnectionString("WcsDb");
+            if (!string.IsNullOrEmpty(connStr))
+            {
+                using var sugarDb = new SqlSugarClient(new ConnectionConfig
+                {
+                    ConnectionString = connStr,
+                    DbType = DbType.SqlServer,
+                    IsAutoCloseConnection = true
+                });
+                sugarDb.CodeFirst.InitTables(
+                    typeof(TaskRunEntity),
+                    typeof(TransportHistoryEntity),
+                    typeof(CommandLogEntity),
+                    typeof(DeviceStateLogEntity));
+                logger.LogInformation("WCS 业务表已就绪");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "SqlSugar 表初始化失败");
+        }
     }
     catch (Exception ex)
     {
@@ -122,7 +137,7 @@ try
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "加载报警规则失败，使用默认规则");
+        logger.LogWarning(ex, "加载报警规则失败");
     }
 
     app.MapHub<WcsHub>("/wcs");
