@@ -4,174 +4,117 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.PlcSubsystem;
 
-/// <summary>
-/// 命令中心实现 — 统一管理所有设备命令的完整生命周期
-///
-/// ActionNode → CommandCenter.SendCommandAsync() → CommandQueue → PLC
-///
-/// 功能：
-/// - 命令状态机（Created→Sent→Acked→Executing→Done→Completed/Failed/Timeout/Rejected）
-/// - 超时检测
-/// - 重试机制
-/// - 审计追踪
-/// - 统计报告
-/// </summary>
 public class CommandCenter : ICommandCenter, IDisposable
 {
     private readonly ConcurrentDictionary<string, DeviceCommandRecord> _commands = new();
+    private readonly PlcWriter _plcWriter;
     private readonly ILogger<CommandCenter>? _logger;
     private readonly Timer _timeoutTimer;
-    private readonly TimeSpan _timeoutCheckInterval = TimeSpan.FromSeconds(2);
     private bool _disposed;
 
-    public CommandCenter(ILogger<CommandCenter>? logger = null)
+    public CommandCenter(PlcWriter plcWriter, ILogger<CommandCenter>? logger = null)
     {
+        _plcWriter = plcWriter;
         _logger = logger;
-        _timeoutTimer = new Timer(CheckTimeouts, null,
-            _timeoutCheckInterval, _timeoutCheckInterval);
+        _timeoutTimer = new Timer(CheckTimeouts, null, 2000, 2000);
     }
 
-    /// <summary>
-    /// 发送命令 — 创建命令记录并标记为 Sent
-    /// 实际 PLC 写入由调用方完成（ActionNode 的 Handler）
-    /// </summary>
     public async Task<DeviceCommandRecord> SendCommandAsync(
         string deviceId, string commandType,
         string? payload = null, string? taskId = null,
         int timeoutMs = 5000, CancellationToken ct = default)
     {
-        var record = new DeviceCommandRecord
-        {
-            CommandType = commandType,
-            DeviceId = deviceId,
-            Payload = payload,
-            TaskId = taskId,
-            TimeoutMs = timeoutMs,
-            Status = DeviceCommandStatus.Created,
-            CreatedTime = DateTime.UtcNow,
-            Source = "TaskEngine"
-        };
-
+        var record = CreateRecord(commandType, deviceId, taskId, timeoutMs);
+        record.Source = "TaskEngine";
         _commands[record.CommandId] = record;
-
-        // 标记为已发送
         record.Status = DeviceCommandStatus.Sent;
         record.SentTime = DateTime.UtcNow;
-
-        _logger?.LogInformation(
-            "Command {CommandId}: {CommandType} -> {DeviceId} (Task={TaskId})",
-            record.CommandId, commandType, deviceId, taskId);
-
-        await Task.CompletedTask;
+        _logger?.LogInformation("[Cmd] {Type} → {Device}", commandType, deviceId);
         return record;
     }
 
-    public bool ConfirmAcked(string commandId)
+    /// <summary>
+    /// 发送带 [PlcBlock] + [PlcOffset] 的结构化命令
+    /// 自动从 [PlcBlock] 特性中读取目标 PLC/DB 块，无需外部映射
+    ///
+    /// 用法：
+    ///   var cmd = new ConveyorCommand { Start = true };
+    ///   await cmdCenter.SendStructuredCommandAsync("CV01", "StartConveyor", cmd);
+    ///   // 自动通过 [PlcBlock("PLC1", 101)] 写入 PLC1.DB101
+    /// </summary>
+    public async Task<DeviceCommandRecord> SendStructuredCommandAsync<T>(
+        string deviceId, string commandType, T commandData,
+        string? taskId = null, CancellationToken ct = default) where T : struct
     {
-        return UpdateStatus(commandId, DeviceCommandStatus.Acked);
+        var record = CreateRecord(commandType, deviceId, taskId);
+        _commands[record.CommandId] = record;
+
+        _logger?.LogInformation("[Cmd] {Type}(struct) → {Device}", commandType, deviceId);
+
+        var success = await _plcWriter.WriteStructAsync(commandData);
+        if (!success)
+        {
+            record.Status = DeviceCommandStatus.Failed;
+            record.ErrorMessage = "PLC 写入失败";
+            return record;
+        }
+
+        record.Status = DeviceCommandStatus.Sent;
+        record.SentTime = DateTime.UtcNow;
+        return record;
     }
 
-    public bool ConfirmExecuting(string commandId)
+    private DeviceCommandRecord CreateRecord(string commandType, string deviceId,
+        string? taskId = null, int timeoutMs = 5000) => new()
     {
-        return UpdateStatus(commandId, DeviceCommandStatus.Executing);
-    }
+        CommandType = commandType, DeviceId = deviceId, TaskId = taskId,
+        TimeoutMs = timeoutMs, Status = DeviceCommandStatus.Created,
+        CreatedTime = DateTime.UtcNow
+    };
 
-    public bool ConfirmDone(string commandId)
-    {
-        return UpdateStatus(commandId, DeviceCommandStatus.Done);
-    }
+    public bool ConfirmAcked(string commandId) => UpdateStatus(commandId, DeviceCommandStatus.Acked);
+    public bool ConfirmExecuting(string commandId) => UpdateStatus(commandId, DeviceCommandStatus.Executing);
+    public bool ConfirmDone(string commandId) => UpdateStatus(commandId, DeviceCommandStatus.Done);
 
     public bool ConfirmCompleted(string commandId, string? result = null)
     {
-        if (!_commands.TryGetValue(commandId, out var record))
-            return false;
-
-        record.Status = DeviceCommandStatus.Completed;
-        record.CompletedTime = DateTime.UtcNow;
-        if (result != null) record.Payload = result;
-
-        _logger?.LogInformation("Command {CommandId}: {CommandType} completed on {DeviceId}",
-            commandId, record.CommandType, record.DeviceId);
-        return true;
+        if (!_commands.TryGetValue(commandId, out var r)) return false;
+        r.Status = DeviceCommandStatus.Completed; r.CompletedTime = DateTime.UtcNow;
+        if (result != null) r.Payload = result; return true;
     }
 
     public bool ConfirmFailed(string commandId, string? error = null)
     {
-        if (!_commands.TryGetValue(commandId, out var record))
-            return false;
-
-        record.Status = DeviceCommandStatus.Failed;
-        record.ErrorMessage = error;
-        record.CompletedTime = DateTime.UtcNow;
-
-        _logger?.LogWarning("Command {CommandId}: {CommandType} failed on {DeviceId}: {Error}",
-            commandId, record.CommandType, record.DeviceId, error);
-        return true;
+        if (!_commands.TryGetValue(commandId, out var r)) return false;
+        r.Status = DeviceCommandStatus.Failed; r.ErrorMessage = error; r.CompletedTime = DateTime.UtcNow; return true;
     }
 
-    public bool ConfirmTimeout(string commandId)
-    {
-        return UpdateStatus(commandId, DeviceCommandStatus.Timeout);
-    }
+    public bool ConfirmTimeout(string commandId) => UpdateStatus(commandId, DeviceCommandStatus.Timeout);
 
     public bool ConfirmRejected(string commandId, string? reason = null)
     {
-        if (!_commands.TryGetValue(commandId, out var record))
-            return false;
-
-        record.Status = DeviceCommandStatus.Rejected;
-        record.ErrorMessage = reason;
-        record.CompletedTime = DateTime.UtcNow;
-
-        _logger?.LogWarning("Command {CommandId}: {CommandType} rejected by {DeviceId}: {Reason}",
-            commandId, record.CommandType, record.DeviceId, reason);
-        return true;
+        if (!_commands.TryGetValue(commandId, out var r)) return false;
+        r.Status = DeviceCommandStatus.Rejected; r.ErrorMessage = reason; r.CompletedTime = DateTime.UtcNow; return true;
     }
 
     public async Task<bool> CancelCommandAsync(string commandId, CancellationToken ct = default)
-    {
-        var result = UpdateStatus(commandId, DeviceCommandStatus.Cancelled);
-        await Task.CompletedTask;
-        return result;
-    }
+    { await Task.CompletedTask; return UpdateStatus(commandId, DeviceCommandStatus.Cancelled); }
 
     public DeviceCommandRecord? GetCommand(string commandId)
-    {
-        _commands.TryGetValue(commandId, out var record);
-        return record;
-    }
+    { _commands.TryGetValue(commandId, out var r); return r; }
 
-    public IEnumerable<DeviceCommandRecord> GetDeviceCommands(string deviceId, int maxCount = 50)
-    {
-        return _commands.Values
-            .Where(c => c.DeviceId == deviceId)
-            .OrderByDescending(c => c.CreatedTime)
-            .Take(maxCount);
-    }
+    public IEnumerable<DeviceCommandRecord> GetDeviceCommands(string deviceId, int max = 50)
+        => _commands.Values.Where(c => c.DeviceId == deviceId).OrderByDescending(c => c.CreatedTime).Take(max);
 
     public IEnumerable<DeviceCommandRecord> GetPendingCommands()
-    {
-        return _commands.Values
-            .Where(c => c.Status == DeviceCommandStatus.Sent
-                     || c.Status == DeviceCommandStatus.Acked
-                     || c.Status == DeviceCommandStatus.Executing);
-    }
+        => _commands.Values.Where(c => c.Status is DeviceCommandStatus.Sent or DeviceCommandStatus.Acked or DeviceCommandStatus.Executing);
 
     public IEnumerable<DeviceCommandRecord> GetTimeoutCommands()
-    {
-        return _commands.Values
-            .Where(c => c.Status == DeviceCommandStatus.Timeout);
-    }
+        => _commands.Values.Where(c => c.Status == DeviceCommandStatus.Timeout);
 
     public CommandCenterStats GetStats()
     {
-        var completed = _commands.Values
-            .Where(c => c.Status == DeviceCommandStatus.Completed && c.CompletedTime.HasValue);
-
-        var avgMs = completed.Any()
-            ? completed.Average(c => (c.CompletedTime!.Value - c.CreatedTime).TotalMilliseconds)
-            : 0;
-
+        var comp = _commands.Values.Where(c => c.Status == DeviceCommandStatus.Completed && c.CompletedTime.HasValue);
         return new CommandCenterStats
         {
             TotalCommands = _commands.Count,
@@ -179,62 +122,33 @@ public class CommandCenter : ICommandCenter, IDisposable
             FailedCommands = _commands.Values.Count(c => c.Status == DeviceCommandStatus.Failed),
             TimeoutCommands = _commands.Values.Count(c => c.Status == DeviceCommandStatus.Timeout),
             PendingCommands = GetPendingCommands().Count(),
-            AvgCompletionTimeMs = avgMs
+            AvgCompletionTimeMs = comp.Any() ? comp.Average(c => (c.CompletedTime!.Value - c.CreatedTime).TotalMilliseconds) : 0
         };
     }
 
-    public void Clear()
-    {
-        _commands.Clear();
-    }
+    public void Clear() => _commands.Clear();
+    public void Dispose() { if (!_disposed) { _disposed = true; _timeoutTimer.Dispose(); } }
 
-    public void Dispose()
+    private bool UpdateStatus(string commandId, DeviceCommandStatus s)
     {
-        if (!_disposed)
-        {
-            _disposed = true;
-            _timeoutTimer.Dispose();
-        }
-    }
-
-    private bool UpdateStatus(string commandId, DeviceCommandStatus newStatus)
-    {
-        if (!_commands.TryGetValue(commandId, out var record))
-            return false;
-
-        record.Status = newStatus;
-        if (newStatus is DeviceCommandStatus.Completed or DeviceCommandStatus.Failed
+        if (!_commands.TryGetValue(commandId, out var r)) return false;
+        r.Status = s;
+        if (s is DeviceCommandStatus.Completed or DeviceCommandStatus.Failed
             or DeviceCommandStatus.Timeout or DeviceCommandStatus.Rejected)
-        {
-            record.CompletedTime = DateTime.UtcNow;
-        }
+            r.CompletedTime = DateTime.UtcNow;
         return true;
     }
 
     private void CheckTimeouts(object? state)
     {
         var now = DateTime.UtcNow;
-        foreach (var record in _commands.Values)
+        foreach (var r in _commands.Values)
         {
-            // 只检查已发送但未完成的命令
-            if (record.Status is DeviceCommandStatus.Completed or DeviceCommandStatus.Failed
-                or DeviceCommandStatus.Timeout or DeviceCommandStatus.Rejected
-                or DeviceCommandStatus.Cancelled)
-                continue;
-
-            if (!record.SentTime.HasValue) continue;
-
-            var elapsed = (now - record.SentTime.Value).TotalMilliseconds;
-            if (elapsed > record.TimeoutMs)
-            {
-                record.Status = DeviceCommandStatus.Timeout;
-                record.ErrorMessage = $"Command timed out after {record.TimeoutMs}ms";
-                record.CompletedTime = now;
-
-                _logger?.LogWarning(
-                    "Command {CommandId}: {CommandType} timeout after {Elapsed}ms (limit {TimeoutMs}ms)",
-                    record.CommandId, record.CommandType, elapsed, record.TimeoutMs);
-            }
+            if (r.Status is DeviceCommandStatus.Completed or DeviceCommandStatus.Failed
+                or DeviceCommandStatus.Timeout or DeviceCommandStatus.Rejected or DeviceCommandStatus.Cancelled) continue;
+            if (!r.SentTime.HasValue) continue;
+            if ((now - r.SentTime.Value).TotalMilliseconds > r.TimeoutMs)
+            { r.Status = DeviceCommandStatus.Timeout; r.ErrorMessage = $"超时 {r.TimeoutMs}ms"; r.CompletedTime = now; }
         }
     }
 }

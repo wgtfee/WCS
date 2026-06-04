@@ -18,7 +18,7 @@ namespace Wcs.Core.PlcSubsystem.SignalMapper.S7
         /// <returns>The object depending on the struct type or null if fails(array-length != struct-length</returns>
         public static object FromBytes(Type structType, byte[] bytes, int Endcount, int startcount)
         {
-            if (bytes == null)
+            if (bytes == null || bytes.Length == 0 || structType == null)
                 return null;
 
             // and decode it
@@ -30,7 +30,7 @@ namespace Wcs.Core.PlcSubsystem.SignalMapper.S7
             object structValue = Activator.CreateInstance(structType);
 
 
-            var infos = structValue.GetType()
+            var infos = structValue?.GetType()
 #if NETSTANDARD1_3
                 .GetTypeInfo().DeclaredFields;
 #else

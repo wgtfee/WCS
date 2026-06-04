@@ -593,3 +593,62 @@ TaskEngine（未被修改）
     ├── RuleEngine → TaskGenerator → TaskScheduler
     └── ChainExecutionEngine → ActionNode → CommandCenter → PLC 写
                 ↑ WaitNode 通过 StateCenter + EventBus 双保险等待条件
+
+
+
+                架构定稿
+
+                 读链路                             写链路
+        ┌──────────────────┐             ┌──────────────────┐
+        │    ReadPool       │             │    WritePool      │
+        │  (独立 S7Client)   │             │  (独立 S7Client)   │
+        └────────┬─────────┘             └────────┬─────────┘
+                 │ ReadAsync(db,start,count)       │ WriteAsync(db,start,data)
+                 ▼                                ▲
+        ┌──────────────────┐             ┌──────────────────┐
+        │  PlcReader        │             │   PlcWriter       │
+        │  Struct.FromBytes │             │  PlcSerializer    │
+        │  → 强类型 struct   │             │  [PlcOffset] 序列化│
+        └────────┬─────────┘             └────────┬─────────┘
+                 │                                ▲
+                 ▼                                │
+        ┌──────────────────┐             ┌──────────────────┐
+        │  StateCenter      │◄────┐      │  CommandCenter    │
+        │  DeviceState      │     │      │  状态机+审计      │
+        │  TaskState        │     │      └────────┬─────────┘
+        │  AlarmState       │     │                ▲
+        └────────┬─────────┘     │               │
+                 │               │     ┌──────────────────┐
+                 ▼               │     │  ChainExecution   │
+        ┌──────────────────┐     │     │  Engine / Action  │
+        │  SignalMapper     │     │     │  Node             │
+        │  State diff →     │     │     └──────────────────┘
+        │  DomainEvent      │     │
+        └────────┬─────────┘     │
+                 ▼               │
+        ┌──────────────────┐     │
+        │  RuleEngine       │     │
+        │  → TaskGenerator  │─────┘
+        └──────────────────┘
+关键设计
+组件	职责	只读/写
+ReadPool	读连接池（独立 S7Client），整个系统只有 S7PollingService 用它	只读
+WritePool	写连接池（独立 S7Client），整个系统只有 PlcWriter 用它	只写
+S7PollingService	byte[] → struct → StateCenter → 验证 → EventBus	轮询
+PlcWriter	[PlcOffset] 命令序列化 → WritePool	写入
+PlcBlockRegistry	设备 ID → PLC/DB/偏移 查询	映射
+PlcSerializer	[PlcOffset] 标记的 C# 对象 ↔ byte[]	序列化
+新增/修改文件
+文件	说明
+Pools/ReadPool.cs	新建 — 读专用连接池（独立 Snap7 连接）
+Pools/WritePool.cs	新建 — 写专用连接池（独立 Snap7 连接）
+PlcBlockIdentifier.cs	新建 — 设备→PLC/DB 映射识别器
+Examples/PlcDeviceModels.cs	新建 — 示例 PLC 结构体（DB1_StatusBlock / ConveyorCommand 等）
+Examples/WcsIntegrationExample.cs	新建 — 完整链路集成示例
+S7/PlcStructRegistry.cs	重写 — 使用 ReadPool + WritePool 替代旧 S7PLCPool
+S7/S7PollingService.cs	更新 — 使用 ReadPool
+PlcWriter.cs	更新 — 使用 WritePool
+CommandCenter/CommandCenter.cs	更新 — 集成 PlcWriter + 结构化命令
+Application/PlcRegistrationExtension.cs	更新 — 注册双连接池
+Application/DependencyInjection.cs	更新 — 注册 ICommandCenter + PlcWriter
+SignalMapper/S7/S7PLCPool.cs	删除 — 已替换为 ReadPool + WritePool

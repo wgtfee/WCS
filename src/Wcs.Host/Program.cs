@@ -27,10 +27,6 @@ try
     // PLC 子系统（旧的 DiffEngine 保留兼容）
     builder.Services.AddSingleton<IPlcBlockDiffEngine, PlcBlockDiffEngine>();
 
-    // ===== 配置驱动 PLC 注册 =====
-    // PlcConnections + PlcBlocks 从 appsettings.json 自动加载
-    // 不需要改代码，改配置即可
-    builder.Services.AddWcsPlc(builder.Configuration);
 
     // ===== 虚拟工厂 / 真实 PLC 切换 =====
     var simulatorEnabled = builder.Configuration.GetSection("Simulator").GetValue<bool>("Enabled");
@@ -67,7 +63,14 @@ try
     if (simulatorEnabled)
         builder.Services.AddHostedService<SimulatorBackgroundService>();
     else
-        builder.Services.AddHostedService<S7PollingBackgroundService>();
+    {        
+      // ===== 配置驱动 PLC 注册 =====
+      // PlcConnections + PlcBlocks 从 appsettings.json 自动加载
+      // 不需要改代码，改配置即可
+      builder.Services.AddWcsPlc(builder.Configuration);
+      builder.Services.AddHostedService<S7PollingBackgroundService>();
+    }
+
 
     builder.Services.AddHostedService<SnapshotBackgroundService>();
     builder.Services.AddHostedService<PersistBackgroundService>();
