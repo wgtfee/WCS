@@ -12,8 +12,7 @@ using Wcs.Infrastructure.Logging;
 using Wcs.Infrastructure.Persistence;
 using Wcs.Infrastructure.SignalR;
 using Microsoft.Extensions.Options;
-using Wcs.Simulator;
-using Wcs.Simulator.PlcSimulator;
+using Wcs.Simulator.PlcSimulatorEngine;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -28,44 +27,38 @@ try
 
     builder.Services.AddSingleton<IPlcBlockDiffEngine, PlcBlockDiffEngine>();
 
-    // ===== 配置驱动 PLC 注册（必须始终执行，PlcWriter/PlcStructRegistry 依赖）=====
-    builder.Services.AddWcsPlc(builder.Configuration);
+    // ===== SqlSugar DI =====
+    var dbConnStr = builder.Configuration.GetConnectionString("WcsDb");
+    if (!string.IsNullOrEmpty(dbConnStr))
+        builder.Services.AddSingleton<ISqlSugarClient>(_ => new SqlSugarClient(
+            new ConnectionConfig { ConnectionString = dbConnStr, DbType = DbType.SqlServer, IsAutoCloseConnection = true }));
 
-    // ===== 虚拟工厂 / 真实 PLC 切换 =====
-    var simulatorEnabled = builder.Configuration.GetSection("Simulator").GetValue<bool>("Enabled");
+    // ===== PLC 核心注册 =====
+    var connectToPlc = !builder.Configuration.GetSection("Simulator").GetValue<bool>("Enabled");
+    builder.Services.AddWcsPlc(builder.Configuration, connectToPlc);
 
-    if (simulatorEnabled)
+    // ===== 后台服务 =====
+    if (connectToPlc)
     {
-        builder.Services.AddSingleton<SimulatorSignalSource>();
-        builder.Services.AddSingleton<ISignalSource>(sp => sp.GetRequiredService<SimulatorSignalSource>());
-        builder.Services.AddSingleton<VirtualPlant>(sp =>
-        {
-            var gen = new TransportGenerator(
-                sp.GetRequiredService<Wcs.Core.TaskEngine.Scheduler.ITaskScheduler>(),
-                sp.GetRequiredService<ILogger<TransportGenerator>>());
-            var plant = new VirtualPlant(gen, sp.GetRequiredService<ILogger<VirtualPlant>>());
-            plant.BuildDefaultTopology();
-            return plant;
-        });
-        builder.Services.AddSingleton<SimulatorOrchestrator>(sp =>
-            new SimulatorOrchestrator(
-                sp.GetRequiredService<VirtualPlant>(),
-                sp.GetRequiredService<Wcs.Core.TaskEngine.Scheduler.ITaskScheduler>(),
-                sp.GetRequiredService<Wcs.Core.EventBus.Publisher.IEventBus>(),
-                sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
-                sp.GetRequiredService<ILogger<SimulatorOrchestrator>>()));
-        Log.Logger.Information("🧪 虚拟工厂模式已启用");
-        builder.Services.AddHostedService<SimulatorBackgroundService>();
+        builder.Services.AddHostedService<S7PollingBackgroundService>();
+        Log.Logger.Information("🏭 真实 PLC 模式");
     }
     else
     {
-        Log.Logger.Information("🏭 真实 PLC 模式已启用");
-        builder.Services.AddHostedService<S7PollingBackgroundService>();
+        builder.Services.AddSingleton(sp => new SimulatedPlcPollingService(
+            sp.GetRequiredService<Wcs.Core.PlcSubsystem.S7.PlcStructRegistry>(),
+            sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
+            sp.GetRequiredService<Wcs.Core.EventDetection.EventDetector>(),
+            sp.GetRequiredService<Wcs.Core.SignalSnapshot.SignalSnapshotCenter>(),
+            sp.GetRequiredService<ILogger<SimulatedPlcPollingService>>()));
+        builder.Services.AddHostedService<SimulatorBackgroundService>();
+        Log.Logger.Information("🧪 模拟模式 — 3 PLC 9 DB + 18 验证器");
     }
 
     builder.Services.AddHostedService<SnapshotBackgroundService>();
     builder.Services.AddHostedService<PersistBackgroundService>();
     builder.Services.AddHostedService<AlarmMonitorBackgroundService>();
+    builder.Services.AddHostedService<EventPersistenceService>();
 
     builder.Services.AddWindowsService(options => options.ServiceName = "WCS Runtime Engine");
     builder.Services.AddSignalR();
@@ -86,12 +79,11 @@ try
 
         try
         {
-            var connStr = builder.Configuration.GetConnectionString("WcsDb");
-            if (!string.IsNullOrEmpty(connStr))
+            if (!string.IsNullOrEmpty(dbConnStr))
             {
                 using var sugarDb = new SqlSugarClient(new ConnectionConfig
                 {
-                    ConnectionString = connStr,
+                    ConnectionString = dbConnStr,
                     DbType = DbType.SqlServer,
                     IsAutoCloseConnection = true
                 });
@@ -110,7 +102,7 @@ try
     }
     catch (Exception ex)
     {
-        logger.LogCritical(ex, "数据库初始化失败，系统无法启动");
+        logger.LogCritical(ex, "数据库初始化失败");
         throw;
     }
 
@@ -125,7 +117,7 @@ try
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "系统恢复失败，以全新状态启动");
+        logger.LogWarning(ex, "系统恢复失败");
     }
 
     try
@@ -135,10 +127,7 @@ try
         foreach (var rule in wcsOptions.Value.AlarmRules)
             alarmCenter.SetAlarmRule(rule);
     }
-    catch (Exception ex)
-    {
-        logger.LogWarning(ex, "加载报警规则失败");
-    }
+    catch { }
 
     app.MapHub<WcsHub>("/wcs");
     app.MapControllers();
@@ -147,7 +136,6 @@ try
     app.MapHealthChecks("/health");
     app.MapGet("/", () => "WCS Runtime Engine is running.");
 
-    logger.LogInformation("SignalR hub available at /wcs");
     await app.RunAsync();
 }
 catch (Exception ex)

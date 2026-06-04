@@ -84,5 +84,6 @@ public class DeviceStateLogEntity
     public string? PlcName { get; set; }
     public int DbBlock { get; set; }
     public bool ValidatorPassed { get; set; }
+    public string? DomainEventType { get; set; }
     public string? ValidatorReason { get; set; }
 }

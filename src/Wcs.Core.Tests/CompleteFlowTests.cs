@@ -73,7 +73,7 @@ public class CompleteFlowTests
     public void T3_EdgeDetection()
     {
         var snap = new SignalSnapshotCenter();
-        var det = new EventDetector(new EventBus(), snap, NullLogger<EventDetector>.Instance);
+        var det = new EventDetector(new EventBus(), snap, new StateCenter(null), NullLogger<EventDetector>.Instance);
 
         snap.Update("PLC1.DB1", ParseData(MakeData(false, false, false, 0, 0)),
             typeof(PLC1_DB1_ConveyorStatus));
@@ -92,7 +92,7 @@ public class CompleteFlowTests
     public void T4_ValidatorReject()
     {
         var snap = new SignalSnapshotCenter();
-        var det = new EventDetector(new EventBus(), snap, NullLogger<EventDetector>.Instance);
+        var det = new EventDetector(new EventBus(), snap, new StateCenter(null), NullLogger<EventDetector>.Instance);
         det.RegisterValidator(new Cv01_ArrivalValidator());
 
         snap.Update("PLC1.DB1", ParseData(MakeData(false, false, false, 0, 0)),
