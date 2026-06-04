@@ -61,6 +61,7 @@ try
     builder.Services.AddHostedService<EventPersistenceService>();
     builder.Services.AddHostedService<TaskGeneratorService>();
     builder.Services.AddHostedService<TaskExecutionWorker>();
+    builder.Services.AddHostedService<AlarmWiringService>();
 
     builder.Services.AddWindowsService(options => options.ServiceName = "WCS Runtime Engine");
     builder.Services.AddSignalR();
