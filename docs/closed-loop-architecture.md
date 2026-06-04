@@ -304,3 +304,31 @@ A: 写入后下一轮轮询会读到 PLC 的反馈信号。
 A: 不能混用。类型 1 在轮询线程中运行，必须轻量快速，只做信号级判断。
    类型 2 在 DAG 执行线程中运行，可以访问完整任务上下文，做业务级判断。
    混用会导致轮询线程阻塞，影响其他设备的响应时间。
+
+
+最终两个修正
+修正	之前	现在
+SignalSnapshotCenter vs StateCenter	职责模糊，可能混用	硬性分层：SignalSnapshotCenter = PLC 镜像（只存 Current/Previous），StateCenter = 业务状态（只存 DeviceStatus/TaskStatus）
+RawSignalEvent 两级管线	EventDetector 直接发 DomainEvent，无法审计	始终先发 RawSignalEvent，验证通过后再发 DomainEvent，TraceCenter 直接记录原始信号
+最终数据流
+
+PLC → S7PollingService → byte[] → Struct
+  → ① StateCenter（无条件同步）
+  → ② SignalSnapshotCenter（更新 Current/Previous）
+  → ③ EventDetector
+       → 边沿检测
+       → 发布 RawSignalEvent（始终，含 ValidatorPassed 状态）
+       → Validator 管道
+         ├─ Pass   → DomainEvent → RuleEngine → TaskGenerator
+         └─ Reject → 仅记录（不执行任何操作）
+
+TaskGenerator → TaskScheduler → ChainExecutionEngine
+  → DecisionNode（任务级验证）
+  → ActionNode → CommandCenter（CommandProfile）→ PlcWriter → WritePool → PLC
+  → WaitNode（EventBus 事件驱动）
+文档清单
+文档	内容
+docs/qa-architecture-records.md	全部 26 个问答 + 完整模块清单
+docs/test-bench-matrix.md	9 项测试矩阵（基础链路→10万次压测→7×24稳定性）
+docs/architecture-corrections-v10.md	5 个偏差修正 + EventDetector 设计
+docs/closed-loop-architecture.md	闭环链路详解

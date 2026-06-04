@@ -6,6 +6,7 @@ using Wcs.Core.EventDetection;
 using Wcs.Core.PlcSubsystem;
 using Wcs.Core.PlcSubsystem.Pools;
 using Wcs.Core.PlcSubsystem.S7;
+using Wcs.Core.SignalSnapshot;
 using Wcs.Core.StateCenter.Interfaces;
 
 namespace Wcs.Application;
@@ -24,7 +25,7 @@ public static class PlcRegistrationExtension
                 continue;
             registry.AddReadConnection(conn.PlcName, conn.Address, conn.Rack, conn.Slot);
             registry.AddWriteConnection(conn.PlcName, conn.Address, conn.Rack, conn.Slot);
-            Console.WriteLine($"[WcsPlc] 🏭 {conn.PlcName} @ {conn.Address} (读+写双池)");
+            Console.WriteLine($"[WcsPlc] {conn.PlcName} @ {conn.Address} (RW双池)");
         }
 
         var blocks = config.GetSection("PlcBlocks").Get<List<PlcBlockConfig>>()
@@ -32,25 +33,19 @@ public static class PlcRegistrationExtension
         if (blocks.Count > 0)
         {
             registry.RegisterFromConfig(blocks);
-            Console.WriteLine($"[WcsPlc] 📦 {blocks.Count} 个 DB 块已注册");
+            Console.WriteLine($"[WcsPlc] {blocks.Count} DB块");
         }
 
         services.AddSingleton(registry);
 
-        // EventDetector — PLC 状态变化 → 业务事件
-        services.AddSingleton(sp =>
-            new EventDetector(
-                sp.GetRequiredService<IEventBus>(),
-                sp.GetRequiredService<ILogger<EventDetector>>()));
+        // 信号快照中心（Current/Previous 统一管理）
+        services.AddSingleton<SignalSnapshotCenter>();
+
+        // EventDetector（边沿检测 → 业务事件）
+        services.AddSingleton<EventDetector>();
 
         // 轮询服务
-        services.AddSingleton(sp =>
-            new S7PollingService(
-                sp.GetRequiredService<PlcStructRegistry>(),
-                sp.GetRequiredService<IStateCenter>(),
-                sp.GetRequiredService<IEventBus>(),
-                sp.GetRequiredService<EventDetector>(),
-                sp.GetRequiredService<ILogger<S7PollingService>>()));
+        services.AddSingleton<S7PollingService>();
 
         return services;
     }

@@ -162,12 +162,32 @@ public class SystemStoppingEvent : EventBase
 public class SystemErrorEvent : EventBase
 {
     public override EventPriority Priority => EventPriority.Critical;
-
     public string ErrorCode { get; set; } = string.Empty;
-
     public string Message { get; set; } = string.Empty;
-
     public string? StackTrace { get; set; }
-
     public Exception? Exception { get; set; }
+}
+
+public class TransportRequestedEvent : EventBase
+{
+    public override EventPriority Priority => EventPriority.High;
+    public string SourceDeviceId { get; set; } = string.Empty;
+    public string? TargetDeviceId { get; set; }
+    public string? PalletId { get; set; }
+    public int TaskPriority { get; set; } = 2;
+    public string? Source { get; set; }
+}
+
+public class RawSignalEvent : EventBase
+{
+    public override EventPriority Priority => EventPriority.Medium;
+    public string PlcName { get; set; } = string.Empty;
+    public int DbBlock { get; set; }
+    public string FieldName { get; set; } = string.Empty;
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+    public string Edge { get; set; } = string.Empty;
+    public bool ValidatorPassed { get; set; }
+    public string? ValidatorReason { get; set; }
+    public string? DomainEventType { get; set; }
 }
