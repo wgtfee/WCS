@@ -28,6 +28,15 @@ public class DeviceFaultEvent : EventBase
     public string PlcName { get; set; } = string.Empty;
 }
 
+public class DeviceRecoveredEvent : EventBase
+{
+    public override EventPriority Priority => EventPriority.Critical;
+    public string DeviceId { get; set; } = string.Empty;
+    public string FaultCode { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string PlcName { get; set; } = string.Empty;
+}
+
 /// <summary>模式切换信号</summary>
 public class ModeSwitchedEvent : EventBase
 {

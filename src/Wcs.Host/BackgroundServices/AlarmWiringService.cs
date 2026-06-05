@@ -69,6 +69,20 @@ public class AlarmWiringService : BackgroundService
             }
         });
 
+        _eventBus.Subscribe<DeviceRecoveredEvent>(async (evt, ct) =>
+        {
+            _logger.LogWarning("[Alarm] ✅ {Device} 恢复: {FaultCode}", evt.DeviceId, evt.FaultCode);
+
+            try
+            {
+                await _alarmCenter.RecoverAlarmAsync(alarmCode: evt.FaultCode,ct: ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Alarm] RecoverAlarmAsync 失败");
+            }
+        });
+
         // AlarmRaisedEvent → 写入 Wcs_DeviceStateLog + Wcs_AlarmRuntime
         _eventBus.Subscribe<AlarmRaisedEvent>(async (evt, ct) =>
         {

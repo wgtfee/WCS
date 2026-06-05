@@ -138,6 +138,14 @@ public enum DeviceStatusEnum
     Maintenance = 5
 }
 
+public enum DebounceState
+{
+    Idle,
+    RaisePending,
+    RecoverPending,
+    Active
+}
+
 /// <summary>
 /// 任务状态枚举
 /// </summary>

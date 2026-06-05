@@ -16,9 +16,7 @@ using Wcs.Core.TaskEngine.Scheduler;
 ///                                                                       ↑
 ///                                                               RuleEngine 匹配规则
 /// </summary>
-public class TaskGenerator : IEventHandler<ConveyorReadyChangedEvent>,
-    IEventHandler<PalletArrivedEvent>,
-    IEventHandler<DeviceFaultEvent>
+public class TaskGenerator : IEventHandler<ConveyorReadyChangedEvent>,IEventHandler<PalletArrivedEvent>,IEventHandler<DeviceFaultEvent>,IEventHandler<DeviceRecoveredEvent>
 {
     private readonly IRuleEngine _ruleEngine;
     private readonly ITaskScheduler _scheduler;
@@ -60,6 +58,15 @@ public class TaskGenerator : IEventHandler<ConveyorReadyChangedEvent>,
     /// 处理设备故障信号
     /// </summary>
     public async Task HandleAsync(DeviceFaultEvent @event, CancellationToken ct)
+    {
+        _logger?.LogDebug("TaskGenerator: evaluating DeviceFaultEvent for {DeviceId}", @event.DeviceId);
+        await EvaluateAndSubmit(@event, ct);
+    }
+
+    /// <summary>
+    /// 处理设备恢复信号
+    /// </summary>
+    public async Task HandleAsync(DeviceRecoveredEvent @event, CancellationToken ct)
     {
         _logger?.LogDebug("TaskGenerator: evaluating DeviceFaultEvent for {DeviceId}", @event.DeviceId);
         await EvaluateAndSubmit(@event, ct);

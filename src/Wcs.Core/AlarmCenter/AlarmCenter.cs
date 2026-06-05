@@ -102,6 +102,10 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
 {
     private readonly ConcurrentDictionary<string, AlarmState> _alarms = new();       // alarmId → state
     private readonly ConcurrentDictionary<string, AlarmRule> _rules = new();          // alarmCode → rule
+
+    // 记录当前信号状态（关键修复）
+private readonly ConcurrentDictionary<string, bool> _recoverSignals = new();
+private readonly ConcurrentDictionary<string, bool> _raiseSignals = new();
     private readonly IEventBus _eventBus;
     private readonly AlarmDebounceEngine _debounceEngine;
     private readonly AlarmStormGuard _stormGuard;
@@ -172,7 +176,8 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
     {
         // Step 1: 查找规则
         var rule = GetRule(alarmCode);
-
+        _raiseSignals[alarmCode] = true;
+        _recoverSignals[alarmCode] = false; // ❗关键：打断恢复态
         // Step 2: 防抖 — 信号进入 DelayRaise 窗口
         _debounceEngine.SignalRaise(alarmCode, rule);
 
@@ -183,7 +188,8 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
     {
         // Step 1: 查找规则
         var rule = GetRule(alarmCode);
-
+        _recoverSignals[alarmCode] = true;
+        _raiseSignals[alarmCode] = false; // ❗关键：取消报警态
         // Step 2: 防抖 — 信号进入 DelayRecover 窗口
         _debounceEngine.SignalRecover(alarmCode, rule);
 
@@ -247,9 +253,15 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
     /// </summary>
     private void OnDebounceConfirmedRecover(string alarmCode)
     {
+        if (!_recoverSignals.TryGetValue(alarmCode, out var recovering) || !recovering)
+        {
+        return; // ❌ 防止误触发
+        }
+        _recoverSignals[alarmCode] = false; // 清理状态
         // 找到所有该 alarmCode 的活跃报警
         var toRecover = _alarms.Values
-            .Where(a => a.AlarmCode == alarmCode && AlarmStateMachine.IsActive(a.Status))
+            //.Where(a => a.AlarmCode == alarmCode && AlarmStateMachine.IsActive(a.Status))
+            .Where(a => a.AlarmCode == alarmCode && a.Status != AlarmStatusEnum.Recovered)
             .ToList();
 
         foreach (var alarm in toRecover)

@@ -81,7 +81,7 @@ public class EventDetector
             if (!rejected)
             {
                 rawSignal.ValidatorPassed = true;
-                var domainEvent = CreateDomainEvent(meta, newVal, edge);
+                var domainEvent = CreateDomainEvent(meta, newVal,oldVal, edge);
                 if (domainEvent != null)
                 {
                     rawSignal.DomainEventType = domainEvent.GetType().Name;
@@ -93,7 +93,7 @@ public class EventDetector
         }
     }
 
-    private IEvent? CreateDomainEvent(FieldMetadata meta, object? newVal, EdgeType edge)
+    private IEvent? CreateDomainEvent(FieldMetadata meta, object? newVal,object? oldVal, EdgeType edge)
     {
         foreach (var rule in _extraRules)
         {
@@ -102,14 +102,36 @@ public class EventDetector
             return CreateEventFromRule(rule, meta);
         }
         if (!EnableNamingConvention) return null;
-        if (newVal is not bool boolVal || edge != EdgeType.Rising || !boolVal) return null;
+        //if (newVal is not bool boolVal || edge != EdgeType.Rising || !boolVal) return null;
+        if (newVal is not bool newBool || oldVal is not bool oldBool)  return null;
         if (meta.DeviceId == null) return null;
 
         var suffix = meta.Suffix;
         if (suffix is "_ARRIVED" or "_REQUESTOUT")
             return new PalletArrivedEvent { DeviceId = meta.DeviceId };
-        if (suffix == "_FAULT")
-            return new DeviceFaultEvent { DeviceId = meta.DeviceId, FaultCode = meta.FieldName };
+        if (suffix is "_FAULT" or "_ARALM")
+        {
+            // 上升沿：报警
+            if (!oldBool && newBool)
+            {
+                return new DeviceFaultEvent
+                {
+                    DeviceId = meta.DeviceId,
+                    FaultCode = meta.FieldName
+                };
+            }
+        
+            // 下降沿：恢复
+            if (oldBool && !newBool)
+            {
+                return new DeviceRecoveredEvent
+                {
+                    DeviceId = meta.DeviceId,
+                    FaultCode = meta.FieldName
+                };
+            }
+        }
+
         if (suffix == "_READY")
             return new ConveyorReadyChangedEvent { DeviceId = meta.DeviceId, Ready = true };
         return null;
@@ -118,7 +140,7 @@ public class EventDetector
     private IEvent? CreateEventFromRule(EventDetectionRule rule, FieldMetadata meta)
     {
         if (string.IsNullOrEmpty(rule.TargetEventType))
-            return CreateDomainEvent(meta, true, EdgeType.Rising);
+            return CreateDomainEvent(meta, true,null, EdgeType.Rising);
         var eventType = Type.GetType(rule.TargetEventType);
         if (eventType == null || !typeof(IEvent).IsAssignableFrom(eventType)) return null;
         try

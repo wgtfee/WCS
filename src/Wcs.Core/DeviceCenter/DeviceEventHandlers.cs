@@ -7,6 +7,12 @@ using Wcs.Core.DeviceCenter;
 /// </summary>
 public class DeviceStateUpdateHandler : IDeviceEventHandler
 {
+    /// <summary>
+    /// 设备启动处理器 - 标记运行状态并发布事件
+    /// </summary>
+    /// <param name="device"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     public async Task OnDeviceStartedAsync(IDevice device, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -15,6 +21,12 @@ public class DeviceStateUpdateHandler : IDeviceEventHandler
         await Task.CompletedTask;
     }
 
+    /// <summary>
+    /// 设备停止处理器 - 标记停止状态并发布事件
+    /// </summary>
+    /// <param name="device"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     public async Task OnDeviceStoppedAsync(IDevice device, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -22,22 +34,34 @@ public class DeviceStateUpdateHandler : IDeviceEventHandler
         await Task.CompletedTask;
     }
 
-    public async Task OnDeviceStatusChangedAsync(
-        IDevice device,
-        DeviceStatusEnum oldStatus,
-        DeviceStatusEnum newStatus,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 设备状态变化处理器 - 与 StateCenter 同步
+    /// </summary>
+    /// <param name="device"></param>
+    /// <param name="oldStatus"></param>
+    /// <param name="newStatus"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public async Task OnDeviceStatusChangedAsync(IDevice device,DeviceStatusEnum oldStatus,DeviceStatusEnum newStatus,CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(device);
         // TODO: 集成 StateCenter 更新
+        if (oldStatus == DeviceStatusEnum.Error && newStatus == DeviceStatusEnum.Running)
+        {
+            //await AlarmCenter.RecoverAlarmAsync(...);
+        }
         // TODO: 发布 EventBus 事件
         await Task.CompletedTask;
     }
 
-    public async Task OnDeviceErrorAsync(
-        IDevice device,
-        string errorMessage,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 设备错误处理器 - 标记错误状态并发布报警事件
+    /// </summary>
+    /// <param name="device"></param>
+    /// <param name="errorMessage"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public async Task OnDeviceErrorAsync(IDevice device,string errorMessage,CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(errorMessage);

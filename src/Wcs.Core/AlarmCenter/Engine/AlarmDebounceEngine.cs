@@ -37,10 +37,20 @@ public sealed class AlarmDebounceEngine : IDisposable
 
         lock (entry.Lock)
         {
+            entry.SetState(DebounceState.RaisePending);
             entry.ResetRaiseTimer(() =>
             {
                 // DelayRaise 到期 → 确认报警
-                _onConfirmedRaise(alarmCode);
+                entry.ResetRaiseTimer(() =>
+                {
+                    lock (entry.Lock)
+                    {
+                        if (entry.State != DebounceState.RaisePending)
+                            return;        
+                        entry.SetState(DebounceState.Idle);
+                        _onConfirmedRaise(alarmCode);
+                    }
+                });
             });
         }
     }
@@ -51,13 +61,21 @@ public sealed class AlarmDebounceEngine : IDisposable
     public void SignalRecover(string alarmCode, AlarmRule rule)
     {
         var entry = _entries.GetOrAdd(alarmCode, _ => new DebounceEntry(rule));
-
+    
         lock (entry.Lock)
         {
+            entry.SetState(DebounceState.RecoverPending);
+    
             entry.ResetRecoverTimer(() =>
             {
-                // DelayRecover 到期 → 确认恢复
-                _onConfirmedRecover(alarmCode);
+                lock (entry.Lock)
+                {
+                    if (entry.State != DebounceState.RecoverPending)
+                        return;
+    
+                    entry.SetState(DebounceState.Idle);
+                    _onConfirmedRecover(alarmCode);
+                }
             });
         }
     }
@@ -86,6 +104,7 @@ public sealed class AlarmDebounceEngine : IDisposable
         lock (entry.Lock)
         {
             entry.CancelRecoverTimer();
+            entry.SetState(DebounceState.RaisePending);
             _onRebounce(alarmCode);
         }
     }
@@ -106,6 +125,10 @@ public sealed class AlarmDebounceEngine : IDisposable
         private Timer? _recoverTimer;
         private readonly object _lock = new();
         private bool _disposed;
+        
+        public  DebounceState _state = DebounceState.Idle;
+        public DebounceState State => _state;
+        public void SetState(DebounceState state) => _state = state;  
 
         public object Lock => _lock;
 
