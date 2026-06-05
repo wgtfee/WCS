@@ -17,44 +17,44 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = Wcs.Desktop
-build_property.ProjectDir = I:\code\IOT\WCS ENG\src\Wcs.Desktop\
+build_property.ProjectDir = i:\code\IOT\WCS ENG\src\Wcs.Desktop\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 build_property.EffectiveAnalysisLevelStyle = 8.0
 build_property.EnableCodeStyleSeverity = 
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/App.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/App.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Controls/ConnectionBar.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Controls/ConnectionBar.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Controls/OverviewCard.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Controls/OverviewCard.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Styles/Colors.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Styles/Colors.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Styles/Themes.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Styles/Themes.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/AlarmPanelView.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/AlarmPanelView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/DashboardView.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/DashboardView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/DeviceListView.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/DeviceListView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/EventLogView.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/EventLogView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/MainWindow.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/MainWindow.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/ObjectTrackingView.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/ObjectTrackingView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[I:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/TaskManagementView.axaml]
+[i:/code/IOT/WCS ENG/src/Wcs.Desktop/Views/TaskManagementView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
