@@ -123,6 +123,16 @@ public class AlarmCenter : IAlarmCenter, ISnapshotProvider
         SuppressionThreshold = 10
     };
 
+    private static readonly AlarmRule ErrorRule = new()
+    {
+        AlarmCode = "*",
+        Level = AlarmLevelEnum.Error,
+        DelayRaiseMs = 1000,
+        DelayRecoverMs = 3000,
+        SuppressionWindowSec = 60,
+        SuppressionThreshold = 10
+    };
+
     public AlarmCenter(IEventBus eventBus, AlarmMaskManager? maskManager = null)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
