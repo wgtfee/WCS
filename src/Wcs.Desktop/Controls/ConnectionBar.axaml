@@ -1,5 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.Controls"
+             x:DataType="vm:ConnectionBar"
              x:Class="Wcs.Desktop.Controls.ConnectionBar"
              Height="24">
     <Border Background="#1A1A1A" Padding="8,4">

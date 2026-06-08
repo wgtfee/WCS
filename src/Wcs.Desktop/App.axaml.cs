@@ -23,7 +23,9 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Avoid duplicate validations from both Avalonia and CommunityToolkit
-            BindingPlugins.DataValidators.RemoveAt(0);
+            //BindingPlugins.DataValidators.RemoveAt(0);
+            // 注册 ViewLocator 到全局 DataTemplates
+            DataTemplates.Add(new ViewLocator());
 
             var vm = _services!.GetRequiredService<MainWindowViewModel>();
             desktop.MainWindow = new MainWindow

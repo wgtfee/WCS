@@ -3,6 +3,7 @@
              xmlns:vm="using:Wcs.Desktop.ViewModels"
              xmlns:conv="using:Wcs.Desktop.Converters"
              x:Class="Wcs.Desktop.Views.DeviceListView"
+             x:DataType="vm:DeviceListViewModel"
              Background="#1E1E1E">
     <UserControl.Resources>
         <conv:StatusToColorConverter x:Key="StatusToColor" />

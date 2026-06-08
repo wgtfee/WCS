@@ -1,6 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="using:Wcs.Desktop.Converters"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:DataType="vm:TaskManagementViewModel"
              x:Class="Wcs.Desktop.Views.TaskManagementView"
              Background="#1E1E1E">
     <UserControl.Resources>
@@ -14,10 +16,10 @@
                 <TextBlock Text="Create Task" FontSize="16" FontWeight="Bold" Foreground="White" />
                 <Grid ColumnDefinitions="Auto,8,*,8,80,8,Auto">
                     <TextBlock Text="Device:" Foreground="#CCC" VerticalAlignment="Center" />
-                    <TextBox Grid.Column="2" Watermark="Device ID" Text="{Binding NewTaskDeviceId}"
+                    <TextBox Grid.Column="2" PlaceholderText="Device ID" Text="{Binding NewTaskDeviceId}"
                              Width="150" Background="#1E1E1E" Foreground="White" />
                     <TextBlock Grid.Column="3" Text="Route:" Foreground="#CCC" VerticalAlignment="Center" />
-                    <TextBox Grid.Column="4" Watermark="Route ID" Text="{Binding NewTaskRouteId}"
+                    <TextBox Grid.Column="4" PlaceholderText="Route ID" Text="{Binding NewTaskRouteId}"
                              Width="150" Background="#1E1E1E" Foreground="White" />
                     <NumericUpDown Grid.Column="5" Value="{Binding NewTaskPriority}"
                                    Minimum="0" Maximum="10" Width="60" />

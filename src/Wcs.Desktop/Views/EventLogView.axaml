@@ -1,7 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="using:Wcs.Desktop.Converters"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
              x:Class="Wcs.Desktop.Views.EventLogView"
+             x:DataType="vm:EventLogViewModel"
              Background="#1E1E1E">
     <UserControl.Resources>
         <conv:StatusToColorConverter x:Key="StatusToColor" />

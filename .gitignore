@@ -1,6 +1,7 @@
 # 忽略所有名为 bin 和 obj 的文件夹及其子内容
 bin/
 obj/
+.vs/
 
 # 忽略特定后缀文件
 *.dll
@@ -8,3 +9,4 @@ obj/
 *.exe
 *.so
 *.obj
+*.vs

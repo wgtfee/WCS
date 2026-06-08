@@ -3,6 +3,7 @@
         xmlns:vm="using:Wcs.Desktop.ViewModels"
         xmlns:ctl="using:Wcs.Desktop.Controls"
         x:Class="Wcs.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
         Title="WCS Runtime Engine - Desktop Monitor"
         Width="1280" Height="800"
         Background="#1E1E1E"
@@ -26,12 +27,12 @@
                     SelectedIndex="{Binding SelectedTabIndex}"
                     Background="#1E1E1E">
             <TabControl.ItemTemplate>
-                <DataTemplate>
+                <DataTemplate x:DataType="vm:TabItem">
                     <TextBlock Text="{Binding Header}" Foreground="White" />
                 </DataTemplate>
             </TabControl.ItemTemplate>
             <TabControl.ContentTemplate>
-                <DataTemplate>
+                <DataTemplate x:DataType="vm:TabItem">
                     <ContentControl Content="{Binding Content}" />
                 </DataTemplate>
             </TabControl.ContentTemplate>

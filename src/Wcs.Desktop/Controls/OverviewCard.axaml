@@ -1,6 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.Controls"
+             x:DataType="vm:OverviewCard"
              x:Class="Wcs.Desktop.Controls.OverviewCard"
+
              Width="200" Height="120" Margin="8">
     <Border CornerRadius="8" Background="{Binding BackgroundColor}" Padding="16">
         <StackPanel Spacing="8" VerticalAlignment="Center">
