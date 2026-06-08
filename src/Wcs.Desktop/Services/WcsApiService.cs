@@ -1,8 +1,10 @@
-using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
+using System.Net.Http.Json;
 using Wcs.Core.Recovery;
 using Wcs.Core.StateCenter.Models;
 using Wcs.Core.TaskEngine.Context;
+using Wcs.Desktop.Models;
+using Wcs.Entity;
 
 namespace Wcs.Desktop.Services;
 
@@ -71,5 +73,12 @@ public class WcsApiService : IWcsApiService
         var response = await _http.PostAsync("/api/system/recover", null, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<RecoveryResult>(ct);
+    }
+
+    public async Task<List<MenuItemDto>> GetMenusAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/Menu", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<MenuItemDto>>(ct);
     }
 }

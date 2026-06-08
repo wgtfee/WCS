@@ -1,21 +1,30 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace Wcs.Desktop;
+namespace Wcs.Desktop.ViewModels;
 
 public class ViewLocator : IDataTemplate
 {
+    private readonly IServiceProvider _serviceProvider;
+
+    public ViewLocator(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
+
     public Control? Build(object? param)
     {
         if (param is null) return null;
 
         var name = param.GetType().FullName!.Replace("ViewModel", "View");
         var type = Type.GetType(name);
-
+        Console.WriteLine(type == null? "没找到": "找到了");
         if (type is not null)
         {
-            return (Control)Activator.CreateInstance(type)!;
+            // 使用 DI 容器创建 View（支持有参构造函数）
+            return (Control)ActivatorUtilities.CreateInstance(_serviceProvider, type);
         }
 
         return new TextBlock { Text = $"View not found: {name}" };

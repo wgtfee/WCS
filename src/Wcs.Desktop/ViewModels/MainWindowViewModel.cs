@@ -1,90 +1,154 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Collections.ObjectModel;
+using Wcs.Desktop.Controls;
+using Wcs.Desktop.Interface;
 using Wcs.Desktop.Services;
+using Wcs.Entity;
+using Wcs.Service;
 
 namespace Wcs.Desktop.ViewModels;
 
-/// <summary>
-/// Tab 页包装
-/// </summary>
-public class TabItem
-{
-    public string Header { get; init; } = string.Empty;
-    public object Content { get; init; } = null!;
-}
-
-/// <summary>
-/// 主窗口 ViewModel - Tab 导航宿主
-/// </summary>
-public partial class MainWindowViewModel : ObservableObject
+public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
 {
     private readonly IWcsRealtimeService _realtime;
-    private readonly IWcsApiService _api;
-    private readonly IOptions<WcsDesktopOptions> _options;
+    private readonly IServiceProvider _serviceProvider;
 
-    [ObservableProperty] private bool _isConnected;
-    [ObservableProperty] private string _connectionText = "Disconnected";
-    [ObservableProperty] private int _selectedTabIndex;
+    [ObservableProperty]
+    private string _connectionText = "Disconnected";
 
-    public ObservableCollection<TabItem> Tabs { get; } = new();
+    [ObservableProperty]
+    private ClosableTabItem? _selectedTabItem;
+
+    [ObservableProperty]
+    private ObservableCollection<MenuItemDto> _menuItems = new();
+
+    public ObservableCollection<ClosableTabItem> Tabs { get; } = new();
+
+    private ClosableTabItem _homeTab;
 
     public MainWindowViewModel(
         IWcsRealtimeService realtime,
         IWcsApiService api,
         IOptions<WcsDesktopOptions> options,
-        DashboardViewModel dashboard,
-        DeviceListViewModel deviceList,
-        TaskManagementViewModel taskManagement,
-        AlarmPanelViewModel alarmPanel,
-        ObjectTrackingViewModel objectTracking,
-        EventLogViewModel eventLog)
+        IServiceProvider serviceProvider,
+        LoadService loadService,
+        DashboardViewModel dashboard)
     {
         _realtime = realtime;
-        _api = api;
-        _options = options;
+        _serviceProvider = serviceProvider;
+        
 
-        Tabs = new ObservableCollection<TabItem>
-        {
-            new() { Header = "Dashboard", Content = dashboard },
-            new() { Header = "Devices", Content = deviceList },
-            new() { Header = "Tasks", Content = taskManagement },
-            new() { Header = "Alarms", Content = alarmPanel },
-            new() { Header = "Objects", Content = objectTracking },
-            new() { Header = "Event Log", Content = eventLog }
-        };
+        _homeTab = new ClosableTabItem { Header = "Dashboard", Content = dashboard, CanClose = false };
+        Tabs.Add(_homeTab);
+        SelectedTabItem = _homeTab;
 
         _realtime.ConnectionStateChanged += OnConnectionStateChanged;
+        _ = InitializeMenuAsync(api);
     }
 
     public async Task InitializeAsync()
     {
-        var serverUrl = _options.Value.ServerUrl;
         ConnectionText = "Connecting...";
+        await Task.CompletedTask;
+    }
 
+    /// <summary>构建基础菜单（6 个默认页面）</summary>
+    private static List<MenuItemDto> BuildDefaultMenus()
+    {
+        int id = 1;
+        return new List<MenuItemDto>
+        {
+            new() { Id = id++, ParentId = 0, Name = "Dashboard", Url = "/Dashboard" },
+            new() { Id = id++, ParentId = 0, Name = "Devices",   Url = "/Devices" },
+            new() { Id = id++, ParentId = 0, Name = "Tasks",     Url = "/Tasks" },
+            new() { Id = id++, ParentId = 0, Name = "Alarms",    Url = "/Alarms" },
+            new() { Id = id++, ParentId = 0, Name = "Objects",   Url = "/Objects" },
+            new() { Id = id++, ParentId = 0, Name = "Event Log", Url = "/EventLog" },
+        };
+    }
+
+    private async Task InitializeMenuAsync(IWcsApiService api)
+    {
         try
         {
-            await _realtime.ConnectAsync(serverUrl);
+            List<MenuItemDto> defaultMenus = BuildDefaultMenus();
 
-            // Initial data load for all tabs
-            await Task.WhenAll(
-                ((DashboardViewModel)Tabs[0].Content).LoadAsync(),
-                ((DeviceListViewModel)Tabs[1].Content).LoadAsync(),
-                ((TaskManagementViewModel)Tabs[2].Content).LoadAsync(),
-                ((AlarmPanelViewModel)Tabs[3].Content).LoadAsync(),
-                ((ObjectTrackingViewModel)Tabs[4].Content).LoadAsync()
-            );
+            List<MenuItemDto>? dynamicMenus = null;
+            try
+            {
+                dynamicMenus = await api.GetMenusAsync();
+            }
+            catch { }
+
+            // 合并：基础菜单在前，动态菜单在后
+            var all = new List<MenuItemDto>(defaultMenus);
+            if (dynamicMenus != null && dynamicMenus.Count > 0)
+                all.AddRange(dynamicMenus);
+
+            MenuItems = BuildMenuTree(all, 0);
         }
-        catch (Exception ex)
+        catch
         {
-            ConnectionText = $"Connection failed: {ex.Message}";
+            MenuItems = BuildMenuTree(BuildDefaultMenus(), 0);
         }
     }
 
     private void OnConnectionStateChanged(bool connected)
+        => ConnectionText = connected ? "Connected" : "Disconnected";
+
+    private static ObservableCollection<MenuItemDto> BuildMenuTree(List<MenuItemDto> flatList, int parentId)
     {
-        IsConnected = connected;
-        ConnectionText = connected ? "Connected" : "Disconnected";
+        var tree = new ObservableCollection<MenuItemDto>();
+        foreach (var item in flatList.Where(x => x.ParentId == parentId))
+        {
+            item.Children = BuildMenuTree(flatList, item.Id);
+            tree.Add(item);
+        }
+        return tree;
+    }
+
+    public void OpenTab(string title, object content)
+    {
+        var existing = Tabs.FirstOrDefault(x => x.Header == title);
+        if (existing != null) { SelectedTabItem = existing; return; }
+
+        var tab = new ClosableTabItem { Header = title, Content = content, CanClose = true };
+        Tabs.Add(tab);
+        SelectedTabItem = tab;
+    }
+
+    public void CloseTab(ClosableTabItem? tab)
+    {
+        if (tab == null || tab.CanClose == false) return;
+        var idx = Tabs.IndexOf(tab);
+        Tabs.Remove(tab);
+        if (Tabs.Count > 0)
+            SelectedTabItem = idx > 0 ? Tabs[idx - 1] : Tabs[0];
+        else
+        {
+            Tabs.Add(_homeTab);
+            SelectedTabItem = _homeTab;
+        }
+    }
+
+    public async Task OpenPageFromMenu(MenuItemDto? menu)
+    {
+        if (menu == null || string.IsNullOrWhiteSpace(menu.Url)) return;
+
+        object? content = menu.Url switch
+        {
+            "/Dashboard" => (object?)_serviceProvider.GetRequiredService<DashboardViewModel>(),
+            "/Devices"   => _serviceProvider.GetRequiredService<DeviceListViewModel>(),
+            "/Tasks"     => _serviceProvider.GetRequiredService<TaskManagementViewModel>(),
+            "/Alarms"    => _serviceProvider.GetRequiredService<AlarmPanelViewModel>(),
+            "/Objects"   => _serviceProvider.GetRequiredService<ObjectTrackingViewModel>(),
+            "/EventLog"  => _serviceProvider.GetRequiredService<EventLogViewModel>(),
+            _ => null
+        };
+        if (content == null) return;
+        if (content is IAsyncInitializable init) await init.InitializeAsync();
+        OpenTab(menu.Name, content);
     }
 }

@@ -26,6 +26,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Wcs.Entity\Wcs.Entity.csproj" />
+    <ProjectReference Include="..\..\Wcs.Service\Wcs.Service.csproj" />
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
   </ItemGroup>
 

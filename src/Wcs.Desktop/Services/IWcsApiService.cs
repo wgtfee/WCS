@@ -3,6 +3,8 @@ namespace Wcs.Desktop.Services;
 using Wcs.Core.Recovery;
 using Wcs.Core.StateCenter.Models;
 using Wcs.Core.TaskEngine.Context;
+using Wcs.Desktop.Models;
+using Wcs.Entity;
 
 /// <summary>
 /// REST API 客户端接口
@@ -21,4 +23,6 @@ public interface IWcsApiService
     Task RecoverAlarmAsync(string alarmCode, CancellationToken ct = default);
     Task<List<ObjectState>> GetObjectsAsync(CancellationToken ct = default);
     Task<RecoveryResult?> RecoverAsync(CancellationToken ct = default);
+
+    Task<List<MenuItemDto>> GetMenusAsync(CancellationToken ct = default);
 }

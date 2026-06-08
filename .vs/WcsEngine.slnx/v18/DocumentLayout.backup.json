@@ -3,64 +3,8 @@
   "WorkspaceRootPath": "I:\\code\\IOT\\WCS ENG\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\taskmanagementview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\taskmanagementview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\controls\\connectionbar.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\controls\\connectionbar.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\converters\\booltovisibilityconverter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\converters\\booltovisibilityconverter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\controls\\connectionbar.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\controls\\connectionbar.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\controls\\overviewcard.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\controls\\overviewcard.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\controls\\overviewcard.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\controls\\overviewcard.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\dashboardview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\dashboardview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\viewmodels\\taskmanagementviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\viewmodels\\taskmanagementviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\objecttrackingview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\objecttrackingview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\eventlogview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\eventlogview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\devicelistview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\devicelistview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\alarmpanelview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\alarmpanelview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\viewmodels\\mainwindowviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\viewmodels\\mainwindowviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\app.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{16810E3D-F07B-43CE-A14C-0E8D5684D7F5}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\app.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{D618F1D1-49D0-DDD0-0668-522CE29F753F}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|i:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
+      "RelativeMoniker": "D:0:0:{D618F1D1-49D0-DDD0-0668-522CE29F753F}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
     }
   ],
   "DocumentGroupContainers": [
@@ -70,7 +14,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 29,
+          "SelectedChildIndex": 23,
           "Children": [
             {
               "$type": "Bookmark",
@@ -166,188 +110,14 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "BoolToVisibilityConverter.cs",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Converters\\BoolToVisibilityConverter.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Converters\\BoolToVisibilityConverter.cs",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Converters\\BoolToVisibilityConverter.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Converters\\BoolToVisibilityConverter.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-08T02:13:30.358Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "ConnectionBar.axaml.cs",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Controls\\ConnectionBar.axaml.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Controls\\ConnectionBar.axaml.cs",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Controls\\ConnectionBar.axaml.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Controls\\ConnectionBar.axaml.cs",
-              "ViewState": "AgIAAAYAAAAAAAAAAAAAAAQAAAAPAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-08T02:13:06.717Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "ConnectionBar.axaml",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Controls\\ConnectionBar.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Controls\\ConnectionBar.axaml",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Controls\\ConnectionBar.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Controls\\ConnectionBar.axaml",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T02:12:01.213Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "OverviewCard.axaml.cs",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Controls\\OverviewCard.axaml.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Controls\\OverviewCard.axaml.cs",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Controls\\OverviewCard.axaml.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Controls\\OverviewCard.axaml.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-08T02:10:25.416Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "OverviewCard.axaml",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Controls\\OverviewCard.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Controls\\OverviewCard.axaml",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Controls\\OverviewCard.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Controls\\OverviewCard.axaml",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T02:08:56.568Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 7,
-              "Title": "TaskManagementViewModel.cs",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\ViewModels\\TaskManagementViewModel.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\ViewModels\\TaskManagementViewModel.cs",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\ViewModels\\TaskManagementViewModel.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\ViewModels\\TaskManagementViewModel.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-08T02:08:39.312Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "TaskManagementView.axaml",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\TaskManagementView.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\TaskManagementView.axaml",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\TaskManagementView.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\TaskManagementView.axaml",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T02:07:25.632Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "ObjectTrackingView.axaml",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\ObjectTrackingView.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\ObjectTrackingView.axaml",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\ObjectTrackingView.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\ObjectTrackingView.axaml",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T02:06:53.869Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 9,
-              "Title": "EventLogView.axaml",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\EventLogView.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\EventLogView.axaml",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\EventLogView.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\EventLogView.axaml",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T02:06:33.036Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 10,
-              "Title": "DeviceListView.axaml",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\DeviceListView.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\DeviceListView.axaml",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\DeviceListView.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\DeviceListView.axaml",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T02:06:06.868Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 11,
-              "Title": "AlarmPanelView.axaml",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\AlarmPanelView.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\AlarmPanelView.axaml",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\AlarmPanelView.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\AlarmPanelView.axaml",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T02:04:40.806Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "DashboardView.axaml",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\DashboardView.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\DashboardView.axaml",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\DashboardView.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\DashboardView.axaml",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T02:03:50.773Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 14,
-              "Title": "App.axaml.cs",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\App.axaml.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\App.axaml.cs",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\App.axaml.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\App.axaml.cs",
-              "ViewState": "AgIAABUAAAAAAAAAAAAqwBEAAAAoAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-08T01:59:38.059Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 13,
-              "Title": "MainWindowViewModel.cs",
-              "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\ViewModels\\MainWindowViewModel.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\ViewModels\\MainWindowViewModel.cs",
-              "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\ViewModels\\MainWindowViewModel.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\ViewModels\\MainWindowViewModel.cs",
-              "ViewState": "AgIAAEAAAAAAAAAAAAAqwFoAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-08T01:56:43.023Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 12,
               "Title": "MainWindow.axaml",
               "DocumentMoniker": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml",
               "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\MainWindow.axaml",
               "ToolTip": "I:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml",
               "RelativeToolTip": "src\\Wcs.Desktop\\Views\\MainWindow.axaml",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-08T01:54:25.743Z",
+              "WhenOpened": "2026-06-08T05:24:18.769Z",
               "EditorCaption": ""
             }
           ]

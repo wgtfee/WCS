@@ -1,10 +1,13 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
+using Wcs.Desktop.Interface;
 using Wcs.Desktop.ViewModels;
 using Wcs.Desktop.Views;
+using Wcs.Service;
 
 namespace Wcs.Desktop;
 
@@ -25,13 +28,26 @@ public partial class App : Application
             // Avoid duplicate validations from both Avalonia and CommunityToolkit
             //BindingPlugins.DataValidators.RemoveAt(0);
             // 注册 ViewLocator 到全局 DataTemplates
-            DataTemplates.Add(new ViewLocator());
+            DataTemplates.Add(new ViewLocator(_services!));
 
             var vm = _services!.GetRequiredService<MainWindowViewModel>();
+            //vm.InitializeAsync().GetAwaiter().GetResult();
+
             desktop.MainWindow = new MainWindow
             {
                 DataContext = vm
             };
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await vm.InitializeAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+                }
+            });
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -41,6 +57,7 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
         services.AddWcsDesktop();
+        services.AddSingleton<LoadService>();
         return services.BuildServiceProvider();
     }
 }

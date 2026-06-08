@@ -1,6 +1,7 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
+using Wcs.Desktop.Interface;
 using Wcs.Desktop.Models;
 using Wcs.Desktop.Services;
 
@@ -9,7 +10,7 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 物体追踪 ViewModel
 /// </summary>
-public partial class ObjectTrackingViewModel : ObservableObject
+public partial class ObjectTrackingViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
     private readonly IWcsRealtimeService _realtime;
@@ -34,7 +35,10 @@ public partial class ObjectTrackingViewModel : ObservableObject
         };
     }
 
-    [RelayCommand]
+    public async Task InitializeAsync()
+    {
+        await LoadAsync();
+    }
     public async Task LoadAsync()
     {
         IsLoading = true;

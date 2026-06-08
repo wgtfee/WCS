@@ -1,0 +1,74 @@
+<UserControl
+    x:Class="Wcs.Desktop.Controls.ClosableTabControl"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="clr-namespace:Wcs.Desktop.Controls"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Tab Header -->
+
+        <ScrollViewer Grid.Row="0"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled">
+
+            <ItemsControl ItemsSource="{Binding Tabs, RelativeSource={RelativeSource AncestorType=local:ClosableTabControl}}">
+
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+
+                <ItemsControl.ItemTemplate>
+
+                    <DataTemplate x:DataType="local:ClosableTabItem">
+
+                        <Border Padding="10,5"
+                                Margin="2"
+                                BorderThickness="1">
+
+                            <Grid ColumnDefinitions="*,Auto">
+
+                                <Button Grid.Column="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Content="{Binding Header}"
+                                        Command="{Binding SelectTabCommand,
+                                                  RelativeSource={RelativeSource AncestorType=local:ClosableTabControl}}"
+                                        CommandParameter="{Binding}" />
+
+                                <Button Grid.Column="1"
+                                        Width="20"
+                                        Height="20"
+                                        Margin="5,0,0,0"
+                                        Content="×"
+                                        IsVisible="{Binding CanClose}"
+                                        Command="{Binding CloseTabCommand,
+                                                  RelativeSource={RelativeSource AncestorType=local:ClosableTabControl}}"
+                                        CommandParameter="{Binding}" />
+
+                            </Grid>
+
+                        </Border>
+
+                    </DataTemplate>
+
+                </ItemsControl.ItemTemplate>
+
+            </ItemsControl>
+
+        </ScrollViewer>
+
+        <!-- Content -->
+
+        <ContentPresenter Grid.Row="1"
+                          Content="{Binding SelectedTab.Content,
+                                    RelativeSource={RelativeSource AncestorType=local:ClosableTabControl}}" />
+
+    </Grid>
+
+</UserControl>

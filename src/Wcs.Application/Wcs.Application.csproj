@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Wcs.Service\Wcs.Service.csproj" />
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
   </ItemGroup>
 

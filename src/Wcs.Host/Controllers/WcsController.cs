@@ -4,14 +4,21 @@ using Microsoft.AspNetCore.Mvc;
 using Wcs.Application.Services;
 using Wcs.Core.StateCenter.Models;
 using Wcs.Core.TaskEngine.Context;
+using Wcs.Entity;
+using Wcs.Service;
 
 [ApiController]
 [Route("api")]
 public class WcsController : ControllerBase
 {
     private readonly WcsApplicationService _wcs;
+    private readonly LoadService _loadService;
 
-    public WcsController(WcsApplicationService wcs) => _wcs = wcs;
+    public WcsController(WcsApplicationService wcs, LoadService loadService)
+    {
+        _wcs = wcs;
+        _loadService = loadService;
+    }
 
     [HttpGet("overview")]
     public ActionResult<SystemOverview> GetOverview() => Ok(_wcs.GetOverview());
@@ -108,6 +115,29 @@ public class WcsController : ControllerBase
         var result = await _wcs.RecoverAsync(ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// 获取所有菜单（树形原始数据）
+    /// </summary>
+    [HttpGet]
+    public ActionResult<List<MenuItemDto>> GetAllMenus()
+    {
+        var menus = _loadService.GetStaticMenus();
+        return Ok(menus);
+    }
+
+    /// <summary>
+    /// 根据权限/角色获取菜单（示例）
+    /// </summary>
+    [HttpGet("byRole/{roleId}")]
+    public ActionResult<List<MenuItemDto>> GetMenusByRole(int roleId)
+    {
+        // 实际项目中从数据库根据 roleId 过滤
+        var allMenus = _loadService.GetStaticMenus();
+        // 示例：此处模拟过滤
+        return Ok(allMenus);
+    }
+
 }
 
 public record CreateTaskRequest(

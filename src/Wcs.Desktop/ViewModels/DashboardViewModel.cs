@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Wcs.Desktop.Interface;
 using Wcs.Desktop.Services;
 
 namespace Wcs.Desktop.ViewModels;
@@ -7,7 +8,7 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 仪表盘 ViewModel - 系统概览卡片
 /// </summary>
-public partial class DashboardViewModel : ObservableObject
+public partial class DashboardViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
     private readonly IWcsRealtimeService _realtime;
@@ -28,7 +29,10 @@ public partial class DashboardViewModel : ObservableObject
         _realtime.AlarmEvent += _ => RefreshCounts();
     }
 
-    [RelayCommand]
+    public async Task InitializeAsync()
+    {
+        await LoadAsync();
+    }
     public async Task LoadAsync()
     {
         try

@@ -1,6 +1,7 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
+using Wcs.Desktop.Interface;
 using Wcs.Desktop.Models;
 using Wcs.Desktop.Services;
 
@@ -9,7 +10,7 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 报警面板 ViewModel
 /// </summary>
-public partial class AlarmPanelViewModel : ObservableObject
+public partial class AlarmPanelViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
     private readonly IWcsRealtimeService _realtime;
@@ -40,7 +41,11 @@ public partial class AlarmPanelViewModel : ObservableObject
         };
     }
 
-    [RelayCommand]
+    public async Task InitializeAsync()
+    {
+        await LoadAsync();
+    }
+
     public async Task LoadAsync()
     {
         IsLoading = true;

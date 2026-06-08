@@ -17,6 +17,7 @@ using Wcs.Core.TaskEngine.Scheduler;
 using Microsoft.Extensions.DependencyInjection;
 using Wcs.Core.StateCenter.Implementation;
 using Wcs.Core.EventBus.Events;
+using Wcs.Service;
 
 public static class DependencyInjection
 {
@@ -63,6 +64,7 @@ public static class DependencyInjection
 
         // Application service
         services.AddSingleton<WcsApplicationService>();
+        services.AddSingleton<LoadService>();
 
         // Register EventBus subscriptions
         services.AddHostedService<EventBusSubscriberHostedService>();

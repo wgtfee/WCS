@@ -1,6 +1,7 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
+using Wcs.Desktop.Interface;
 using Wcs.Desktop.Models;
 using Wcs.Desktop.Services;
 
@@ -9,7 +10,7 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 设备列表 ViewModel
 /// </summary>
-public partial class DeviceListViewModel : ObservableObject
+public partial class DeviceListViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
     private readonly IWcsRealtimeService _realtime;
@@ -36,7 +37,10 @@ public partial class DeviceListViewModel : ObservableObject
         };
     }
 
-    [RelayCommand]
+    public async Task InitializeAsync()
+    {
+        await LoadAsync();
+    }
     public async Task LoadAsync()
     {
         IsLoading = true;

@@ -1,44 +1,46 @@
-<Window xmlns="https://github.com/avaloniaui"
+<Window x:Class="Wcs.Desktop.Views.MainWindow"
+        xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Wcs.Desktop.ViewModels"
+        xmlns:Vc="using:Wcs.Entity"
         xmlns:ctl="using:Wcs.Desktop.Controls"
-        x:Class="Wcs.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="WCS Runtime Engine - Desktop Monitor"
+        Title="WCS Runtime Engine"
         Width="1280" Height="800"
         Background="#1E1E1E"
         Foreground="White"
         WindowStartupLocation="CenterScreen">
-    <Grid RowDefinitions="Auto,*,Auto">
-        <!-- Header -->
-        <Border Background="#2A2A2A" Padding="16,8">
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Text="WCS Runtime Engine Monitor" FontSize="20" FontWeight="Bold"
-                           VerticalAlignment="Center" />
-                <Border Grid.Column="1" CornerRadius="4" Padding="8,4"
-                        Background="#333333">
-                    <TextBlock Text="{Binding ConnectionText}" FontSize="12" Foreground="#CCCCCC" />
-                </Border>
-            </Grid>
+
+    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="240,*">
+
+        <!-- 顶部 Header -->
+        <Border Grid.ColumnSpan="2" Background="#2A2A2A" Padding="16,8">
+            <TextBlock Text="{Binding ConnectionText}" FontSize="12" Foreground="#CCCCCC"/>
         </Border>
 
-        <!-- Tab Content -->
-        <TabControl Grid.Row="1" ItemsSource="{Binding Tabs}"
-                    SelectedIndex="{Binding SelectedTabIndex}"
-                    Background="#1E1E1E">
-            <TabControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:TabItem">
-                    <TextBlock Text="{Binding Header}" Foreground="White" />
-                </DataTemplate>
-            </TabControl.ItemTemplate>
-            <TabControl.ContentTemplate>
-                <DataTemplate x:DataType="vm:TabItem">
-                    <ContentControl Content="{Binding Content}" />
-                </DataTemplate>
-            </TabControl.ContentTemplate>
-        </TabControl>
+        <!-- 左侧菜单 -->
+        <TreeView Grid.Row="1" Grid.Column="0"
+                  ItemsSource="{Binding MenuItems}"
+                  Background="#252525"
+                  BorderThickness="0"
+                  SelectionMode="Single"
+                  SelectionChanged="OnTreeViewSelectionChanged">
+            <TreeView.DataTemplates>
+                <TreeDataTemplate ItemsSource="{Binding Children}" DataType="Vc:MenuItemDto">
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="4">
+                        <TextBlock Text="{Binding Name}" Foreground="White" FontSize="13"/>
+                    </StackPanel>
+                </TreeDataTemplate>
+            </TreeView.DataTemplates>
+        </TreeView>
 
-        <!-- Connection Bar -->
-        <ctl:ConnectionBar x:Name="StatusBar" Grid.Row="2" />
+        <!-- 右侧可关闭标签页 -->
+        <ctl:ClosableTabControl Grid.Row="1" Grid.Column="1"
+                                Tabs="{Binding Tabs}"
+                                SelectedTab="{Binding SelectedTabItem}" />
+
+        <!-- 底部状态栏 -->
+        <ctl:ConnectionBar x:Name="StatusBar" Grid.Row="2" Grid.ColumnSpan="2"/>
+
     </Grid>
 </Window>
