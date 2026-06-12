@@ -1,14 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:Wcs.Desktop.Controls"
-             x:DataType="vm:OverviewCard"
              x:Class="Wcs.Desktop.Controls.OverviewCard"
-
+             x:CompileBindings="False"
              Width="200" Height="120" Margin="8">
-    <Border CornerRadius="8" Background="{Binding BackgroundColor}" Padding="16">
+    <Border x:Name="CardBorder" CornerRadius="8" Padding="16">
         <StackPanel Spacing="8" VerticalAlignment="Center">
-            <TextBlock Text="{Binding Label}" FontSize="14" Foreground="#80FFFFFF" />
-            <TextBlock Text="{Binding Value}" FontSize="36" FontWeight="Bold" Foreground="White" />
+            <TextBlock Text="{Binding Label, RelativeSource={RelativeSource AncestorType=UserControl}}" FontSize="14" Foreground="#80FFFFFF" />
+            <TextBlock Text="{Binding Value, RelativeSource={RelativeSource AncestorType=UserControl}}" FontSize="36" FontWeight="Bold" Foreground="White" />
         </StackPanel>
     </Border>
 </UserControl>

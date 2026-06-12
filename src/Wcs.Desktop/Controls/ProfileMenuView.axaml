@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Wcs.Desktop.Controls.ProfileMenuView"
+             Width="200">
+    <Border Background="{DynamicResource BgSecondary}" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource BorderColor}">
+        <StackPanel Spacing="2" Margin="4">
+
+            <!-- 用户名称 -->
+            <TextBlock Text="Admin" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
+                       FontSize="14" Padding="12,8,12,4"/>
+            <TextBlock Text="系统管理员" Foreground="{DynamicResource TextSecondary}"
+                       FontSize="12" Padding="12,0,12,8"/>
+
+            <Separator Background="{DynamicResource BorderColor}" Margin="8,0"/>
+
+            <!-- 个人信息 -->
+            <Button Content="👤 个人信息"
+                    Background="Transparent" BorderThickness="0"
+                    Foreground="{DynamicResource TextPrimary}" FontSize="13"
+                    Padding="12,8" HorizontalContentAlignment="Left"
+                    Click="OnPersonalInfoClick">
+                <Button.Styles>
+                    <Style Selector="Button:pointerover">
+                        <Setter Property="Background" Value="{DynamicResource TabBg}"/>
+                    </Style>
+                </Button.Styles>
+            </Button>
+
+            <!-- 修改密码 -->
+            <Button Content="🔑 修改密码"
+                    Background="Transparent" BorderThickness="0"
+                    Foreground="{DynamicResource TextPrimary}" FontSize="13"
+                    Padding="12,8" HorizontalContentAlignment="Left"
+                    Click="OnChangePasswordClick">
+                <Button.Styles>
+                    <Style Selector="Button:pointerover">
+                        <Setter Property="Background" Value="{DynamicResource TabBg}"/>
+                    </Style>
+                </Button.Styles>
+            </Button>
+
+            <Separator Background="{DynamicResource BorderColor}" Margin="8,4"/>
+
+            <!-- 主题切换 -->
+            <Button x:Name="ThemeButton"
+                    Background="Transparent" BorderThickness="0"
+                    Content="🎨 浅色主题" Foreground="{DynamicResource TextPrimary}" FontSize="13"
+                    Padding="12,8" HorizontalContentAlignment="Left"
+                    Click="OnThemeToggleClick">
+                <Button.Styles>
+                    <Style Selector="Button:pointerover">
+                        <Setter Property="Background" Value="{DynamicResource TabBg}"/>
+                    </Style>
+                </Button.Styles>
+            </Button>
+
+            <Separator Background="{DynamicResource BorderColor}" Margin="8,4"/>
+
+            <!-- 注销 -->
+            <Button Content="🚪 注销登录"
+                    Background="Transparent" BorderThickness="0"
+                    Foreground="#F44336" FontSize="13"
+                    Padding="12,8" HorizontalContentAlignment="Left"
+                    Click="OnLogoutClick">
+                <Button.Styles>
+                    <Style Selector="Button:pointerover">
+                        <Setter Property="Background" Value="{DynamicResource TabBg}"/>
+                    </Style>
+                </Button.Styles>
+            </Button>
+
+        </StackPanel>
+    </Border>
+</UserControl>

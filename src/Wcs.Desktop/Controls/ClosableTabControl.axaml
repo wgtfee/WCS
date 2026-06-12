@@ -1,5 +1,6 @@
 <UserControl
     x:Class="Wcs.Desktop.Controls.ClosableTabControl"
+    x:Name="PART_Root"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -9,65 +10,85 @@
 
     <Grid RowDefinitions="Auto,*">
 
-        <!-- Tab Header -->
+        <!-- Tab Header bar -->
+        <Border Grid.Row="0" Background="{DynamicResource BgSecondary}" Padding="4,0">
 
-        <ScrollViewer Grid.Row="0"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Disabled">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled">
 
-            <ItemsControl ItemsSource="{Binding Tabs, RelativeSource={RelativeSource AncestorType=local:ClosableTabControl}}">
+                <ItemsControl ItemsSource="{Binding Tabs, ElementName=PART_Root}">
 
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
 
-                <ItemsControl.ItemTemplate>
+                    <ItemsControl.ItemTemplate>
 
-                    <DataTemplate x:DataType="local:ClosableTabItem">
+                        <DataTemplate x:DataType="local:ClosableTabItem">
 
-                        <Border Padding="10,5"
-                                Margin="2"
-                                BorderThickness="1">
+                            <Border CornerRadius="4" Padding="12,6" Margin="2,4"
+                                    BorderThickness="1" BorderBrush="{DynamicResource BorderColor}"
+                                    Background="{DynamicResource TabBg}"
+                                    PointerPressed="OnTabPointerPressed">
 
-                            <Grid ColumnDefinitions="*,Auto">
+                                <Border.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="关闭"
+                                                  IsVisible="{Binding CanClose}"
+                                                  Click="OnCloseMenuItemClick"/>
+                                        <MenuItem Header="关闭左侧页面"
+                                                  Click="OnCloseLeftMenuItemClick"/>
+                                        <MenuItem Header="关闭右侧页面"
+                                                  Click="OnCloseRightMenuItemClick"/>
+                                        <Separator/>
+                                        <MenuItem Header="关闭全部页面"
+                                                  Click="OnCloseAllMenuItemClick"/>
+                                        <MenuItem Header="关闭其他页面"
+                                                  Click="OnCloseAllButThisMenuItemClick"/>
+                                    </ContextMenu>
+                                </Border.ContextMenu>
 
-                                <Button Grid.Column="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Content="{Binding Header}"
-                                        Command="{Binding SelectTabCommand,
-                                                  RelativeSource={RelativeSource AncestorType=local:ClosableTabControl}}"
-                                        CommandParameter="{Binding}" />
+                                <Grid ColumnDefinitions="*,Auto">
 
-                                <Button Grid.Column="1"
-                                        Width="20"
-                                        Height="20"
-                                        Margin="5,0,0,0"
-                                        Content="×"
-                                        IsVisible="{Binding CanClose}"
-                                        Command="{Binding CloseTabCommand,
-                                                  RelativeSource={RelativeSource AncestorType=local:ClosableTabControl}}"
-                                        CommandParameter="{Binding}" />
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Header}"
+                                               Foreground="{DynamicResource TextPrimary}"
+                                               FontSize="13"
+                                               VerticalAlignment="Center"/>
 
-                            </Grid>
+                                    <Button Grid.Column="1"
+                                            Width="26"
+                                            Height="22"
+                                            Margin="6,0,-6,0"
+                                            Padding="4,1"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Foreground="{DynamicResource TextSecondary}"
+                                            Content="✕"
+                                            FontSize="11"
+                                            IsVisible="{Binding CanClose}"
+                                            Click="OnCloseButtonClick" />
 
-                        </Border>
+                                </Grid>
 
-                    </DataTemplate>
+                            </Border>
 
-                </ItemsControl.ItemTemplate>
+                        </DataTemplate>
 
-            </ItemsControl>
+                    </ItemsControl.ItemTemplate>
 
-        </ScrollViewer>
+                </ItemsControl>
+
+            </ScrollViewer>
+
+        </Border>
 
         <!-- Content -->
-
-        <ContentPresenter Grid.Row="1"
-                          Content="{Binding SelectedTab.Content,
-                                    RelativeSource={RelativeSource AncestorType=local:ClosableTabControl}}" />
+        <Border Grid.Row="1" Background="{DynamicResource BgPrimary}">
+            <ContentPresenter Content="{Binding SelectedTab.Content, ElementName=PART_Root}" />
+        </Border>
 
     </Grid>
 

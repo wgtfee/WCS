@@ -76,9 +76,5 @@ public class WcsApiService : IWcsApiService
     }
 
     public async Task<List<MenuItemDto>> GetMenusAsync(CancellationToken ct = default)
-    {
-        var response = await _http.PostAsync("/api/Menu", null, ct);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<List<MenuItemDto>>(ct);
-    }
+        => await _http.GetFromJsonAsync<List<MenuItemDto>>("/api/menus", ct) ?? [];
 }

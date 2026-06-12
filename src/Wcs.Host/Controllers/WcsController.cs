@@ -119,7 +119,7 @@ public class WcsController : ControllerBase
     /// <summary>
     /// 获取所有菜单（树形原始数据）
     /// </summary>
-    [HttpGet]
+    [HttpGet("menus")]
     public ActionResult<List<MenuItemDto>> GetAllMenus()
     {
         var menus = _loadService.GetStaticMenus();

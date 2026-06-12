@@ -12,4 +12,7 @@ public partial class ClosableTabItem : ObservableObject
 
     [ObservableProperty]
     private bool _canClose = true;
+
+    [ObservableProperty]
+    private bool _isSelected;
 }

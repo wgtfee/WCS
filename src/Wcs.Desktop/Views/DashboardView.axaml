@@ -4,10 +4,10 @@
              xmlns:ctl="using:Wcs.Desktop.Controls"
              x:Class="Wcs.Desktop.Views.DashboardView"
              x:DataType="vm:DashboardViewModel"
-             Background="#1E1E1E">
+             Background="{DynamicResource BgPrimary}">
     <ScrollViewer Padding="24">
         <StackPanel Spacing="16">
-            <TextBlock Text="System Overview" FontSize="24" FontWeight="Bold" Foreground="White" />
+            <TextBlock Text="System Overview" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" />
 
             <!-- Summary Cards -->
             <WrapPanel>
@@ -24,9 +24,9 @@
             </WrapPanel>
 
             <!-- Quick Actions -->
-            <Border Background="#2A2A2A" CornerRadius="8" Padding="16" Margin="0,16,0,0">
+            <Border Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="16" Margin="0,16,0,0">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="Quick Actions" FontSize="18" FontWeight="Bold" Foreground="White" />
+                    <TextBlock Text="Quick Actions" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                     </StackPanel>
                 </StackPanel>

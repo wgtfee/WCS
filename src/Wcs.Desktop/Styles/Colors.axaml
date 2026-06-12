@@ -1,8 +1,11 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Dark theme palette -->
+    <!-- Dark theme palette (default) -->
     <Color x:Key="BgPrimary">#1E1E1E</Color>
     <Color x:Key="BgSecondary">#2A2A2A</Color>
+    <Color x:Key="BgSidebar">#252525</Color>
+    <Color x:Key="BgStatusBar">#1A1A1A</Color>
+    <Color x:Key="TabBg">#3A3A3A</Color>
     <Color x:Key="BgCard">#333333</Color>
     <Color x:Key="TextPrimary">#FFFFFF</Color>
     <Color x:Key="TextSecondary">#9E9E9E</Color>

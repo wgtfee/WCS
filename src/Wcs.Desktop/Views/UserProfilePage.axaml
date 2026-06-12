@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Wcs.Desktop.Views.UserProfilePage"
+             Background="#1E1E1E">
+    <Border Padding="32">
+        <StackPanel Spacing="16">
+            <TextBlock Text="个人信息" FontSize="22" FontWeight="Bold" Foreground="White"/>
+
+            <Border Background="#2A2A2A" CornerRadius="8" Padding="24">
+                <StackPanel Spacing="14">
+                    <Grid ColumnDefinitions="100,*">
+                        <TextBlock Text="用户名:" Foreground="#9E9E9E" FontSize="14"/>
+                        <TextBlock Grid.Column="1" Text="Admin" Foreground="White" FontSize="14"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="100,*">
+                        <TextBlock Text="角色:" Foreground="#9E9E9E" FontSize="14"/>
+                        <TextBlock Grid.Column="1" Text="系统管理员" Foreground="White" FontSize="14"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="100,*">
+                        <TextBlock Text="邮箱:" Foreground="#9E9E9E" FontSize="14"/>
+                        <TextBlock Grid.Column="1" Text="admin@wcs.local" Foreground="White" FontSize="14"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="100,*">
+                        <TextBlock Text="上次登录:" Foreground="#9E9E9E" FontSize="14"/>
+                        <TextBlock Grid.Column="1" Text="2026-06-12 08:30:00" Foreground="White" FontSize="14"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

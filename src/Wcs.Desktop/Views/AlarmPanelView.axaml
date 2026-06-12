@@ -4,33 +4,34 @@
              xmlns:vm="using:Wcs.Desktop.ViewModels"
              x:Class="Wcs.Desktop.Views.AlarmPanelView"
              x:DataType="vm:AlarmPanelViewModel"
-             Background="#1E1E1E">
+             Background="{DynamicResource BgPrimary}">
     <UserControl.Resources>
         <conv:StatusToColorConverter x:Key="StatusToColor" />
     </UserControl.Resources>
 
     <DockPanel Margin="16">
         <!-- Toolbar -->
-        <Border DockPanel.Dock="Top" Background="#2A2A2A" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Text="Active Alarms" FontSize="20" FontWeight="Bold" Foreground="White"
+                <TextBlock Text="Active Alarms" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
                            VerticalAlignment="Center" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                     <Button Content="Refresh" Command="{Binding RefreshCommand}"
-                            Background="#1565C0" Foreground="White" />
+                            Background="#555555" Foreground="White"
+                            BorderThickness="0" CornerRadius="4"/>
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Alarm List Header -->
-        <Border DockPanel.Dock="Top" Background="#333333" CornerRadius="4,4,0,0" Padding="8,6">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" CornerRadius="4,4,0,0" Padding="8,6">
             <Grid ColumnDefinitions="*,0.7*,2*,0.7*,1.5*,1.5*">
-                <TextBlock Text="Code" Foreground="#999" FontWeight="Bold" />
-                <TextBlock Grid.Column="1" Text="Level" Foreground="#999" FontWeight="Bold" />
-                <TextBlock Grid.Column="2" Text="Message" Foreground="#999" FontWeight="Bold" />
-                <TextBlock Grid.Column="3" Text="Status" Foreground="#999" FontWeight="Bold" />
-                <TextBlock Grid.Column="4" Text="Occur Time" Foreground="#999" FontWeight="Bold" />
-                <TextBlock Grid.Column="5" Text="Actions" Foreground="#999" FontWeight="Bold" />
+                <TextBlock Text="Code" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" />
+                <TextBlock Grid.Column="1" Text="Level" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" />
+                <TextBlock Grid.Column="2" Text="Message" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" />
+                <TextBlock Grid.Column="3" Text="Status" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" />
+                <TextBlock Grid.Column="4" Text="Occur Time" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" />
+                <TextBlock Grid.Column="5" Text="Actions" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" />
             </Grid>
         </Border>
 
@@ -38,23 +39,25 @@
             <ItemsControl ItemsSource="{Binding Alarms}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Padding="8,6" BorderBrush="#404040" BorderThickness="0,0,0,1">
+                        <Border Padding="8,6" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
                             <Grid ColumnDefinitions="*,0.7*,2*,0.7*,1.5*,1.5*">
-                                <TextBlock Text="{Binding AlarmCode}" Foreground="White" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding AlarmCode}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1" Text="{Binding Level}" Foreground="{Binding Level, Converter={StaticResource StatusToColor}}"
                                            FontWeight="Bold" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2" Text="{Binding Message}" Foreground="#CCC" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="3" Text="{Binding Status}" Foreground="#CCC" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="4" Text="{Binding OccurTime}" Foreground="#CCC" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Message}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="3" Text="{Binding Status}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="4" Text="{Binding OccurTime}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
                                 <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                     <Button Content="Ack"
                                             Command="{Binding $parent[ItemsControl].DataContext.AckAlarmCommand}"
                                             CommandParameter="{Binding AlarmId}"
-                                            Background="#E65100" Foreground="White" />
+                                            Background="#E65100" Foreground="White"
+                                            BorderThickness="0" CornerRadius="4"/>
                                     <Button Content="Recover"
                                             Command="{Binding $parent[ItemsControl].DataContext.RecoverAlarmCommand}"
                                             CommandParameter="{Binding AlarmCode}"
-                                            Background="#2E7D32" Foreground="White" />
+                                            Background="#2E7D32" Foreground="White"
+                                            BorderThickness="0" CornerRadius="4"/>
                                 </StackPanel>
                             </Grid>
                         </Border>

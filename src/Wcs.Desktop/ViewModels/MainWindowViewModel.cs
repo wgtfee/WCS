@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Collections.ObjectModel;
@@ -15,6 +16,8 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     private readonly IWcsRealtimeService _realtime;
     private readonly IServiceProvider _serviceProvider;
 
+   private readonly LoadService _loadService;
+
     [ObservableProperty]
     private string _connectionText = "Disconnected";
 
@@ -23,6 +26,8 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
 
     [ObservableProperty]
     private ObservableCollection<MenuItemDto> _menuItems = new();
+
+    public NotificationCenterViewModel NotificationCenter { get; } = new();
 
     public ObservableCollection<ClosableTabItem> Tabs { get; } = new();
 
@@ -38,9 +43,8 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     {
         _realtime = realtime;
         _serviceProvider = serviceProvider;
-        
-
-        _homeTab = new ClosableTabItem { Header = "Dashboard", Content = dashboard, CanClose = false };
+        _loadService = loadService;
+        _homeTab = new ClosableTabItem { Header = "Dashboard", Content = dashboard, CanClose = false, IsSelected = true };
         Tabs.Add(_homeTab);
         SelectedTabItem = _homeTab;
 
@@ -54,10 +58,10 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         await Task.CompletedTask;
     }
 
-    /// <summary>构建基础菜单（6 个默认页面）</summary>
+    /// <summary>构建基础菜单（6 个默认页面），Id 偏移 1000 避免与 API 菜单冲突</summary>
     private static List<MenuItemDto> BuildDefaultMenus()
     {
-        int id = 1;
+        int id = 1001;
         return new List<MenuItemDto>
         {
             new() { Id = id++, ParentId = 0, Name = "Dashboard", Url = "/Dashboard" },
@@ -73,20 +77,20 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     {
         try
         {
-            List<MenuItemDto> defaultMenus = BuildDefaultMenus();
-
-            List<MenuItemDto>? dynamicMenus = null;
+            List<MenuItemDto>? menus = null;
             try
             {
-                dynamicMenus = await api.GetMenusAsync();
+                menus = await api.GetMenusAsync();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Menu] API exception: {ex.Message}");
+            }
 
-            // 合并：基础菜单在前，动态菜单在后
-            var all = new List<MenuItemDto>(defaultMenus);
-            if (dynamicMenus != null && dynamicMenus.Count > 0)
-                all.AddRange(dynamicMenus);
-
+            // 合并：默认菜单在后，API 动态菜单在前
+            var all = BuildDefaultMenus();
+            if (menus != null && menus.Count > 0)
+                all.InsertRange(0, menus);
             MenuItems = BuildMenuTree(all, 0);
         }
         catch

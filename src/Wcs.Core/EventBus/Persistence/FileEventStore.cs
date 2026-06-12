@@ -14,6 +14,7 @@ public class FileEventStore : IEventStore, IDisposable
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ConcurrentQueue<string> _buffer = new();
     private readonly SemaphoreSlim _flushSignal = new(0);
+    private readonly SemaphoreSlim _fileLock = new(1, 1);
     private readonly Timer _flushTimer;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _flushTask;
@@ -77,10 +78,28 @@ public class FileEventStore : IEventStore, IDisposable
             .ToList();
 
         var events = new List<IEvent>();
+        var currentFile = GetCurrentFilePath();
         foreach (var file in files)
         {
             if (events.Count >= count) break;
-            var lines = await File.ReadAllLinesAsync(file, ct);
+
+            string[] lines;
+            if (string.Equals(file, currentFile, StringComparison.OrdinalIgnoreCase))
+            {
+                // 当前文件可能正在写入，加锁读取
+                await _fileLock.WaitAsync(ct);
+                try
+                {
+                    try { lines = await File.ReadAllLinesAsync(file, ct); }
+                    catch (IOException) { await Task.Delay(100, ct); lines = await File.ReadAllLinesAsync(file, ct); }
+                }
+                finally { _fileLock.Release(); }
+            }
+            else
+            {
+                lines = await File.ReadAllLinesAsync(file, ct);
+            }
+
             for (int i = lines.Length - 1; i >= 0; i--)
             {
                 if (events.Count >= count) break;
@@ -174,7 +193,21 @@ public class FileEventStore : IEventStore, IDisposable
         Interlocked.Add(ref _pendingCount, -batch.Count);
 
         var filePath = GetCurrentFilePath();
-        await File.AppendAllLinesAsync(filePath, batch, ct);
+        await _fileLock.WaitAsync(ct);
+        try
+        {
+            await File.AppendAllLinesAsync(filePath, batch, ct);
+        }
+        catch (IOException)
+        {
+            // 并发写入冲突时退避重试 (跨进程)
+            await Task.Delay(100, ct);
+            await File.AppendAllLinesAsync(filePath, batch, ct);
+        }
+        finally
+        {
+            _fileLock.Release();
+        }
     }
 
     /// <summary>
@@ -194,12 +227,31 @@ public class FileEventStore : IEventStore, IDisposable
     /// </summary>
     private void FlushPendingSync()
     {
+        var batch = new List<string>();
         while (_buffer.TryDequeue(out var line))
-        {
-            var filePath = GetCurrentFilePath();
-            File.AppendAllText(filePath, line + Environment.NewLine);
-        }
+            batch.Add(line);
+
+        if (batch.Count == 0) return;
         _pendingCount = 0;
+
+        var filePath = GetCurrentFilePath();
+        _fileLock.Wait();
+        try
+        {
+            try
+            {
+                File.AppendAllLines(filePath, batch);
+            }
+            catch (IOException)
+            {
+                Thread.Sleep(100);
+                File.AppendAllLines(filePath, batch);
+            }
+        }
+        finally
+        {
+            _fileLock.Release();
+        }
     }
 
     private async Task<IReadOnlyList<IEvent>> ReadEventsInRangeAsync(DateTime from, DateTime to, CancellationToken ct)
@@ -216,7 +268,25 @@ public class FileEventStore : IEventStore, IDisposable
 
             if (!File.Exists(filePath)) continue;
 
-            var lines = await File.ReadAllLinesAsync(filePath, ct);
+            string[] lines;
+            await _fileLock.WaitAsync(ct);
+            try
+            {
+                try
+                {
+                    lines = await File.ReadAllLinesAsync(filePath, ct);
+                }
+                catch (IOException)
+                {
+                    await Task.Delay(100, ct);
+                    lines = await File.ReadAllLinesAsync(filePath, ct);
+                }
+            }
+            finally
+            {
+                _fileLock.Release();
+            }
+
             foreach (var line in lines)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;

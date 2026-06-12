@@ -5,42 +5,124 @@
         xmlns:Vc="using:Wcs.Entity"
         xmlns:ctl="using:Wcs.Desktop.Controls"
         x:DataType="vm:MainWindowViewModel"
+        x:Name="MainWin"
         Title="WCS Runtime Engine"
         Width="1280" Height="800"
-        Background="#1E1E1E"
+        Background="{DynamicResource BgPrimary}"
         Foreground="White"
         WindowStartupLocation="CenterScreen">
 
-    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="240,*">
+    <Window.Styles>
+        <!-- 全局去掉焦点白框 + Flyout 白边框 -->
+        <Style Selector="Button">
+            <Setter Property="FocusAdorner" Value="{x:Null}"/>
+        </Style>
+        <Style Selector="FlyoutPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+    </Window.Styles>
 
-        <!-- 顶部 Header -->
-        <Border Grid.ColumnSpan="2" Background="#2A2A2A" Padding="16,8">
-            <TextBlock Text="{Binding ConnectionText}" FontSize="12" Foreground="#CCCCCC"/>
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- 顶部 Header 
+        <Border Background="{DynamicResource BgSecondary}" Padding="16,8">
+            <TextBlock Text="{Binding ConnectionText}" FontSize="12" Foreground="{DynamicResource TextSecondary}"/>
         </Border>
+-->
+        <!-- 主区域：固定左侧菜单 + 右侧标签页 -->
+        <Grid Grid.Row="1" ColumnDefinitions="240,*">
 
-        <!-- 左侧菜单 -->
-        <TreeView Grid.Row="1" Grid.Column="0"
-                  ItemsSource="{Binding MenuItems}"
-                  Background="#252525"
-                  BorderThickness="0"
-                  SelectionMode="Single"
-                  SelectionChanged="OnTreeViewSelectionChanged">
-            <TreeView.DataTemplates>
-                <TreeDataTemplate ItemsSource="{Binding Children}" DataType="Vc:MenuItemDto">
-                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="4">
-                        <TextBlock Text="{Binding Name}" Foreground="White" FontSize="13"/>
-                    </StackPanel>
-                </TreeDataTemplate>
-            </TreeView.DataTemplates>
-        </TreeView>
+            <!-- 左侧菜单 -->
+            <Border Background="{DynamicResource BgSidebar}" BorderThickness="0,0,1,0" BorderBrush="#333333">
+                <TreeView ItemsSource="{Binding MenuItems}"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          SelectionMode="Single"
+                          SelectionChanged="OnTreeViewSelectionChanged">
+                    <TreeView.DataTemplates>
+                        <TreeDataTemplate ItemsSource="{Binding Children}" DataType="Vc:MenuItemDto">
+                            <Border Padding="12,8" Background="Transparent">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimary}" FontSize="13"/>
+                                </StackPanel>
+                            </Border>
+                        </TreeDataTemplate>
+                    </TreeView.DataTemplates>
+                </TreeView>
+            </Border>
 
-        <!-- 右侧可关闭标签页 -->
-        <ctl:ClosableTabControl Grid.Row="1" Grid.Column="1"
-                                Tabs="{Binding Tabs}"
-                                SelectedTab="{Binding SelectedTabItem}" />
+            <!-- 右侧可关闭标签页 -->
+            <ctl:ClosableTabControl Grid.Column="1"
+                                    Tabs="{Binding Tabs}"
+                                    SelectedTab="{Binding SelectedTabItem}" />
+
+        </Grid>
 
         <!-- 底部状态栏 -->
-        <ctl:ConnectionBar x:Name="StatusBar" Grid.Row="2" Grid.ColumnSpan="2"/>
+        <Border Grid.Row="2" Background="{DynamicResource BgStatusBar}" Padding="8,4" Height="30">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*">
+
+                <!-- 用户信息按钮（放最左侧） -->
+                <Button Grid.Column="0" MinWidth="40" Height="28" Padding="8,0"
+                        Background="Transparent" BorderThickness="0" Focusable="False"
+                        Content="👤" FontSize="14"
+                        ToolTip.Tip="用户菜单">
+                    <Button.Flyout>
+                        <Flyout Placement="Top">
+                            <ctl:ProfileMenuView/>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- 消息通知按钮 -->
+                <Button Grid.Column="1" MinWidth="40" Height="28" Padding="8,0" Margin="2,0"
+                        Background="Transparent" BorderThickness="0" Focusable="False"
+                        Content="🔔" FontSize="14"
+                        ToolTip.Tip="消息中心">
+                    <Button.Flyout>
+                        <Flyout Placement="Top" FlyoutPresenterClasses="NotificationFlyout">
+                            <ctl:NotificationCenterView/>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- 分隔线 -->
+                <Border Grid.Column="2" Width="1" Background="{DynamicResource BorderColor}" Margin="8,2"/>
+
+                <!-- 连接状态 -->
+                <Ellipse Grid.Column="3" x:Name="StatusDot" Width="8" Height="8" Fill="Gray"
+                         VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="4" x:Name="StatusText"
+                           Text="{Binding ConnectionText}"
+                           FontSize="12" Foreground="{DynamicResource TextSecondary}" Margin="6,0,0,0"
+                           VerticalAlignment="Center"/>
+
+            </Grid>
+        </Border>
+
+        <!-- Profile 覆盖层 -->
+        <Border Grid.Row="1" x:Name="ProfileOverlay" IsVisible="False"
+                Background="#80000000"
+                ZIndex="100"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <ctl:UserProfileOverlay x:Name="ProfileOverlayControl"
+                                    CloseRequested="OnProfileOverlayClosed"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- 修改密码覆盖层 -->
+        <Border Grid.Row="1" x:Name="ChangePasswordOverlay" IsVisible="False"
+                Background="#80000000"
+                ZIndex="100"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <ctl:ChangePasswordOverlay x:Name="ChangePasswordOverlayControl"
+                                       CloseRequested="OnChangePasswordOverlayClosed"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+        </Border>
 
     </Grid>
 </Window>

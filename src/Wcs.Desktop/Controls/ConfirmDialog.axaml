@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Wcs.Desktop.Controls.ConfirmDialog"
+        Title="确认"
+        Width="360" Height="180"
+        Background="#2A2A2A"
+        Foreground="White"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False">
+    <Grid RowDefinitions="*,Auto" Margin="20">
+        <TextBlock x:Name="MessageText"
+                   Text="确认此操作？"
+                   FontSize="15"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Center"
+                   TextWrapping="Wrap"
+                   Foreground="White"/>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="16">
+            <Button Content="确认" Width="90" Height="32"
+                    Background="#F44336" Foreground="White"
+                    BorderThickness="0" CornerRadius="4"
+                    Click="OnYesClick"/>
+            <Button Content="取消" Width="90" Height="32"
+                    Background="#555555" Foreground="White"
+                    BorderThickness="0" CornerRadius="4"
+                    Click="OnNoClick"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Wcs.Desktop.Controls.UserProfileOverlay"
+             Width="480" Height="340">
+    <Border Background="{DynamicResource BgSecondary}" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource BorderColor}">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <!-- Header -->
+            <Border Background="{DynamicResource BgCard}" Padding="16,12" CornerRadius="8,8,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="个人信息" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
+                    <Button Grid.Column="1" Width="30" Height="26"
+                            Padding="0"
+                            Background="Transparent" BorderThickness="0"
+                            Content="✕" Foreground="{DynamicResource TextSecondary}" FontSize="13"
+                            Click="OnCloseClick"/>
+                </Grid>
+            </Border>
+
+            <!-- Body -->
+            <StackPanel Grid.Row="1" Spacing="14" Margin="24,20">
+                <Grid ColumnDefinitions="100,*">
+                    <TextBlock Text="用户名:" Foreground="{DynamicResource TextSecondary}" FontSize="14"/>
+                    <TextBlock Grid.Column="1" Text="Admin" Foreground="{DynamicResource TextPrimary}" FontSize="14" FontWeight="Bold"/>
+                </Grid>
+                <Grid ColumnDefinitions="100,*">
+                    <TextBlock Text="角色:" Foreground="{DynamicResource TextSecondary}" FontSize="14"/>
+                    <TextBlock Grid.Column="1" Text="系统管理员" Foreground="{DynamicResource TextPrimary}" FontSize="14"/>
+                </Grid>
+                <Grid ColumnDefinitions="100,*">
+                    <TextBlock Text="邮箱:" Foreground="{DynamicResource TextSecondary}" FontSize="14"/>
+                    <TextBlock Grid.Column="1" Text="admin@wcs.local" Foreground="{DynamicResource TextPrimary}" FontSize="14"/>
+                </Grid>
+                <Grid ColumnDefinitions="100,*">
+                    <TextBlock Text="上次登录:" Foreground="{DynamicResource TextSecondary}" FontSize="14"/>
+                    <TextBlock Grid.Column="1" Text="2026-06-12 08:30:00" Foreground="{DynamicResource TextPrimary}" FontSize="14"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Close button -->
+            <Border Grid.Row="2" Padding="16,10" CornerRadius="0,0,8,8" Background="{DynamicResource BgSidebar}">
+                <Button Content="关闭" Width="100" Height="32"
+                        Background="#555555" Foreground="White"
+                        BorderThickness="0" CornerRadius="4"
+                        HorizontalAlignment="Center"
+                        Click="OnCloseClick"/>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

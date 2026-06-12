@@ -15,9 +15,8 @@ public partial class OverviewCard : UserControl
     public static readonly StyledProperty<string> ValueProperty =
         AvaloniaProperty.Register<OverviewCard, string>(nameof(Value));
 
-    public static readonly StyledProperty<IBrush> BackgroundColorProperty =
-        AvaloniaProperty.Register<OverviewCard, IBrush>(nameof(BackgroundColor),
-            new SolidColorBrush(Color.Parse("#2A2A2A")));
+    public static readonly StyledProperty<string> BackgroundColorProperty =
+        AvaloniaProperty.Register<OverviewCard, string>(nameof(BackgroundColor), "#2A2A2A");
 
     public string Label
     {
@@ -31,7 +30,7 @@ public partial class OverviewCard : UserControl
         set => SetValue(ValueProperty, value);
     }
 
-    public IBrush BackgroundColor
+    public string BackgroundColor
     {
         get => GetValue(BackgroundColorProperty);
         set => SetValue(BackgroundColorProperty, value);
@@ -40,5 +39,12 @@ public partial class OverviewCard : UserControl
     public OverviewCard()
     {
         InitializeComponent();
+        BackgroundColorProperty.Changed.AddClassHandler<OverviewCard>(OnBackgroundColorChanged);
+    }
+
+    private static void OnBackgroundColorChanged(OverviewCard card, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is string hex && !string.IsNullOrEmpty(hex))
+            card.CardBorder.Background = new SolidColorBrush(Color.Parse(hex));
     }
 }

@@ -9,10 +9,10 @@
             "name": ".NET Core Launch (web)",
             "type": "coreclr",
             "request": "launch",
-            "preLaunchTask": "build",
+            "preLaunchTask": "build-host",
             // 如果已更改目标框架，请确保更新程序路径。
             "program": "${workspaceFolder}/src/Wcs.Host/bin/Debug/net8.0/Wcs.Host.dll",
-            "args": [],
+            "args": ["--urls", "http://localhost:5000"],
             "cwd": "${workspaceFolder}/src/Wcs.Host",
             "stopAtEntry": false,
             // 启用在启动 ASP.NET Core 时启动 Web 浏览器。有关详细信息: https://aka.ms/VSCode-CS-LaunchJson-WebBrowser
@@ -34,28 +34,27 @@
             "name": ".NET Core Launch (Desktop)",
             "type": "coreclr",
             "request": "launch",
-            "preLaunchTask": "build",
-            // 如果已更改目标框架，请确保更新程序路径。
+            "preLaunchTask": "build-desktop",
+            "requireExactSource": false,
             "program": "${workspaceFolder}/src/Wcs.Desktop/bin/Debug/net8.0/Wcs.Desktop.dll",
             "args": [],
             "cwd": "${workspaceFolder}/src/Wcs.Desktop",
             "stopAtEntry": false,
-            // 启用在启动 ASP.NET Core 时启动 Web 浏览器。有关详细信息: https://aka.ms/VSCode-CS-LaunchJson-WebBrowser
-            "serverReadyAction": {
-                "action": "openExternally",
-                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
-            },
             "env": {
                 "ASPNETCORE_ENVIRONMENT": "Development"
-            },
-            "sourceFileMap": {
-                "/Views": "${workspaceFolder}/Views"
             }
         },
         {
             "name": ".NET Core Attach",
             "type": "coreclr",
             "request": "attach"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Debug Host + Desktop",
+            "configurations": [".NET Core Launch (web)", ".NET Core Launch (Desktop)"],
+            "stopAll": true
         }
     ]
 }

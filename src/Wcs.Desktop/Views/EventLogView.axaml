@@ -4,19 +4,19 @@
              xmlns:vm="using:Wcs.Desktop.ViewModels"
              x:Class="Wcs.Desktop.Views.EventLogView"
              x:DataType="vm:EventLogViewModel"
-             Background="#1E1E1E">
+             Background="{DynamicResource BgPrimary}">
     <UserControl.Resources>
         <conv:StatusToColorConverter x:Key="StatusToColor" />
     </UserControl.Resources>
 
     <DockPanel Margin="16">
         <!-- Toolbar -->
-        <Border DockPanel.Dock="Top" Background="#2A2A2A" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Text="Event Log" FontSize="20" FontWeight="Bold" Foreground="White"
+                <TextBlock Text="Event Log" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
                            VerticalAlignment="Center" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                    <CheckBox IsChecked="{Binding AutoScroll}" Foreground="White"
+                    <CheckBox IsChecked="{Binding AutoScroll}" Foreground="{DynamicResource TextPrimary}"
                               Content="Auto-scroll" />
                 </StackPanel>
             </Grid>
@@ -24,21 +24,21 @@
 
         <!-- Event Log List -->
         <ListBox ItemsSource="{Binding Entries}"
-                 Background="#1A1A1A" BorderBrush="#404040">
+                 Background="{DynamicResource BgStatusBar}" BorderBrush="{DynamicResource BorderColor}">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Border Padding="6,3" Background="Transparent">
                         <Grid ColumnDefinitions="Auto,Auto,*">
                             <TextBlock Text="{Binding Timestamp, StringFormat='HH:mm:ss'}"
-                                       Foreground="#888888" FontSize="12" />
+                                       Foreground="{DynamicResource TextSecondary}" FontSize="12" />
                             <Border Grid.Column="1" CornerRadius="3" Padding="4,1"
                                     Background="{Binding Level, Converter={StaticResource StatusToColor}, ConverterParameter=bg}"
                                     Opacity="0.3">
                                 <TextBlock Text="{Binding Category}" FontSize="11"
-                                           Foreground="White" FontWeight="Bold" />
+                                           Foreground="{DynamicResource TextPrimary}" FontWeight="Bold" />
                             </Border>
                             <TextBlock Grid.Column="2" Text="{Binding Message}"
-                                       Foreground="#CCCCCC" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondary}" FontSize="12"
                                        TextWrapping="NoWrap" />
                         </Grid>
                     </Border>
