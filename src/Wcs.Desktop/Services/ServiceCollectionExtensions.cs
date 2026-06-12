@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ThemeService>();
 
         // ViewModels
+        services.AddTransient<LoginViewModel>();
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<DashboardViewModel>();
         services.AddTransient<DeviceListViewModel>();

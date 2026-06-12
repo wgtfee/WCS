@@ -1,68 +1,50 @@
 <UserControl x:Class="Wcs.Desktop.Views.LoginView"
-			 xmlns="https://github.com/avaloniaui"
-			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-			 xmlns:vm="using:Wcs.Desktop.ViewModels"
-			 xmlns:prism="http://prismlibrary.com/"
-			 prism:ViewModelLocator.AutoWireViewModel="True"
-			 x:CompileBindings="True"
-			 x:DataType="vm:LoginViewModel"
-			 Background="#F5F5F5">
-	<UserControl.Styles>
-		<Style Selector="Button">
-			<Setter Property="Padding" Value="12,8"/>
-			<Setter Property="Margin" Value="0,5"/>
-			<Setter Property="FontSize" Value="14"/>
-		</Style>
-		<Style Selector="TextBox">
-			<Setter Property="Padding" Value="8"/>
-			<Setter Property="Margin" Value="0,5"/>
-			<Setter Property="FontSize" Value="14"/>
-		</Style>
-		<Style Selector="TextBlock">
-			<Setter Property="FontSize" Value="14"/>
-			<Setter Property="VerticalAlignment" Value="Center"/>
-		</Style>
-	</UserControl.Styles>
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:DataType="vm:LoginViewModel"
+             Background="#F5F5F5">
+    <UserControl.Styles>
+        <Style Selector="Button">
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0,5"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Margin" Value="0,5"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Styles>
 
-	<!-- 左右分栏：左边图片，右边登录表单 -->
+    <!-- 左右分栏：左边图片，右边登录表单 -->
     <Grid ColumnDefinitions="*,1.2*">
-        
+
         <!-- 左边：图片区域 -->
-        <Border Grid.Column="0" 
-                Background="#0078D4">
-            <Grid>
-                <!-- 背景图片 -->
-                <Image Source="/Assets/Images/login.png"
-                       Stretch="UniformToFill"
-                       Opacity="0.3"/>
-                
-                <!-- 叠加内容 -->
-                <StackPanel VerticalAlignment="Center" 
-                            HorizontalAlignment="Center"
-                            Margin="40">
-                    <Image Source="/Assets/Images/login.png"
-                           Width="120"
-                           Height="120"
-                           Margin="0,0,0,20"/>
-                    <TextBlock Text="工业智能管理系统"
-                               FontSize="28"
-                               FontWeight="Bold"
-                               Foreground="White"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="Industrial Intelligence Management System"
-                               FontSize="14"
-                               Foreground="#B0D4F1"
-                               HorizontalAlignment="Center"
-                               Margin="0,10,0,0"/>
-                </StackPanel>
-            </Grid>
+        <Border Grid.Column="0" Background="#0078D4">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="40">
+                <TextBlock Text="工业智能管理系统"
+                           FontSize="28"
+                           FontWeight="Bold"
+                           Foreground="White"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="Industrial Intelligence Management System"
+                           FontSize="14"
+                           Foreground="#B0D4F1"
+                           HorizontalAlignment="Center"
+                           Margin="0,10,0,0"/>
+            </StackPanel>
         </Border>
 
         <!-- 右边：登录表单 -->
-        <Grid Grid.Column="1" 
-              RowDefinitions="Auto,*,Auto" 
+        <Grid Grid.Column="1"
+              RowDefinitions="Auto,*,Auto"
               Margin="50,40">
-            
+
             <!-- 标题 -->
             <TextBlock Grid.Row="0"
                        Text="用户登录"
@@ -74,107 +56,43 @@
 
             <!-- 登录表单 -->
             <StackPanel Grid.Row="1" Spacing="15">
-                
+
                 <!-- 用户名 -->
                 <StackPanel Spacing="5">
-                    <TextBlock Text="用户名" 
-                               Foreground="#666"/>
+                    <TextBlock Text="用户名" Foreground="#666"/>
                     <TextBox Text="{Binding UserName, Mode=TwoWay}"
-                             Watermark="请输入用户名"
+                             PlaceholderText="请输入用户名"
                              IsEnabled="{Binding !IsLoading}">
                         <TextBox.InnerLeftContent>
                             <PathIcon Data="{StaticResource UserIcon}"
-                                      Width="16"
-                                      Height="16"
+                                      Width="16" Height="16"
                                       Margin="8,0,0,0"
                                       Foreground="#999"/>
                         </TextBox.InnerLeftContent>
                     </TextBox>
                 </StackPanel>
 
-                <!-- 密码 - 使用 RevealPasswordButton -->
+                <!-- 密码 -->
                 <StackPanel Spacing="5">
-                    <TextBlock Text="密码" 
-                               Foreground="#666"/>
+                    <TextBlock Text="密码" Foreground="#666"/>
                     <TextBox Text="{Binding Password, Mode=TwoWay}"
                              PasswordChar="*"
-                             Watermark="请输入密码"
+                             PlaceholderText="请输入密码"
                              IsEnabled="{Binding !IsLoading}">
                         <TextBox.InnerLeftContent>
                             <PathIcon Data="{StaticResource LockIcon}"
-                                      Width="16"
-                                      Height="16"
+                                      Width="16" Height="16"
                                       Margin="8,0,0,0"
                                       Foreground="#999"/>
                         </TextBox.InnerLeftContent>
                     </TextBox>
                 </StackPanel>
 
-                <!-- 验证码输入 -->
-<!-- 验证码输入 -->
-<StackPanel Spacing="8">
-    <TextBlock Text="验证码" 
-               FontWeight="SemiBold"
-               Foreground="#374151"/>
-    
-    <!-- 验证码图片 + 输入框 + 刷新按钮 -->
-    <Grid ColumnDefinitions="180,*,150,Auto" 
-          ColumnSpacing="10">
-        
- 
-        
-        <!-- 输入框 -->
-        <TextBox Grid.Column="0" Text="{Binding Captcha, Mode=TwoWay}"
-                 Watermark="请输入验证码"
-                 MaxLength="6"
-                 VerticalContentAlignment="Center"
-                 IsEnabled="{Binding !IsLoading}">
-            <TextBox.InnerLeftContent>
-                <PathIcon Data="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"
-                          Width="18"
-                          Height="18"
-                          Margin="12,0,8,0"
-                          Foreground="#9CA3AF"/>
-            </TextBox.InnerLeftContent>
-        </TextBox>
-               <!-- 验证码图片 -->
-        <Border Grid.Column="1"
-                Height="40"
-                CornerRadius="4"
-                BorderBrush="#D1D5DB"
-                BorderThickness="1"
-                Background="#F9FAFB">
-            <Image Source="{Binding CaptchaImage}"
-                   Stretch="Uniform"
-                   Margin="2"/>
-        </Border>
-        <!-- 刷新按钮 -->
-        <Button Grid.Column="2"
-                Content="刷新"
-                Width="80"
-                Height="40"
-                Command="{Binding RefreshCaptchaCommand}"
-                IsEnabled="{Binding !IsLoading}"
-                Background="#E5E7EB"
-                Foreground="#374151"
-                Padding="8"
-                FontSize="13"
-                CornerRadius="4">
-            <Button.Styles>
-                <Style Selector="Button:pointerover">
-                    <Setter Property="Background" Value="#D1D5DB"/>
-                </Style>
-            </Button.Styles>
-        </Button>
-    </Grid>
-</StackPanel>
-
-
                 <!-- 错误信息 -->
-                <Border Background="#FEE2E2" 
+                <Border Background="#FEE2E2"
                         CornerRadius="4"
                         Padding="10,6"
-                        IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        IsVisible="{Binding HasError}">
                     <TextBlock Text="{Binding ErrorMessage}"
                                Foreground="#DC2626"
                                TextWrapping="Wrap"

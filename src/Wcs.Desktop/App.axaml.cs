@@ -1,10 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
-using Wcs.Desktop.Interface;
 using Wcs.Desktop.ViewModels;
 using Wcs.Desktop.Views;
 using Wcs.Service;
@@ -25,29 +23,46 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Avoid duplicate validations from both Avalonia and CommunityToolkit
-            //BindingPlugins.DataValidators.RemoveAt(0);
-            // 注册 ViewLocator 到全局 DataTemplates
             DataTemplates.Add(new ViewLocator(_services!));
 
-            var vm = _services!.GetRequiredService<MainWindowViewModel>();
-            //vm.InitializeAsync().GetAwaiter().GetResult();
+            var loginVm = _services!.GetRequiredService<LoginViewModel>();
+            var loginView = new LoginView { DataContext = loginVm };
 
-            desktop.MainWindow = new MainWindow
+            var window = new Window
             {
-                DataContext = vm
+                Content = loginView,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                CanResize = false,
+                Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#F5F5F5"))
             };
-            _ = Task.Run(async () =>
+
+            loginVm.LoginSuccess += () =>
             {
-                try
+                var mainVm = _services!.GetRequiredService<MainWindowViewModel>();
+                var mainWin = new MainWindow
                 {
-                    await vm.InitializeAsync();
-                }
-                catch (Exception ex)
+                    DataContext = mainVm
+                };
+
+                desktop.MainWindow = mainWin;
+                mainWin.Show();
+                window.Close();
+
+                _ = Task.Run(async () =>
                 {
-                    Console.WriteLine(ex);
-                }
-            });
+                    try
+                    {
+                        await mainVm.InitializeAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex);
+                    }
+                });
+            };
+
+            desktop.MainWindow = window;
         }
 
         base.OnFrameworkInitializationCompleted();
