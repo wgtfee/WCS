@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Wcs.Desktop.Interface;
 using Microsoft.Extensions.Configuration;
 using Wcs.Desktop.Services;
 using Wcs.Desktop.ViewModels;
@@ -26,6 +27,9 @@ public static class ServiceCollectionExtensions
 
         // SignalR 实时服务
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
+
+        // 数据提供者
+        services.AddSingleton<Wcs.Desktop.Interface.IDataProvider, DataProvider>();
 
         // 主题服务
         services.AddSingleton<ThemeService>();

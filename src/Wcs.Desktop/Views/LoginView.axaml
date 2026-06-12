@@ -88,6 +88,37 @@
                     </TextBox>
                 </StackPanel>
 
+                <!-- 验证码 -->
+                <StackPanel Spacing="5">
+                    <TextBlock Text="验证码" Foreground="#666"/>
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding Captcha, Mode=TwoWay}"
+                                 PlaceholderText="请输入验证码"
+                                 MaxLength="6"
+                                 IsEnabled="{Binding !IsLoading}"/>
+                        <Border Grid.Column="1"
+                                Width="130" Height="40"
+                                CornerRadius="4"
+                                BorderBrush="#D1D5DB"
+                                BorderThickness="1"
+                                Background="#F9FAFB">
+                            <Image Source="{Binding CaptchaImage}"
+                                   Stretch="Uniform"
+                                   Margin="2"/>
+                        </Border>
+                        <Button Grid.Column="2"
+                                Content="刷新"
+                                Width="60" Height="40"
+                                Command="{Binding GenerateCaptchaCommand}"
+                                IsEnabled="{Binding !IsLoading}"
+                                Background="#E5E7EB"
+                                Foreground="#374151"
+                                FontSize="13"
+                                CornerRadius="4"/>
+                    </Grid>
+                </StackPanel>
+
                 <!-- 错误信息 -->
                 <Border Background="#FEE2E2"
                         CornerRadius="4"

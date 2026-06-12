@@ -3,6 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
+using Wcs.Desktop.Interface;
+using Wcs.Desktop.Models;
+using Wcs.Desktop.Services;
 using Wcs.Desktop.ViewModels;
 using Wcs.Desktop.Views;
 using Wcs.Service;
@@ -73,6 +76,8 @@ public partial class App : Application
         var services = new ServiceCollection();
         services.AddWcsDesktop();
         services.AddSingleton<LoadService>();
+        services.AddSingleton<IAuthState, AuthState>();
+                services.AddSingleton<IDataProvider, ApiDataProvider>();
         return services.BuildServiceProvider();
     }
 
