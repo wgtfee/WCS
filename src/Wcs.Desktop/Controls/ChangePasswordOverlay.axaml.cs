@@ -12,7 +12,7 @@ public partial class ChangePasswordOverlay : UserControl
         InitializeComponent();
     }
 
-    private void OnCloseClick(object? sender, RoutedEventArgs e)
+    private void CloseClick(object? sender, RoutedEventArgs e)
     {
         CloseRequested?.Invoke();
     }

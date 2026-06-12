@@ -18,12 +18,10 @@
                    Foreground="White"/>
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="16">
             <Button Content="确认" Width="90" Height="32"
-                    Background="#F44336" Foreground="White"
-                    BorderThickness="0" CornerRadius="4"
+                    Classes="Danger"
                     Click="OnYesClick"/>
             <Button Content="取消" Width="90" Height="32"
-                    Background="#555555" Foreground="White"
-                    BorderThickness="0" CornerRadius="4"
+                    Classes="Secondary"
                     Click="OnNoClick"/>
         </StackPanel>
     </Grid>

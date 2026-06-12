@@ -27,6 +27,9 @@ public static class ServiceCollectionExtensions
         // SignalR 实时服务
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
 
+        // 主题服务
+        services.AddSingleton<ThemeService>();
+
         // ViewModels
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<DashboardViewModel>();

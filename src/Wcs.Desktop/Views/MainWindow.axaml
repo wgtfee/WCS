@@ -22,6 +22,25 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
         </Style>
+        <Style Selector="TreeView">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TreeViewItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        </Style>
+        <Style Selector="TreeViewItem:selected /template/ Border#RootBorder,
+                         TreeViewItem:focus-visible /template/ Border#RootBorder,
+                         TreeViewItem:selected:focus /template/ Border#RootBorder,
+                         TreeViewItem:selected:pointerover /template/ Border#RootBorder">
+            <Setter Property="Background" Value="{DynamicResource TreeViewSelectedBg}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TreeViewItem:selected, TreeViewItem:selected:focus">
+            <Setter Property="Background" Value="{DynamicResource TreeViewSelectedBg}"/>
+        </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="Auto,*,Auto">

@@ -6,6 +6,7 @@
     <Color x:Key="BgSidebar">#252525</Color>
     <Color x:Key="BgStatusBar">#1A1A1A</Color>
     <Color x:Key="TabBg">#3A3A3A</Color>
+    <Color x:Key="TreeViewSelectedBg">#333333</Color>
     <Color x:Key="BgCard">#333333</Color>
     <Color x:Key="TextPrimary">#FFFFFF</Color>
     <Color x:Key="TextSecondary">#9E9E9E</Color>

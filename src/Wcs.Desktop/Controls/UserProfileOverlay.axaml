@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:u="https://irihi.tech/ursa"
              x:Class="Wcs.Desktop.Controls.UserProfileOverlay"
              Width="480" Height="340">
     <Border Background="{DynamicResource BgSecondary}" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource BorderColor}">
@@ -8,11 +9,9 @@
             <Border Background="{DynamicResource BgCard}" Padding="16,12" CornerRadius="8,8,0,0">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Text="个人信息" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
-                    <Button Grid.Column="1" Width="30" Height="26"
-                            Padding="0"
-                            Background="Transparent" BorderThickness="0"
-                            Content="✕" Foreground="{DynamicResource TextSecondary}" FontSize="13"
-                            Click="OnCloseClick"/>
+                    <u:IconButton Grid.Column="1" Width="30" Height="30"
+                                  Content="✕" FontSize="12"
+                                  Click="CloseClick"/>
                 </Grid>
             </Border>
 
@@ -39,10 +38,10 @@
             <!-- Close button -->
             <Border Grid.Row="2" Padding="16,10" CornerRadius="0,0,8,8" Background="{DynamicResource BgSidebar}">
                 <Button Content="关闭" Width="100" Height="32"
-                        Background="#555555" Foreground="White"
-                        BorderThickness="0" CornerRadius="4"
+                        Classes="Secondary"
                         HorizontalAlignment="Center"
-                        Click="OnCloseClick"/>
+                        VerticalContentAlignment="Center"
+                        Click="CloseClick"/>
             </Border>
         </Grid>
     </Border>

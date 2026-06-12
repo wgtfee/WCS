@@ -60,4 +60,12 @@ public partial class App : Application
         services.AddSingleton<LoadService>();
         return services.BuildServiceProvider();
     }
+
+    /// <summary>获取 DI 容器中的服务</summary>
+    public static T? GetService<T>() where T : class
+    {
+        if (Current is App app && app._services != null)
+            return app._services.GetService<T>();
+        return null;
+    }
 }

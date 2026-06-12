@@ -24,8 +24,7 @@
                     <NumericUpDown Grid.Column="5" Value="{Binding NewTaskPriority}"
                                    Minimum="0" Maximum="10" Width="60" />
                     <Button Grid.Column="6" Content="Create" Command="{Binding CreateTaskCommand}"
-                            Background="#2196F3" Foreground="White"
-                            BorderThickness="0" CornerRadius="4"/>
+                            Classes="Primary"/>
                 </Grid>
             </StackPanel>
         </Border>
@@ -62,8 +61,7 @@
                                 <Button Grid.Column="6" Content="Cancel"
                                         Command="{Binding $parent[ItemsControl].DataContext.CancelTaskCommand}"
                                         CommandParameter="{Binding TaskId}"
-                                        Background="#C62828" Foreground="White"
-                                        BorderThickness="0" CornerRadius="4"
+                                        Classes="Danger"
                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
