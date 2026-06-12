@@ -29,7 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
 
         // 数据提供者
-        services.AddSingleton<Wcs.Desktop.Interface.IDataProvider, DataProvider>();
+        services.AddSingleton<Wcs.Desktop.Interface.IDataProvider, ApiDataProvider>();
 
         // 主题服务
         services.AddSingleton<ThemeService>();

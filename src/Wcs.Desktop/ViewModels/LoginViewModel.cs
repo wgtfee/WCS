@@ -59,16 +59,12 @@ public partial class LoginViewModel : ObservableObject
     {
         try
         {
-            // 获取验证码  /api/User/getVierificationCode
             var result = await _dataProvider.getVierificationCode();
-        
+
             if (result != null)
             {
-                // 方式1：如果 DataProvider 已经返回 Bitmap
-        
                 _captchaKey = result.UUID;
                 var imgData = result.Img;
-                // 去掉 data:image/png;base64, 前缀，只保留纯 Base64
                 if (imgData.StartsWith("data:image/png;base64,"))
                 {
                     imgData = imgData.Substring("data:image/png;base64,".Length);
@@ -77,8 +73,7 @@ public partial class LoginViewModel : ObservableObject
                 {
                     imgData = imgData.Substring("data:image/jpeg;base64,".Length);
                 }
-        
-                // Base64 转 Bitmap
+
                 if (!string.IsNullOrEmpty(imgData))
                 {
                     var bytes = Convert.FromBase64String(imgData);
@@ -90,8 +85,6 @@ public partial class LoginViewModel : ObservableObject
             {
                 ErrorMessage =  "获取验证码失败";
             }
-        
-        
         }
         catch (Exception ex)
         {
@@ -120,21 +113,38 @@ public partial class LoginViewModel : ObservableObject
 
         ErrorMessage = string.Empty;
         IsLoading = true;
-
+        bool success = false;
         try
         {
-            await Task.Delay(500);
-
-            if (UserName == "admin" && Password == "123456")
+            var loginData = new LoginInfo
             {
-                _authState.Token = "mock-token-xxx";
-                _authState.UserName = UserName;
-                LoginSuccess?.Invoke();
+                UserName = UserName,
+                Password = Password,
+                VerificationCode = Captcha,
+                UUID = _captchaKey
+            };
+
+            var token = await _dataProvider.GetToken(loginData);
+            if (!token.Status && token.Data != null)
+            {
+                ErrorMessage =  "登录失败，用户名或密码错误";
+                await GenerateCaptcha();
+                throw new Exception(token.Message);
             }
             else
             {
-                ErrorMessage = "用户名或密码错误";
-                GenerateCaptcha();
+                _authState.Token = token.Data.token;
+                _authState.UserName = token.Data.userName;
+                success = true;
+
+                // 临时模拟用户信息，后续替换为真实接口
+                UserInfo.User = new UserDto
+                {
+                    Name = token.Data.userName,
+                    RoleId = 1
+                };
+                UserInfo.UserName = UserName;
+                LoginSuccess?.Invoke();
             }
         }
         catch (Exception ex)

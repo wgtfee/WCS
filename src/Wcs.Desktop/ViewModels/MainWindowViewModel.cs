@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using Wcs.Desktop.Controls;
 using Wcs.Desktop.Interface;
 using Wcs.Desktop.Services;
+using Wcs.Desktop.Models;
 using Wcs.Entity;
 using Wcs.Service;
 
@@ -27,10 +28,10 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     [ObservableProperty]
     private ObservableCollection<MenuItemDto> _menuItems = new();
 
-    public NotificationCenterViewModel NotificationCenter { get; } = new();
+    private NotificationCenterViewModel NotificationCenter { get; } = new();
 
-    public ObservableCollection<ClosableTabItem> Tabs { get; } = new();
-
+    private ObservableCollection<ClosableTabItem> Tabs { get; } = new();
+    private readonly IDataProvider _dataProvider;
     private ClosableTabItem _homeTab;
 
     public MainWindowViewModel(
@@ -39,7 +40,7 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         IOptions<WcsDesktopOptions> options,
         IServiceProvider serviceProvider,
         LoadService loadService,
-        DashboardViewModel dashboard)
+        DashboardViewModel dashboard,IDataProvider dataprovider)
     {
         _realtime = realtime;
         _serviceProvider = serviceProvider;
@@ -47,7 +48,7 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         _homeTab = new ClosableTabItem { Header = "Dashboard", Content = dashboard, CanClose = false, IsSelected = true };
         Tabs.Add(_homeTab);
         SelectedTabItem = _homeTab;
-
+        _dataProvider = dataprovider;
         _realtime.ConnectionStateChanged += OnConnectionStateChanged;
         _ = InitializeMenuAsync(api);
     }
@@ -77,10 +78,10 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     {
         try
         {
-            List<MenuItemDto>? menus = null;
+            WebResponseContent<List<MenuItemDto>> menus = null;
             try
             {
-                menus = await api.GetMenusAsync();
+                menus = await _dataProvider.GetMenus(UserInfo.User?.RoleId ?? 1);
             }
             catch (Exception ex)
             {
@@ -89,8 +90,8 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
 
             // 合并：默认菜单在后，API 动态菜单在前
             var all = BuildDefaultMenus();
-            if (menus != null && menus.Count > 0)
-                all.InsertRange(0, menus);
+            if (menus != null && menus.Data != null && menus.Data.Count > 0)
+                all.InsertRange(0, menus.Data);
             MenuItems = BuildMenuTree(all, 0);
         }
         catch

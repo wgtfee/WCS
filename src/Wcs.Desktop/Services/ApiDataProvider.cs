@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Wcs.Desktop.Interface;
 using Wcs.Desktop.Models;
+using Wcs.Entity;
 
 namespace Wcs.Desktop.Services
 {
@@ -86,7 +87,7 @@ namespace Wcs.Desktop.Services
         {
             try
             {
-                var result = await PostJsonAsync<WebResponseContent>("/api/user/login", info);
+                var result = await PostJsonAsync<WebResponseContent>(Url+"/api/user/login", info);
                 // 反序列化为目标类型
                 string LoginDatas = JsonConvert.SerializeObject(result.Data);
                 var resulta = JsonConvert.DeserializeObject<LoginData>(LoginDatas);
@@ -101,6 +102,45 @@ namespace Wcs.Desktop.Services
             catch (Exception ex)
             {
                 return new WebResponseContent<LoginData> { Status = false, Message = ex.Message };
+            }
+        }
+        #endregion
+
+        #region Menus 获取
+        //[Logger]
+        public async Task<WebResponseContent<List<MenuItemDto>>> GetMenus(int info)
+        {
+            try
+            {
+                var result = await PostJsonAsync<WebResponseContent>(Url+"/api/menu/getTreeItem", info);
+                // 反序列化为目标类型
+                string LoginDatas = JsonConvert.SerializeObject(result.Data);
+                var resulta = JsonConvert.DeserializeObject<List<MenuItemDto>>(LoginDatas);
+                return new WebResponseContent<List<MenuItemDto>>
+                {
+                    Status = result.Status,
+                    Code = result.Code,
+                    Message = result.Message,
+                    Data = new List<MenuItemDto>
+                    {
+                        new MenuItemDto
+                        {
+                            Id = 0,
+                            Name = string.Empty,
+                            Url = string.Empty,
+                            ParentId = 0,
+                            Icon = string.Empty,
+                            Enable = 0,
+                            TableName = string.Empty,
+                            Permission = string.Empty,
+                            Children = new()
+                        }
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new WebResponseContent<List<MenuItemDto>> { Status = false, Message = ex.Message };
             }
         }
         #endregion

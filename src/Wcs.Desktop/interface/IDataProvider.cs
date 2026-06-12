@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Wcs.Entity;
 
 namespace Wcs.Desktop.Interface
 {
@@ -38,7 +39,7 @@ namespace Wcs.Desktop.Interface
         Task<ApiResult<UploadResult>> UploadFileChunck(string path, Action<double> progressAction);
         Task<ApiResult> DownLoadFile(string fileUrl, string savePath);
         Task<CaptchaResult> getVierificationCode();
-
+        Task<WebResponseContent<List<MenuItemDto>>> GetMenus(int info);
         #endregion
     }
 }
