@@ -65,6 +65,7 @@ namespace Wcs.Desktop.Models
     {
         public string token { get; set; } = string.Empty;
         public string userName { get; set; } = string.Empty;
+            public int Role_Id { get; set; } 
         public string? img { get; set; }
 
         public static implicit operator LoginData?(WebResponseContent<LoginData>? v)

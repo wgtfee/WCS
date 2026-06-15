@@ -136,12 +136,10 @@ public partial class LoginViewModel : ObservableObject
                 _authState.Token = token.Data.token;
                 _authState.UserName = token.Data.userName;
                 success = true;
-
-                // 临时模拟用户信息，后续替换为真实接口
                 UserInfo.User = new UserDto
                 {
                     Name = token.Data.userName,
-                    RoleId = 1
+                    RoleId = token.Data.Role_Id,
                 };
                 UserInfo.UserName = UserName;
                 LoginSuccess?.Invoke();

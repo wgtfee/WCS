@@ -30,7 +30,7 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
 
     private NotificationCenterViewModel NotificationCenter { get; } = new();
 
-    private ObservableCollection<ClosableTabItem> Tabs { get; } = new();
+    public ObservableCollection<ClosableTabItem> Tabs { get; } = new();
     private readonly IDataProvider _dataProvider;
     private ClosableTabItem _homeTab;
 

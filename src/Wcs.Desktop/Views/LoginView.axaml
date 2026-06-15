@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
              x:DataType="vm:LoginViewModel"
-             Background="#F5F5F5">
+             Background="{DynamicResource BgPrimary}">
     <UserControl.Styles>
         <Style Selector="Button">
             <Setter Property="Padding" Value="12,8"/>
@@ -25,7 +25,7 @@
     <Grid ColumnDefinitions="*,1.2*">
 
         <!-- 左边：图片区域 -->
-        <Border Grid.Column="0" Background="#0078D4">
+        <Border Grid.Column="0" Background="{DynamicResource AccentBlue}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="40">
                 <TextBlock Text="工业智能管理系统"
                            FontSize="28"
@@ -52,14 +52,14 @@
                        FontWeight="Bold"
                        HorizontalAlignment="Left"
                        Margin="0,0,0,30"
-                       Foreground="#333"/>
+                       Foreground="{DynamicResource TextPrimary}"/>
 
             <!-- 登录表单 -->
             <StackPanel Grid.Row="1" Spacing="15">
 
                 <!-- 用户名 -->
                 <StackPanel Spacing="5">
-                    <TextBlock Text="用户名" Foreground="#666"/>
+                    <TextBlock Text="用户名" Foreground="{DynamicResource TextSecondary}"/>
                     <TextBox Text="{Binding UserName, Mode=TwoWay}"
                              PlaceholderText="请输入用户名"
                              IsEnabled="{Binding !IsLoading}">
@@ -67,14 +67,14 @@
                             <PathIcon Data="{StaticResource UserIcon}"
                                       Width="16" Height="16"
                                       Margin="8,0,0,0"
-                                      Foreground="#999"/>
+                                      Foreground="{DynamicResource TextSecondary}"/>
                         </TextBox.InnerLeftContent>
                     </TextBox>
                 </StackPanel>
 
                 <!-- 密码 -->
                 <StackPanel Spacing="5">
-                    <TextBlock Text="密码" Foreground="#666"/>
+                    <TextBlock Text="密码" Foreground="{DynamicResource TextSecondary}"/>
                     <TextBox Text="{Binding Password, Mode=TwoWay}"
                              PasswordChar="*"
                              PlaceholderText="请输入密码"
@@ -83,27 +83,30 @@
                             <PathIcon Data="{StaticResource LockIcon}"
                                       Width="16" Height="16"
                                       Margin="8,0,0,0"
-                                      Foreground="#999"/>
+                                      Foreground="{DynamicResource TextSecondary}"/>
                         </TextBox.InnerLeftContent>
                     </TextBox>
                 </StackPanel>
 
                 <!-- 验证码 -->
                 <StackPanel Spacing="5">
-                    <TextBlock Text="验证码" Foreground="#666"/>
-                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <TextBlock Text="验证码" Foreground="{DynamicResource TextSecondary}"/>
+                    <!-- 使用固定列宽避免图片加载导致布局抖动 -->
+                    <Grid ColumnDefinitions="*,130,60" ColumnSpacing="8">
                         <TextBox Grid.Column="0"
                                  Text="{Binding Captcha, Mode=TwoWay}"
                                  PlaceholderText="请输入验证码"
                                  MaxLength="6"
+                                 MinWidth="100"
                                  IsEnabled="{Binding !IsLoading}"/>
                         <Border Grid.Column="1"
                                 Width="130" Height="40"
                                 CornerRadius="4"
-                                BorderBrush="#D1D5DB"
+                                BorderBrush="{DynamicResource BorderColor}"
                                 BorderThickness="1"
-                                Background="#F9FAFB">
+                                Background="{DynamicResource BgCard}">
                             <Image Source="{Binding CaptchaImage}"
+                                   Width="126" Height="36"
                                    Stretch="Uniform"
                                    Margin="2"/>
                         </Border>
@@ -112,8 +115,8 @@
                                 Width="60" Height="40"
                                 Command="{Binding GenerateCaptchaCommand}"
                                 IsEnabled="{Binding !IsLoading}"
-                                Background="#E5E7EB"
-                                Foreground="#374151"
+                                Background="{DynamicResource BgSecondary}"
+                                Foreground="{DynamicResource TextPrimary}"
                                 FontSize="13"
                                 CornerRadius="4"/>
                     </Grid>
@@ -138,7 +141,7 @@
                     IsEnabled="{Binding !IsLoading}"
                     HorizontalAlignment="Stretch"
                     Height="45"
-                    Background="#0078D4"
+                    Background="{DynamicResource AccentBlue}"
                     Foreground="White"
                     FontWeight="Bold"
                     FontSize="16">

@@ -41,6 +41,7 @@
         <Style Selector="TreeViewItem:selected, TreeViewItem:selected:focus">
             <Setter Property="Background" Value="{DynamicResource TreeViewSelectedBg}"/>
         </Style>
+
     </Window.Styles>
 
     <Grid RowDefinitions="Auto,*,Auto">
@@ -69,6 +70,19 @@
                             </Border>
                         </TreeDataTemplate>
                     </TreeView.DataTemplates>
+                     <TreeView.Resources>
+                         <!-- 覆盖展开箭头的颜色（Fluent主题使用 TreeViewItemForeground 作为箭头填充） -->
+                         <SolidColorBrush x:Key="TreeViewItemForeground" Color="{StaticResource TextSecondary}"/>
+                     </TreeView.Resources>
+                     <TreeView.Styles>
+                        <!-- 悬停/选中时箭头变为白色 -->
+                        <Style Selector="TreeViewItem:pointerover /template/ Path#ChevronPath">
+                            <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
+                        </Style>
+                        <Style Selector="TreeViewItem:selected /template/ Path#ChevronPath">
+                            <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
+                        </Style>
+                    </TreeView.Styles>
                 </TreeView>
             </Border>
 

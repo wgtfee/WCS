@@ -1,7 +1,20 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "H:\\code\\IOT\\WCS ENG\\",
-  "Documents": [],
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\wcs.desktop.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\wcs.desktop.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
+      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\mainwindow.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\mainwindow.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -9,7 +22,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": -1,
+          "SelectedChildIndex": 25,
           "Children": [
             {
               "$type": "Bookmark",
@@ -105,7 +118,49 @@
             },
             {
               "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Bookmark",
               "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Wcs.Desktop",
+              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Wcs.Desktop.csproj",
+              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Wcs.Desktop.csproj",
+              "ViewState": "AgIAAAYAAAAAAAAAAAAAAA8AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2026-06-15T05:23:34.363Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "MainWindow.axaml",
+              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
+              "WhenOpened": "2026-06-15T05:22:31.41Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "MainWindow.axaml.cs",
+              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml.cs",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\MainWindow.axaml.cs",
+              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml.cs",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\MainWindow.axaml.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-15T04:12:29.183Z",
+              "EditorCaption": ""
             }
           ]
         },

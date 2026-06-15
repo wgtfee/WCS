@@ -1,19 +1,19 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Dark theme palette (default) -->
-    <Color x:Key="BgPrimary">#1E1E1E</Color>
-    <Color x:Key="BgSecondary">#2A2A2A</Color>
-    <Color x:Key="BgSidebar">#252525</Color>
-    <Color x:Key="BgStatusBar">#1A1A1A</Color>
-    <Color x:Key="TabBg">#3A3A3A</Color>
-    <Color x:Key="TreeViewSelectedBg">#333333</Color>
-    <Color x:Key="BgCard">#333333</Color>
-    <Color x:Key="TextPrimary">#FFFFFF</Color>
-    <Color x:Key="TextSecondary">#9E9E9E</Color>
-    <Color x:Key="AccentBlue">#2196F3</Color>
-    <Color x:Key="AccentGreen">#4CAF50</Color>
-    <Color x:Key="AccentRed">#F44336</Color>
-    <Color x:Key="AccentOrange">#FF9800</Color>
-    <Color x:Key="AccentYellow">#FFEB3B</Color>
-    <Color x:Key="BorderColor">#404040</Color>
+    <!-- Light blue theme palette -->
+    <Color x:Key="BgPrimary">#EBF2F7</Color>
+    <Color x:Key="BgSecondary">#E0EAF3</Color>
+    <Color x:Key="BgSidebar">#D4E2F0</Color>
+    <Color x:Key="BgStatusBar">#E0EAF3</Color>
+    <Color x:Key="TabBg">#F0F6FB</Color>
+    <Color x:Key="TreeViewSelectedBg">#B8D4F0</Color>
+    <Color x:Key="BgCard">#F7FAFD</Color>
+    <Color x:Key="TextPrimary">#1A2B3C</Color>
+    <Color x:Key="TextSecondary">#5A6B7C</Color>
+    <Color x:Key="AccentBlue">#1976D2</Color>
+    <Color x:Key="AccentGreen">#388E3C</Color>
+    <Color x:Key="AccentRed">#D32F2F</Color>
+    <Color x:Key="AccentOrange">#F57C00</Color>
+    <Color x:Key="AccentYellow">#FBC02D</Color>
+    <Color x:Key="BorderColor">#C8D6E5</Color>
 </ResourceDictionary>

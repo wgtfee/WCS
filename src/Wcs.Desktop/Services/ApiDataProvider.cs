@@ -112,30 +112,19 @@ namespace Wcs.Desktop.Services
         {
             try
             {
-                var result = await PostJsonAsync<WebResponseContent>(Url+"/api/menu/getTreeItem", info);
+                //var url = $"{Url}/api/menu/getTreeMenu?menuId={info}";
+                var url = $"{Url}/api/menu/getTreeMenu";
+                var responseBody = await PostJsonWithAuthAsync(url, "{}");
+                //var result = JsonConvert.DeserializeObject<WebResponseContent>(responseBody);
                 // 反序列化为目标类型
-                string LoginDatas = JsonConvert.SerializeObject(result.Data);
-                var resulta = JsonConvert.DeserializeObject<List<MenuItemDto>>(LoginDatas);
+                //string LoginDatas = JsonConvert.SerializeObject(result?.Data);
+                var resulta = JsonConvert.DeserializeObject<List<MenuItemDto>>(responseBody);
                 return new WebResponseContent<List<MenuItemDto>>
                 {
-                    Status = result.Status,
-                    Code = result.Code,
-                    Message = result.Message,
-                    Data = new List<MenuItemDto>
-                    {
-                        new MenuItemDto
-                        {
-                            Id = 0,
-                            Name = string.Empty,
-                            Url = string.Empty,
-                            ParentId = 0,
-                            Icon = string.Empty,
-                            Enable = 0,
-                            TableName = string.Empty,
-                            Permission = string.Empty,
-                            Children = new()
-                        }
-                    }
+                    Status = true,
+                    Code = "",
+                    Message = "获取菜单成功",
+                    Data = resulta ?? new List<MenuItemDto>()
                 };
             }
             catch (Exception ex)
