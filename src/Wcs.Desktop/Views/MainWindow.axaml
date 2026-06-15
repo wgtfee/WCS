@@ -52,38 +52,125 @@
         </Border>
 -->
         <!-- 主区域：固定左侧菜单 + 右侧标签页 -->
-        <Grid Grid.Row="1" ColumnDefinitions="240,*">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
 
             <!-- 左侧菜单 -->
-            <Border Background="{DynamicResource BgSidebar}" BorderThickness="0,0,1,0" BorderBrush="#333333">
-                <TreeView ItemsSource="{Binding MenuItems}"
-                          Background="Transparent"
-                          BorderThickness="0"
-                          SelectionMode="Single"
-                          SelectionChanged="OnTreeViewSelectionChanged">
-                    <TreeView.DataTemplates>
-                        <TreeDataTemplate ItemsSource="{Binding Children}" DataType="Vc:MenuItemDto">
-                            <Border Padding="12,8" Background="Transparent">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimary}" FontSize="13"/>
-                                </StackPanel>
-                            </Border>
-                        </TreeDataTemplate>
-                    </TreeView.DataTemplates>
-                     <TreeView.Resources>
-                         <!-- 覆盖展开箭头的颜色（Fluent主题使用 TreeViewItemForeground 作为箭头填充） -->
-                         <SolidColorBrush x:Key="TreeViewItemForeground" Color="{StaticResource TextSecondary}"/>
-                     </TreeView.Resources>
-                     <TreeView.Styles>
-                        <!-- 悬停/选中时箭头变为白色 -->
-                        <Style Selector="TreeViewItem:pointerover /template/ Path#ChevronPath">
-                            <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
-                        </Style>
-                        <Style Selector="TreeViewItem:selected /template/ Path#ChevronPath">
-                            <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
-                        </Style>
-                    </TreeView.Styles>
-                </TreeView>
+            <Border Background="{DynamicResource BgSidebar}"
+                    BorderThickness="0,0,1,0" BorderBrush="#333333"
+                    Width="{Binding SidebarWidth}">
+                <Grid RowDefinitions="Auto,*">
+
+                    <!-- 展开/折叠切换按钮 -->
+                    <Button Grid.Row="0"
+                            Width="36" Height="36" Margin="0,8,0,4"
+                            HorizontalAlignment="Center"
+                            Background="Transparent" BorderThickness="0"
+                            Focusable="False"
+                            Command="{Binding ToggleSidebarCommand}"
+                            ToolTip.Tip="切换侧边栏">
+                        <Grid>
+                            <TextBlock Text="◀" FontSize="16"
+                                       Foreground="{DynamicResource TextSecondary}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}"/>
+                            <TextBlock Text="☰" FontSize="20"
+                                       Foreground="{DynamicResource TextSecondary}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding IsSidebarCollapsed}"/>
+                        </Grid>
+                    </Button>
+
+                    <!-- ========== 展开模式：TreeView ========== -->
+                    <TreeView Grid.Row="1"
+                              ItemsSource="{Binding MenuItems}"
+                              IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              SelectionMode="Single"
+                              SelectedItem="{Binding SelectedMenuItem, Mode=TwoWay}">
+                        <TreeView.DataTemplates>
+                            <TreeDataTemplate ItemsSource="{Binding Children}" DataType="Vc:MenuItemDto">
+                                <Border Padding="12,8" Background="Transparent">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimary}" FontSize="13"/>
+                                    </StackPanel>
+                                </Border>
+                            </TreeDataTemplate>
+                        </TreeView.DataTemplates>
+                         <TreeView.Resources>
+                             <SolidColorBrush x:Key="TreeViewItemForeground" Color="{StaticResource TextSecondary}"/>
+                         </TreeView.Resources>
+                         <TreeView.Styles>
+                            <Style Selector="TreeViewItem:pointerover /template/ Path#ChevronPath">
+                                <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
+                            </Style>
+                            <Style Selector="TreeViewItem:selected /template/ Path#ChevronPath">
+                                <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
+                            </Style>
+                        </TreeView.Styles>
+                    </TreeView>
+
+                    <!-- ========== 折叠模式：图标按钮 ========== -->
+                    <ItemsControl Grid.Row="1"
+                                  ItemsSource="{Binding MenuItems}"
+                                  IsVisible="{Binding IsSidebarCollapsed}"
+                                  Margin="0,4,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="Vc:MenuItemDto">
+                                <Button Width="48" Height="48" Padding="0"
+                                        Background="Transparent" BorderThickness="0"
+                                        ToolTip.Tip="{Binding Name}"
+                                        Command="{Binding $parent[ItemsControl].DataContext.CollapsedMenuClickCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="{Binding Name[0]}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               FontSize="18"
+                                               Foreground="{DynamicResource TextSecondary}"/>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- ========== 折叠模式弹出菜单 ========== -->
+                    <Popup IsOpen="{Binding IsCollapsedFlyoutOpen}"
+                           Placement="RightEdgeAlignedTop"
+                           IsLightDismissEnabled="True"
+                           HorizontalOffset="1"
+                           VerticalOffset="-4">
+                        <Border Background="{DynamicResource BgCard}"
+                                BorderBrush="{DynamicResource BorderColor}"
+                                BorderThickness="1" CornerRadius="4"
+                                Width="200" MaxHeight="400"
+                                Padding="4">
+                            <TreeView ItemsSource="{Binding ActiveFlyoutChildren}"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      SelectionMode="Single"
+                                      SelectedItem="{Binding ActiveFlyoutSelectedItem, Mode=TwoWay}">
+                                <TreeView.DataTemplates>
+                                    <TreeDataTemplate ItemsSource="{Binding Children}" DataType="Vc:MenuItemDto">
+                                        <Border Padding="12,8" Background="Transparent">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Name}"
+                                                           Foreground="{DynamicResource TextPrimary}"
+                                                           FontSize="13"
+                                                           VerticalAlignment="Center"/>
+                                                <TextBlock Text="▶" FontSize="10"
+                                                           Foreground="{DynamicResource TextSecondary}"
+                                                           VerticalAlignment="Center"
+                                                           IsVisible="{Binding Children.Count}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </TreeDataTemplate>
+                                </TreeView.DataTemplates>
+                            </TreeView>
+                        </Border>
+                    </Popup>
+
+                </Grid>
             </Border>
 
             <!-- 右侧可关闭标签页 -->

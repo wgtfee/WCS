@@ -28,7 +28,81 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     [ObservableProperty]
     private ObservableCollection<MenuItemDto> _menuItems = new();
 
-    private NotificationCenterViewModel NotificationCenter { get; } = new();
+    [ObservableProperty]
+    private bool _isSidebarCollapsed;
+
+    [ObservableProperty]
+    private MenuItemDto? _selectedMenuItem;
+
+    // -- 折叠模式弹出菜单状态 --
+    [ObservableProperty]
+    private bool _isCollapsedFlyoutOpen;
+
+    [ObservableProperty]
+    private ObservableCollection<MenuItemDto>? _activeFlyoutChildren;
+
+    [ObservableProperty]
+    private MenuItemDto? _activeFlyoutSelectedItem;
+
+    public double SidebarWidth => IsSidebarCollapsed ? 48 : 240;
+
+    partial void OnIsSidebarCollapsedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SidebarWidth));
+        if (!value) CloseCollapsedFlyout(); // 展开时关闭弹出
+    }
+
+    partial void OnSelectedMenuItemChanged(MenuItemDto? value)
+    {
+        if (value != null && (value.Children == null || value.Children.Count == 0))
+        {
+            _ = OpenPageFromMenu(value);
+            SelectedMenuItem = null;
+        }
+    }
+
+    partial void OnActiveFlyoutSelectedItemChanged(MenuItemDto? value)
+    {
+        if (value == null) return;
+
+        if (value.Children.Count > 0)
+        {
+            // 有子菜单 → 切换到下一级
+            ActiveFlyoutChildren = value.Children;
+        }
+        else
+        {
+            // 叶子节点 → 导航并关闭
+            _ = OpenPageFromMenu(value);
+            CloseCollapsedFlyout();
+        }
+        ActiveFlyoutSelectedItem = null;
+    }
+
+    [RelayCommand]
+    private void CollapsedMenuClick(MenuItemDto item)
+    {
+        if (item.Children.Count > 0)
+        {
+            ActiveFlyoutChildren = item.Children;
+            IsCollapsedFlyoutOpen = true;
+        }
+        else if (!string.IsNullOrEmpty(item.Url))
+        {
+            _ = OpenPageFromMenu(item);
+        }
+    }
+
+    private void CloseCollapsedFlyout()
+    {
+        IsCollapsedFlyoutOpen = false;
+        ActiveFlyoutChildren = null;
+    }
+
+    [RelayCommand]
+    private void ToggleSidebar() => IsSidebarCollapsed = !IsSidebarCollapsed;
+
+    public NotificationCenterViewModel NotificationCenter { get; } = new();
 
     public ObservableCollection<ClosableTabItem> Tabs { get; } = new();
     private readonly IDataProvider _dataProvider;
