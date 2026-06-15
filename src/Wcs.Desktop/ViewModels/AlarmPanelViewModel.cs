@@ -10,7 +10,7 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 报警面板 ViewModel
 /// </summary>
-public partial class AlarmPanelViewModel : ViewModelBase
+public partial class AlarmsViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
     private readonly IWcsRealtimeService _realtime;
@@ -19,7 +19,7 @@ public partial class AlarmPanelViewModel : ViewModelBase
 
     [ObservableProperty] private bool _isLoading;
 
-    public AlarmPanelViewModel(IWcsApiService api, IWcsRealtimeService realtime)
+    public AlarmsViewModel(IWcsApiService api, IWcsRealtimeService realtime)
     {
         _api = api;
         _realtime = realtime;

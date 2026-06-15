@@ -38,14 +38,14 @@ public static class ServiceCollectionExtensions
         services.AddTransient<LoginViewModel>();
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<DashboardViewModel>();
-        services.AddTransient<DeviceListViewModel>();
-        services.AddTransient<TaskManagementViewModel>();
-        services.AddTransient<AlarmPanelViewModel>();
-        services.AddTransient<ObjectTrackingViewModel>();
+        services.AddTransient<DevicesViewModel>();
+        services.AddTransient<TasksViewModel>();
+        services.AddTransient<AlarmsViewModel>();
+        services.AddTransient<ObjectsViewModel>();
         services.AddTransient<EventLogViewModel>();
         services.AddTransient<TrackingLogViewModel>();
         services.AddTransient<AuditLogViewModel>();
-        services.AddTransient<SystemLogViewModel>();
+        services.AddTransient<SysLogViewModel>();
 
         return services;
     }

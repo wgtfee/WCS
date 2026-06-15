@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
-             x:Class="Wcs.Desktop.Views.SystemLogView"
-             x:DataType="vm:SystemLogViewModel"
+             x:Class="Wcs.Desktop.Views.SysLogView"
+             x:DataType="vm:SysLogViewModel"
              Background="{DynamicResource BgPrimary}">
     <DockPanel Margin="16">
         <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">

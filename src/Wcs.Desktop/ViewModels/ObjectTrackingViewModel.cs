@@ -10,7 +10,7 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 物体追踪 ViewModel
 /// </summary>
-public partial class ObjectTrackingViewModel : ViewModelBase
+public partial class ObjectsViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
     private readonly IWcsRealtimeService _realtime;
@@ -19,7 +19,7 @@ public partial class ObjectTrackingViewModel : ViewModelBase
 
     [ObservableProperty] private bool _isLoading;
 
-    public ObjectTrackingViewModel(IWcsApiService api, IWcsRealtimeService realtime)
+    public ObjectsViewModel(IWcsApiService api, IWcsRealtimeService realtime)
     {
         _api = api;
         _realtime = realtime;

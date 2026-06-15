@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Wcs.Desktop.Views;
 
-public partial class SystemLogView : UserControl
+public partial class SysLogView : UserControl
 {
-    public SystemLogView()
+    public SysLogView()
     {
         InitializeComponent();
     }

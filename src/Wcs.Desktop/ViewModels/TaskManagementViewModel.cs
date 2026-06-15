@@ -10,7 +10,7 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 任务管理 ViewModel
 /// </summary>
-public partial class TaskManagementViewModel : ViewModelBase
+public partial class TasksViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
     private readonly IWcsRealtimeService _realtime;
@@ -22,7 +22,7 @@ public partial class TaskManagementViewModel : ViewModelBase
     [ObservableProperty] private int _newTaskPriority = 2;
     [ObservableProperty] private bool _isLoading;
 
-    public TaskManagementViewModel(IWcsApiService api, IWcsRealtimeService realtime)
+    public TasksViewModel(IWcsApiService api, IWcsRealtimeService realtime)
     {
         _api = api;
         _realtime = realtime;

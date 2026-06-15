@@ -5,6 +5,6 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 系统日志 ViewModel
 /// </summary>
-public partial class SystemLogViewModel : ObservableObject
+public partial class SysLogViewModel : ObservableObject
 {
 }

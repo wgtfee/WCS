@@ -207,26 +207,26 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         }
     }
 
+    /// <summary>根据路由名自动匹配 ViewModel，约定：{Route}ViewModel</summary>
+    private static Type? ResolveViewModelType(string route)
+    {
+        // 将下划线命名转为帕斯卡（如 "Sys_Log" → "SysLog"）
+        var pascalRoute = string.Concat(
+            route.Split('_', '-', '.')
+                .Select(s => s.Length > 0 ? char.ToUpper(s[0]) + s[1..] : ""));
+        var typeName = $"Wcs.Desktop.ViewModels.{pascalRoute}ViewModel";
+        return Type.GetType(typeName);
+    }
+
     public async Task OpenPageFromMenu(MenuItemDto? menu)
     {
         if (menu == null || string.IsNullOrWhiteSpace(menu.Url)) return;
 
-        // API 端 URL 带 "/" 前缀（如 "/Dashboard"），Ava 端忽略该前缀进行匹配
         var route = menu.Url.TrimStart('/');
-        object? content = route switch
-        {
-            "Dashboard" => (object?)_serviceProvider.GetRequiredService<DashboardViewModel>(),
-            "Devices"   => _serviceProvider.GetRequiredService<DeviceListViewModel>(),
-            "Tasks"     => _serviceProvider.GetRequiredService<TaskManagementViewModel>(),
-            "Alarms"    => _serviceProvider.GetRequiredService<AlarmPanelViewModel>(),
-            "Objects"   => _serviceProvider.GetRequiredService<ObjectTrackingViewModel>(),
-            "EventLog"  => _serviceProvider.GetRequiredService<EventLogViewModel>(),
-            "TrackingLog" => _serviceProvider.GetRequiredService<TrackingLogViewModel>(),
-            "AuditLog"    => _serviceProvider.GetRequiredService<AuditLogViewModel>(),
-            "Sys_Log"     => _serviceProvider.GetRequiredService<SystemLogViewModel>(),
-            _ => null
-        };
-        if (content == null) return;
+        var type = ResolveViewModelType(route);
+        if (type == null) return;
+
+        var content = _serviceProvider.GetRequiredService(type);
         if (content is IAsyncInitializable init) await init.InitializeAsync();
         OpenTab(menu.Name, content);
     }

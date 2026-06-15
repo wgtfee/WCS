@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Wcs.Desktop.Views;
 
-public partial class ObjectTrackingView : UserControl
+public partial class ObjectsView : UserControl
 {
-    public ObjectTrackingView()
+    public ObjectsView()
     {
         InitializeComponent();
     }

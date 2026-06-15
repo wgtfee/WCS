@@ -10,7 +10,7 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 设备列表 ViewModel
 /// </summary>
-public partial class DeviceListViewModel : ViewModelBase
+public partial class DevicesViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
     private readonly IWcsRealtimeService _realtime;
@@ -20,7 +20,7 @@ public partial class DeviceListViewModel : ViewModelBase
     [ObservableProperty] private string _filterText = string.Empty;
     [ObservableProperty] private bool _isLoading;
 
-    public DeviceListViewModel(IWcsApiService api, IWcsRealtimeService realtime)
+    public DevicesViewModel(IWcsApiService api, IWcsRealtimeService realtime)
     {
         _api = api;
         _realtime = realtime;

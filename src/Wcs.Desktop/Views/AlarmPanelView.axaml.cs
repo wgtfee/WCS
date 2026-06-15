@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Wcs.Desktop.Views;
 
-public partial class AlarmPanelView : UserControl
+public partial class AlarmsView : UserControl
 {
-    public AlarmPanelView()
+    public AlarmsView()
     {
         InitializeComponent();
     }

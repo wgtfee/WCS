@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Wcs.Desktop.Views;
 
-public partial class TaskManagementView : UserControl
+public partial class TasksView : UserControl
 {
-    public TaskManagementView()
+    public TasksView()
     {
         InitializeComponent();
     }

@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Wcs.Desktop.Views;
 
-public partial class DeviceListView : UserControl
+public partial class DevicesView : UserControl
 {
-    public DeviceListView()
+    public DevicesView()
     {
         InitializeComponent();
     }

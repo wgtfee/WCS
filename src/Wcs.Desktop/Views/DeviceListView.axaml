@@ -2,8 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
              xmlns:conv="using:Wcs.Desktop.Converters"
-             x:Class="Wcs.Desktop.Views.DeviceListView"
-             x:DataType="vm:DeviceListViewModel"
+             x:Class="Wcs.Desktop.Views.DevicesView"
+             x:DataType="vm:DevicesViewModel"
              Background="{DynamicResource BgPrimary}">
     <UserControl.Resources>
         <conv:StatusToColorConverter x:Key="StatusToColor" />
