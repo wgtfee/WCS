@@ -6,7 +6,6 @@
     <Project Path="H:/code/IOT/WCS ENG/src/Wcs.Host/Wcs.Host.csproj" />
     <Project Path="H:/code/IOT/WCS ENG/src/Wcs.Infrastructure/Wcs.Infrastructure.csproj" />
     <Project Path="H:/code/IOT/WCS ENG/src/Wcs.Simulator/Wcs.Simulator.csproj" />
-    <Project Path="H:/code/IOT/WCS ENG/src/Wcs.Service/Wcs.Service.csproj"  />
-    <Project Path="H:/code/IOT/WCS ENG/src/Wcs.Entity/Wcs.Entity.csproj"  />
+    <Project Path="H:/code/IOT/WCS ENG/src/Wcs.Entity/Wcs.Entity.csproj" />
   </Folder>
 </Solution>

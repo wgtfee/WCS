@@ -8,7 +8,6 @@ using Wcs.Desktop.Interface;
 using Wcs.Desktop.Services;
 using Wcs.Desktop.Models;
 using Wcs.Entity;
-using Wcs.Service;
 
 namespace Wcs.Desktop.ViewModels;
 
@@ -16,8 +15,6 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
 {
     private readonly IWcsRealtimeService _realtime;
     private readonly IServiceProvider _serviceProvider;
-
-   private readonly LoadService _loadService;
 
     [ObservableProperty]
     private string _connectionText = "Disconnected";
@@ -113,12 +110,10 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         IWcsApiService api,
         IOptions<WcsDesktopOptions> options,
         IServiceProvider serviceProvider,
-        LoadService loadService,
         DashboardViewModel dashboard,IDataProvider dataprovider)
     {
         _realtime = realtime;
         _serviceProvider = serviceProvider;
-        _loadService = loadService;
         _homeTab = new ClosableTabItem { Header = "Dashboard", Content = dashboard, CanClose = false, IsSelected = true };
         Tabs.Add(_homeTab);
         SelectedTabItem = _homeTab;
@@ -133,7 +128,7 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         await Task.CompletedTask;
     }
 
-    /// <summary>构建基础菜单（6 个默认页面），Id 偏移 1000 避免与 API 菜单冲突</summary>
+    /// <summary>构建基础菜单（6 个默认页面 + 补充新增日志页面），Id 偏移 1000 避免与 API 菜单冲突</summary>
     private static List<MenuItemDto> BuildDefaultMenus()
     {
         int id = 1001;
@@ -216,14 +211,19 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     {
         if (menu == null || string.IsNullOrWhiteSpace(menu.Url)) return;
 
-        object? content = menu.Url switch
+        // API 端 URL 带 "/" 前缀（如 "/Dashboard"），Ava 端忽略该前缀进行匹配
+        var route = menu.Url.TrimStart('/');
+        object? content = route switch
         {
-            "/Dashboard" => (object?)_serviceProvider.GetRequiredService<DashboardViewModel>(),
-            "/Devices"   => _serviceProvider.GetRequiredService<DeviceListViewModel>(),
-            "/Tasks"     => _serviceProvider.GetRequiredService<TaskManagementViewModel>(),
-            "/Alarms"    => _serviceProvider.GetRequiredService<AlarmPanelViewModel>(),
-            "/Objects"   => _serviceProvider.GetRequiredService<ObjectTrackingViewModel>(),
-            "/EventLog"  => _serviceProvider.GetRequiredService<EventLogViewModel>(),
+            "Dashboard" => (object?)_serviceProvider.GetRequiredService<DashboardViewModel>(),
+            "Devices"   => _serviceProvider.GetRequiredService<DeviceListViewModel>(),
+            "Tasks"     => _serviceProvider.GetRequiredService<TaskManagementViewModel>(),
+            "Alarms"    => _serviceProvider.GetRequiredService<AlarmPanelViewModel>(),
+            "Objects"   => _serviceProvider.GetRequiredService<ObjectTrackingViewModel>(),
+            "EventLog"  => _serviceProvider.GetRequiredService<EventLogViewModel>(),
+            "TrackingLog" => _serviceProvider.GetRequiredService<TrackingLogViewModel>(),
+            "AuditLog"    => _serviceProvider.GetRequiredService<AuditLogViewModel>(),
+            "Sys_Log"     => _serviceProvider.GetRequiredService<SystemLogViewModel>(),
             _ => null
         };
         if (content == null) return;

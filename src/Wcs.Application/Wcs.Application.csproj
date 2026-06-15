@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
-    <ProjectReference Include="..\Wcs.Service\Wcs.Service.csproj" />
   </ItemGroup>
 
   <ItemGroup>

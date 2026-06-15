@@ -56,7 +56,7 @@
 
             <!-- 左侧菜单 -->
             <Border Background="{DynamicResource BgSidebar}"
-                    BorderThickness="0,0,1,0" BorderBrush="#333333"
+                    BorderThickness="0,0,1,0" BorderBrush="{DynamicResource BorderColor}"
                     Width="{Binding SidebarWidth}">
                 <Grid RowDefinitions="Auto,*">
 

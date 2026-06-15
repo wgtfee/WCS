@@ -43,6 +43,9 @@ public static class ServiceCollectionExtensions
         services.AddTransient<AlarmPanelViewModel>();
         services.AddTransient<ObjectTrackingViewModel>();
         services.AddTransient<EventLogViewModel>();
+        services.AddTransient<TrackingLogViewModel>();
+        services.AddTransient<AuditLogViewModel>();
+        services.AddTransient<SystemLogViewModel>();
 
         return services;
     }

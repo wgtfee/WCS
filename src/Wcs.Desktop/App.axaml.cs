@@ -8,7 +8,7 @@ using Wcs.Desktop.Models;
 using Wcs.Desktop.Services;
 using Wcs.Desktop.ViewModels;
 using Wcs.Desktop.Views;
-using Wcs.Service;
+//using Wcs.Service;
 
 namespace Wcs.Desktop;
 
@@ -75,9 +75,9 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
         services.AddWcsDesktop();
-        services.AddSingleton<LoadService>();
+        //services.AddSingleton<LoadService>();
         services.AddSingleton<IAuthState, AuthState>();
-                services.AddSingleton<IDataProvider, ApiDataProvider>();
+        services.AddSingleton<IDataProvider, ApiDataProvider>();
         return services.BuildServiceProvider();
     }
 

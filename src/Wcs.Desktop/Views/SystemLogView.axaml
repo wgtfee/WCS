@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:Class="Wcs.Desktop.Views.SystemLogView"
+             x:DataType="vm:SystemLogViewModel"
+             Background="{DynamicResource BgPrimary}">
+    <DockPanel Margin="16">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+            <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Text="系统日志" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="操作系统与服务运行日志" FontSize="13"
+                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="16,0,0,0"/>
+            </Grid>
+        </Border>
+        <TextBlock Text="页面开发中..."
+                   Foreground="{DynamicResource TextSecondary}"
+                   FontSize="16"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"/>
+    </DockPanel>
+</UserControl>
