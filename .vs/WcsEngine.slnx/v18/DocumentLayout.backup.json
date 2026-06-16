@@ -3,16 +3,16 @@
   "WorkspaceRootPath": "H:\\code\\IOT\\WCS ENG\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\interface\\imodule.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\interface\\imodule.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\viewmodels\\trackinglogviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\viewmodels\\trackinglogviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\trackinglogview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
       "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\trackinglogview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\interface\\imodulepage.cs||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\interface\\imodulepage.cs||{8B382828-6202-11D1-8870-0000F87579D2}"
+      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\models\\log\\trackinglogitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\models\\log\\trackinglogitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -22,21 +22,8 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 26,
           "Children": [
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "IModule.cs",
-              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\interface\\IModule.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\interface\\IModule.cs",
-              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\interface\\IModule.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\interface\\IModule.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAUAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-16T03:04:53.432Z",
-              "EditorCaption": ""
-            },
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{87654321-4321-4321-4321-987654321cba}"
@@ -140,14 +127,27 @@
             {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "IModulePage.cs",
-              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\interface\\IModulePage.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\interface\\IModulePage.cs",
-              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\interface\\IModulePage.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\interface\\IModulePage.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAABAAAAAAAAAA==",
+              "Title": "TrackingLogItem.cs",
+              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Models\\Log\\TrackingLogItem.cs",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Models\\Log\\TrackingLogItem.cs",
+              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Models\\Log\\TrackingLogItem.cs",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Models\\Log\\TrackingLogItem.cs",
+              "ViewState": "AgIAAAoAAAAAAAAAAAAzwBgAAAAsAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-16T03:04:38.812Z",
+              "WhenOpened": "2026-06-16T03:15:41.819Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "TrackingLogViewModel.cs",
+              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\ViewModels\\TrackingLogViewModel.cs",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\ViewModels\\TrackingLogViewModel.cs",
+              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\ViewModels\\TrackingLogViewModel.cs",
+              "RelativeToolTip": "src\\Wcs.Desktop\\ViewModels\\TrackingLogViewModel.cs",
+              "ViewState": "AgIAAA4AAAAAAAAAAAAswCcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-16T03:13:26.737Z",
               "EditorCaption": ""
             },
             {

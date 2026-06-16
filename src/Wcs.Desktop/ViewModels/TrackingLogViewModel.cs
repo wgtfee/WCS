@@ -34,6 +34,9 @@ public partial class TrackingLogViewModel : ObservableObject
     [ObservableProperty]
     private int totalCount;
 
+        // 核心数据源
+    public ObservableCollection<TrackingLogItem> AllItems { get; } = new();
+
     public ObservableCollection<string> EventTypes { get; } = [];
 
     public ObservableCollection<TrackingLogItem> PagedItems { get; } = [];
@@ -48,5 +51,17 @@ public partial class TrackingLogViewModel : ObservableObject
     {
     }
 
+
+   // 当分页改变时，重新切片数据
+    partial void OnPageChanged(int value) => UpdatePage();
+    partial void OnPageSizeChanged(int value) => UpdatePage();
+
+    private void UpdatePage()
+    {
+        PagedItems.Clear();
+        var items = AllItems.Skip((Page - 1) * PageSize).Take(PageSize);
+        foreach (var item in items)
+            PagedItems.Add(item);
+    }
 
 }

@@ -6,102 +6,61 @@
              x:DataType="vm:TrackingLogViewModel"
              Background="{DynamicResource BgPrimary}">
     <DockPanel Margin="16">
-       <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+        
+        <!-- ========== 顶部标题 ========== -->
+        <Border DockPanel.Dock="Top" 
+                Background="{DynamicResource BgSecondary}" 
+                CornerRadius="8" Padding="12" Margin="0,0,0,8">
             <Grid ColumnDefinitions="Auto,*">
-                <TextBlock Text="埋点日志" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
-                           VerticalAlignment="Center"/>
+                <TextBlock Text="埋点日志" FontSize="20" FontWeight="Bold" 
+                           Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1" Text="追踪用户行为与系统埋点数据" FontSize="13"
                            Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="16,0,0,0"/>
             </Grid>
         </Border>
 
+        <!-- ========== 底部分页器 ========== -->
+        <Border DockPanel.Dock="Bottom" Padding="0,8,0,0" Background="Transparent">
+            <ursa:Pagination CurrentPage="{Binding Page}" 
+                             PageSize="{Binding PageSize}" 
+                             TotalCount="{Binding TotalCount}"/>
+        </Border>
 
-      <Border Classes="card">
+        <!-- ========== 查询面板 ========== -->
+        <Border DockPanel.Dock="Top" Classes="card" Margin="0,0,0,8">
+            <StackPanel Spacing="12" Margin="12">
+                        
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
+                    <Button Content="查询" Command="{Binding SearchCommand}" Classes="primary" />
+                    <Button Content="重置" Command="{Binding ResetCommand}" />
+                </StackPanel>
+                 <StackPanel Orientation="Horizontal" Spacing="12">
+                    <TextBox Width="160" PlaceholderText="事件名称" Text="{Binding EventName}" />
+                    <TextBox Width="120" PlaceholderText="用户" Text="{Binding UserName}" />
+                    <DatePicker Width="150" SelectedDate="{Binding BeginDate}" />
+                    <DatePicker Width="150" SelectedDate="{Binding EndDate}" />
+                    <ComboBox Width="120" ItemsSource="{Binding EventTypes}" 
+                              SelectedItem="{Binding EventType}" PlaceholderText="事件类型" />
+                </StackPanel >
 
-        <WrapPanel Margin="10">
-                        <Button
-                Content="查询"
-                Command="{Binding SearchCommand}" />
+            </StackPanel>
+        </Border>
 
-            <Button
-                Content="重置"
-                Command="{Binding ResetCommand}" />
-            <TextBox
-                Width="150"
-                Watermark="事件名称"
-                Text="{Binding EventName}" />
+        <!-- ========== DataGrid 填充中间剩余空间 ========== -->
+        <DataGrid ItemsSource="{Binding PagedItems}" AutoGenerateColumns="False"
+                  Margin="0,0,0,8">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="ID" Binding="{Binding Id}" />
+                <DataGridTextColumn Header="事件名称" Binding="{Binding EventName}" />
+                <DataGridTextColumn Header="事件类型" Binding="{Binding EventType}" />
+                <DataGridTextColumn Header="页面路径" Binding="{Binding PageUrl}" />
+                <DataGridTextColumn Header="用户" Binding="{Binding UserName}" />
+                <DataGridTextColumn Header="IP" Binding="{Binding UserIP}" />
+                <DataGridTextColumn Header="浏览器" Binding="{Binding Browser}" />
+                <DataGridTextColumn Header="操作系统" Binding="{Binding OS}" />
+                <DataGridTextColumn Header="事件时间" Binding="{Binding EventTime}" />
+            </DataGrid.Columns>
+        </DataGrid>
 
-            <ComboBox
-                Width="120"
-                ItemsSource="{Binding EventTypes}"
-                SelectedItem="{Binding EventType}" />
-
-            <TextBox
-                Width="120"
-                Watermark="用户"
-                Text="{Binding UserName}" />
-
-            <DatePicker
-                SelectedDate="{Binding BeginDate}" />
-
-            <DatePicker
-                SelectedDate="{Binding EndDate}" />
-
-
-
-        </WrapPanel>
-
-    </Border>
-
-    <DataGrid
-        ItemsSource="{Binding PagedItems}"
-        AutoGenerateColumns="False">
-
-        <DataGrid.Columns>
-
-            <DataGridTextColumn
-                Header="ID"
-                Binding="{Binding Id}" />
-
-            <DataGridTextColumn
-                Header="事件名称"
-                Binding="{Binding EventName}" />
-
-            <DataGridTextColumn
-                Header="事件类型"
-                Binding="{Binding EventType}" />
-
-            <DataGridTextColumn
-                Header="页面路径"
-                Binding="{Binding PageUrl}" />
-
-            <DataGridTextColumn
-                Header="用户"
-                Binding="{Binding UserName}" />
-
-            <DataGridTextColumn
-                Header="IP"
-                Binding="{Binding UserIP}" />
-
-            <DataGridTextColumn
-                Header="浏览器"
-                Binding="{Binding Browser}" />
-
-            <DataGridTextColumn
-                Header="操作系统"
-                Binding="{Binding OS}" />
-
-            <DataGridTextColumn
-                Header="事件时间"
-                Binding="{Binding EventTime}" />
-
-        </DataGrid.Columns>
-
-    </DataGrid>
-
-        <ursa:Pagination CurrentPage="{Binding Page}" PageSize="{Binding PageSize}"/>
-        
-
-     </DockPanel>
-
+    </DockPanel>
 </UserControl>
