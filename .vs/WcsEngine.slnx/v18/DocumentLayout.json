@@ -3,16 +3,16 @@
   "WorkspaceRootPath": "H:\\code\\IOT\\WCS ENG\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\wcs.desktop.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
-      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\wcs.desktop.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\viewmodels\\trackinglogviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\viewmodels\\trackinglogviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
-      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\mainwindow.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
+      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\trackinglogview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}",
+      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\trackinglogview.axaml||{6D5344A2-2FCD-49DE-A09D-6A14FD1B1224}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\views\\mainwindow.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\views\\mainwindow.axaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|h:\\code\\iot\\wcs eng\\src\\wcs.desktop\\models\\log\\trackinglogitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{36753916-CFB4-5D4D-9A0C-8408219AAF89}|src\\Wcs.Desktop\\Wcs.Desktop.csproj|solutionrelative:src\\wcs.desktop\\models\\log\\trackinglogitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -22,7 +22,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 25,
+          "SelectedChildIndex": 26,
           "Children": [
             {
               "$type": "Bookmark",
@@ -126,40 +126,40 @@
             },
             {
               "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "TrackingLogItem.cs",
+              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Models\\Log\\TrackingLogItem.cs",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Models\\Log\\TrackingLogItem.cs",
+              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Models\\Log\\TrackingLogItem.cs",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Models\\Log\\TrackingLogItem.cs",
+              "ViewState": "AgIAAAoAAAAAAAAAAAAzwBgAAAAsAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-16T03:15:41.819Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "Wcs.Desktop",
-              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Wcs.Desktop.csproj",
-              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Wcs.Desktop.csproj",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Wcs.Desktop.csproj",
-              "ViewState": "AgIAAAYAAAAAAAAAAAAAAA8AAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2026-06-15T05:23:34.363Z",
+              "Title": "TrackingLogViewModel.cs",
+              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\ViewModels\\TrackingLogViewModel.cs",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\ViewModels\\TrackingLogViewModel.cs",
+              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\ViewModels\\TrackingLogViewModel.cs",
+              "RelativeToolTip": "src\\Wcs.Desktop\\ViewModels\\TrackingLogViewModel.cs",
+              "ViewState": "AgIAAA4AAAAAAAAAAAAswCcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-16T03:13:26.737Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "MainWindow.axaml",
-              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\MainWindow.axaml",
-              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\MainWindow.axaml",
+              "Title": "TrackingLogView.axaml",
+              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\TrackingLogView.axaml",
+              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\TrackingLogView.axaml",
+              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\TrackingLogView.axaml",
+              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\TrackingLogView.axaml",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
-              "WhenOpened": "2026-06-15T05:22:31.41Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "MainWindow.axaml.cs",
-              "DocumentMoniker": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml.cs",
-              "RelativeDocumentMoniker": "src\\Wcs.Desktop\\Views\\MainWindow.axaml.cs",
-              "ToolTip": "H:\\code\\IOT\\WCS ENG\\src\\Wcs.Desktop\\Views\\MainWindow.axaml.cs",
-              "RelativeToolTip": "src\\Wcs.Desktop\\Views\\MainWindow.axaml.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-15T04:12:29.183Z",
+              "WhenOpened": "2026-06-16T03:01:49.112Z",
               "EditorCaption": ""
             }
           ]

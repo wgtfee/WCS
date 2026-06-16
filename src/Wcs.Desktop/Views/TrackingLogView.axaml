@@ -1,11 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:ursa="https://irihi.tech/ursa"
              x:Class="Wcs.Desktop.Views.TrackingLogView"
              x:DataType="vm:TrackingLogViewModel"
              Background="{DynamicResource BgPrimary}">
     <DockPanel Margin="16">
-        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+       <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
             <Grid ColumnDefinitions="Auto,*">
                 <TextBlock Text="埋点日志" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
                            VerticalAlignment="Center"/>
@@ -13,10 +14,94 @@
                            Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="16,0,0,0"/>
             </Grid>
         </Border>
-        <TextBlock Text="页面开发中..."
-                   Foreground="{DynamicResource TextSecondary}"
-                   FontSize="16"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"/>
-    </DockPanel>
+
+
+      <Border Classes="card">
+
+        <WrapPanel Margin="10">
+                        <Button
+                Content="查询"
+                Command="{Binding SearchCommand}" />
+
+            <Button
+                Content="重置"
+                Command="{Binding ResetCommand}" />
+            <TextBox
+                Width="150"
+                Watermark="事件名称"
+                Text="{Binding EventName}" />
+
+            <ComboBox
+                Width="120"
+                ItemsSource="{Binding EventTypes}"
+                SelectedItem="{Binding EventType}" />
+
+            <TextBox
+                Width="120"
+                Watermark="用户"
+                Text="{Binding UserName}" />
+
+            <DatePicker
+                SelectedDate="{Binding BeginDate}" />
+
+            <DatePicker
+                SelectedDate="{Binding EndDate}" />
+
+
+
+        </WrapPanel>
+
+    </Border>
+
+    <DataGrid
+        ItemsSource="{Binding PagedItems}"
+        AutoGenerateColumns="False">
+
+        <DataGrid.Columns>
+
+            <DataGridTextColumn
+                Header="ID"
+                Binding="{Binding Id}" />
+
+            <DataGridTextColumn
+                Header="事件名称"
+                Binding="{Binding EventName}" />
+
+            <DataGridTextColumn
+                Header="事件类型"
+                Binding="{Binding EventType}" />
+
+            <DataGridTextColumn
+                Header="页面路径"
+                Binding="{Binding PageUrl}" />
+
+            <DataGridTextColumn
+                Header="用户"
+                Binding="{Binding UserName}" />
+
+            <DataGridTextColumn
+                Header="IP"
+                Binding="{Binding UserIP}" />
+
+            <DataGridTextColumn
+                Header="浏览器"
+                Binding="{Binding Browser}" />
+
+            <DataGridTextColumn
+                Header="操作系统"
+                Binding="{Binding OS}" />
+
+            <DataGridTextColumn
+                Header="事件时间"
+                Binding="{Binding EventTime}" />
+
+        </DataGrid.Columns>
+
+    </DataGrid>
+
+        <ursa:Pagination CurrentPage="{Binding Page}" PageSize="{Binding PageSize}"/>
+        
+
+     </DockPanel>
+
 </UserControl>

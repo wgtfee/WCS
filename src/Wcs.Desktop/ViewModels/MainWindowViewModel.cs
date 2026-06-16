@@ -121,7 +121,11 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         _realtime.ConnectionStateChanged += OnConnectionStateChanged;
         _ = InitializeMenuAsync(api);
     }
-
+    
+    /// <summary>
+    /// 应用启动时的异步初始化方法，当前仅设置连接状态文本，后续可扩展为加载用户信息、权限等
+    /// </summary>
+    /// <returns></returns>
     public async Task InitializeAsync()
     {
         ConnectionText = "Connecting...";
@@ -142,7 +146,12 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
             new() { Id = id++, ParentId = 0, Name = "Event Log", Url = "/EventLog" },
         };
     }
-
+    
+    /// <summary>
+    /// 从 API 获取菜单数据并构建菜单树，若失败则使用默认菜单
+    /// </summary>
+    /// <param name="api"></param>
+    /// <returns></returns>
     private async Task InitializeMenuAsync(IWcsApiService api)
     {
         try
@@ -169,6 +178,10 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         }
     }
 
+    /// <summary>
+    /// 连接状态变化回调，更新 UI 显示
+    /// </summary>
+    /// <param name="connected"></param>
     private void OnConnectionStateChanged(bool connected)
         => ConnectionText = connected ? "Connected" : "Disconnected";
 
@@ -182,7 +195,12 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         }
         return tree;
     }
-
+    
+    /// <summary>
+    /// 打开一个新的标签页，若已存在同名标签则切换到该标签
+    /// </summary>
+    /// <param name="title"></param>
+    /// <param name="content"></param>
     public void OpenTab(string title, object content)
     {
         var existing = Tabs.FirstOrDefault(x => x.Header == title);
@@ -192,7 +210,11 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         Tabs.Add(tab);
         SelectedTabItem = tab;
     }
-
+    
+    /// <summary>
+    /// 关闭指定标签页，若无剩余标签则回到主页
+    /// </summary>
+    /// <param name="tab"></param>
     public void CloseTab(ClosableTabItem? tab)
     {
         if (tab == null || tab.CanClose == false) return;
@@ -218,6 +240,11 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         return Type.GetType(typeName);
     }
 
+    /// <summary>
+    /// 根据菜单项打开对应页面，约定：菜单 URL 对应 ViewModel 路由（如 "/Devices" → DevicesViewModel）
+    /// </summary>
+    /// <param name="menu"></param>
+    /// <returns></returns>
     public async Task OpenPageFromMenu(MenuItemDto? menu)
     {
         if (menu == null || string.IsNullOrWhiteSpace(menu.Url)) return;
