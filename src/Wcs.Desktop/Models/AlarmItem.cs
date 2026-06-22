@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace Wcs.Desktop.Models;
 
 /// <summary>
-/// 报警列表项 - 包装 AlarmState 用于 UI 显示
+/// 报警列表项 - 对应后端 AlarmState 全部字段
 /// </summary>
 public partial class AlarmItem : ObservableObject
 {
@@ -14,4 +14,6 @@ public partial class AlarmItem : ObservableObject
     [ObservableProperty] private string _message = string.Empty;
     [ObservableProperty] private DateTime _occurTime;
     [ObservableProperty] private DateTime? _recoverTime;
+    [ObservableProperty] private string? _rootCauseAlarmId;
+    [ObservableProperty] private int _rootCauseDepth;
 }

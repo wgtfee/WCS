@@ -13,6 +13,7 @@ using Wcs.Infrastructure.Persistence;
 using Wcs.Infrastructure.SignalR;
 using Microsoft.Extensions.Options;
 using Wcs.Simulator.PlcSimulatorEngine;
+using Wcs.Core.PlcSubsystem.Abstractions;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -40,18 +41,29 @@ try
     // ===== 后台服务 =====
     if (connectToPlc)
     {
+        //西门子PLC 轮询服务
         builder.Services.AddHostedService<S7PollingBackgroundService>();
+        builder.Services.AddWcsPlcCore();
+
+        // 按需注册具体的 PLC 连接
+        //builder.Services.AddPlcConnection(new ProtocolConnectionConfig
+        //{
+        //    Name = "ModbusPLC1",
+        //    Protocol = PlcProtocolType.Modbus,
+        //    Host = "192.168.1.100",
+        //    Port = 502,
+        //});
         Log.Logger.Information("🏭 真实 PLC 模式");
     }
     else
     {
-        builder.Services.AddSingleton(sp => new SimulatedPlcPollingService(
-            sp.GetRequiredService<Wcs.Core.PlcSubsystem.S7.PlcStructRegistry>(),
-            sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
-            sp.GetRequiredService<Wcs.Core.EventDetection.EventDetector>(),
-            sp.GetRequiredService<Wcs.Core.SignalSnapshot.SignalSnapshotCenter>(),
-            sp.GetRequiredService<ILogger<SimulatedPlcPollingService>>()));
-        builder.Services.AddHostedService<SimulatorBackgroundService>();
+        //builder.Services.AddSingleton(sp => new SimulatedPlcPollingService(
+        //    sp.GetRequiredService<Wcs.Core.PlcSubsystem.S7.PlcStructRegistry>(),
+        //    sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
+        //    sp.GetRequiredService<Wcs.Core.EventDetection.EventDetector>(),
+        //    sp.GetRequiredService<Wcs.Core.SignalSnapshot.SignalSnapshotCenter>(),
+        //    sp.GetRequiredService<ILogger<SimulatedPlcPollingService>>()));
+        //builder.Services.AddHostedService<SimulatorBackgroundService>();
         Log.Logger.Information("🧪 模拟模式 — 3 PLC 9 DB + 18 验证器");
     }
 

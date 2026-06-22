@@ -114,44 +114,46 @@ public partial class LoginViewModel : ObservableObject
         ErrorMessage = string.Empty;
         IsLoading = true;
         bool success = false;
-        try
-        {
-            var loginData = new LoginInfo
-            {
-                UserName = UserName,
-                Password = Password,
-                VerificationCode = Captcha,
-                UUID = _captchaKey
-            };
-
-            var token = await _dataProvider.GetToken(loginData);
-            if (!token.Status && token.Data != null)
-            {
-                ErrorMessage =  "登录失败，用户名或密码错误";
-                await GenerateCaptcha();
-                throw new Exception(token.Message);
-            }
-            else
-            {
-                _authState.Token = token.Data.token;
-                _authState.UserName = token.Data.userName;
-                success = true;
-                UserInfo.User = new UserDto
-                {
-                    Name = token.Data.userName,
-                    RoleId = token.Data.Role_Id,
-                };
-                UserInfo.UserName = UserName;
+            UserInfo.UserName = UserName;
                 LoginSuccess?.Invoke();
-            }
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"登录异常: {ex.Message}";
-        }
-        finally
-        {
-            IsLoading = false;
-        }
+        //try
+        //{
+        //    var loginData = new LoginInfo
+        //    {
+        //        UserName = UserName,
+        //        Password = Password,
+        //        VerificationCode = Captcha,
+        //        UUID = _captchaKey
+        //    };
+        //     
+        //    var token = await _dataProvider.GetToken(loginData);
+        //    if (!token.Status && token.Data != null)
+        //    {
+        //        ErrorMessage =  "登录失败，用户名或密码错误";
+        //        await GenerateCaptcha();
+        //        throw new Exception(token.Message);
+        //    }
+        //    else
+        //    {
+        //        _authState.Token = token.Data.token;
+        //        _authState.UserName = token.Data.userName;
+        //        success = true;
+        //        UserInfo.User = new UserDto
+        //        {
+        //            Name = token.Data.userName,
+        //            RoleId = token.Data.Role_Id,
+        //        };
+        //        UserInfo.UserName = UserName;
+        //        LoginSuccess?.Invoke();
+        //    }
+        //}
+        //catch (Exception ex)
+        //{
+        //    ErrorMessage = $"登录异常: {ex.Message}";
+        //}
+        //finally
+        //{
+        //    IsLoading = false;
+        //}
     }
 }

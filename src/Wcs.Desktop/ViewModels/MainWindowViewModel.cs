@@ -157,14 +157,15 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         try
         {
             WebResponseContent<List<MenuItemDto>> menus = null;
-            try
-            {
-                menus = await _dataProvider.GetMenus(UserInfo.User?.RoleId ?? 1);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Menu] API exception: {ex.Message}");
-            }
+            //------获取后端的API菜单数据，若失败则使用默认菜单
+            //try
+            //{
+            //    menus = await _dataProvider.GetMenus(UserInfo.User?.RoleId ?? 1);
+            //}
+            //catch (Exception ex)
+            //{
+            //    System.Diagnostics.Debug.WriteLine($"[Menu] API exception: {ex.Message}");
+            //}
 
             // 合并：默认菜单在后，API 动态菜单在前
             var all = BuildDefaultMenus();
