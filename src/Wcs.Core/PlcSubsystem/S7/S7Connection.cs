@@ -1,59 +1,7 @@
 namespace Wcs.Core.PlcSubsystem;
 
 using System.Collections.Concurrent;
-
-/// <summary>
-/// PLC 连接状态枚举
-/// </summary>
-public enum PlcConnectionStatusEnum
-{
-    /// <summary>
-    /// 未连接
-    /// </summary>
-    Disconnected = 0,
-
-    /// <summary>
-    /// 连接中
-    /// </summary>
-    Connecting = 1,
-
-    /// <summary>
-    /// 已连接
-    /// </summary>
-    Connected = 2,
-
-    /// <summary>
-    /// 连接失败
-    /// </summary>
-    Failed = 3,
-
-    /// <summary>
-    /// 断开连接中
-    /// </summary>
-    Disconnecting = 4
-}
-
-/// <summary>
-/// S7 连接状态
-/// </summary>
-public class PlcConnectionStatus
-{
-    public string PlcName { get; set; } = string.Empty;
-
-    public PlcConnectionStatusEnum Status { get; set; }
-
-    public DateTime LastConnectTime { get; set; }
-
-    public DateTime LastHeartbeat { get; set; }
-
-    public int FailureCount { get; set; }
-
-    public string? LastError { get; set; }
-
-    public int ReadCount { get; set; }
-
-    public int WriteCount { get; set; }
-}
+using Wcs.Core.PlcSubsystem.Abstractions;
 
 /// <summary>
 /// PLC 块数据

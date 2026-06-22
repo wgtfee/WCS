@@ -2,6 +2,7 @@ namespace Wcs.Core.PlcSubsystem;
 
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using Wcs.Core.PlcSubsystem.Abstractions;
 
 /// <summary>
 /// PLC 轮询服务接口

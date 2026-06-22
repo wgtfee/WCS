@@ -1,6 +1,7 @@
 namespace Wcs.Infrastructure.S7;
 
 using Wcs.Core.PlcSubsystem;
+using Wcs.Core.PlcSubsystem.Abstractions;
 using S7net = global::S7.Net;
 
 public class S7RealClient : IS7Connection

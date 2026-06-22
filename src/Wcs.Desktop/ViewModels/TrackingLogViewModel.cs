@@ -34,7 +34,7 @@ public partial class TrackingLogViewModel : ObservableObject
     [ObservableProperty]
     private int totalCount;
 
-        // 核心数据源
+    // 核心数据源
     public ObservableCollection<TrackingLogItem> AllItems { get; } = new();
 
     public ObservableCollection<string> EventTypes { get; } = [];
