@@ -41,4 +41,7 @@ public interface IWcsApiService
     /// <summary>从数据库分页查询历史任务</summary>
     Task<List<TaskContext>> GetTaskHistoryAsync(DateTime? from = null, DateTime? to = null,
         string? status = null, int page = 1, int pageSize = 50, CancellationToken ct = default);
+
+    /// <summary>从数据库读取持久化的设备状态</summary>
+    Task<List<DeviceState>> GetDevicesFromDbAsync(CancellationToken ct = default);
 }

@@ -31,8 +31,7 @@ public static class ServiceCollectionExtensions
         // 数据提供者
         services.AddSingleton<Wcs.Desktop.Interface.IDataProvider, ApiDataProvider>();
 
-        // 主题服务
-        services.AddSingleton<ThemeService>();
+        // 主题服务由 AtomUI 管理
 
         // ViewModels
         services.AddTransient<LoginViewModel>();

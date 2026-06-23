@@ -86,8 +86,8 @@ public class WcsController : ControllerBase
     // ===== 报警 DB 查询 =====
 
     [HttpGet("alarms/db")]
-    public async Task<ActionResult<List<AlarmState>>> GetAlarmsFromDb(CancellationToken ct)
-        => Ok(await _wcs.GetAlarmsFromDbAsync(ct));
+    public async Task<ActionResult<List<AlarmState>>> GetAlarmsFromDb()
+        => Ok(await _wcs.GetAlarmsFromDbAsync());
 
     [HttpGet("alarms/history")]
     public async Task<ActionResult<PagedResult<AlarmState>>> GetAlarmHistory(
@@ -96,11 +96,17 @@ public class WcsController : ControllerBase
         CancellationToken ct = default)
         => Ok(await _wcs.GetAlarmHistoryAsync(from, to, level, page, pageSize, ct));
 
+    // ===== 设备 DB 查询 =====
+
+    [HttpGet("devices/db")]
+    public async Task<ActionResult<List<DeviceState>>> GetDevicesFromDb()
+        => Ok(await _wcs.GetDevicesFromDbAsync());
+
     // ===== 任务 DB 查询 =====
 
     [HttpGet("tasks/db")]
-    public async Task<ActionResult<List<TaskContext>>> GetTasksFromDb(CancellationToken ct)
-        => Ok(await _wcs.GetTasksFromDbAsync(ct));
+    public async Task<ActionResult<List<TaskContext>>> GetTasksFromDb()
+        => Ok(await _wcs.GetTasksFromDbAsync());
 
     [HttpGet("tasks/history")]
     public async Task<ActionResult<PagedResult<TaskContext>>> GetTaskHistory(

@@ -1,3 +1,4 @@
+using AtomUI;
 using Avalonia;
 
 namespace Wcs.Desktop;
@@ -11,6 +12,7 @@ public static class Program
     {
         return AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            .WithAtomUIDefaultOptions()
             .LogToTrace();
     }
 }

@@ -1,4 +1,3 @@
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
@@ -9,12 +8,12 @@ using Wcs.Desktop.Services;
 namespace Wcs.Desktop.ViewModels;
 
 /// <summary>
-/// 任务管理 ViewModel — 全部从数据库加载
+/// 任务管理 ViewModel — 全部从数据库加载，支持本地搜索过滤
 /// </summary>
 public partial class TasksViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
-    private readonly IWcsRealtimeService _realtime;
+    private List<TaskItem> _allTasks = new();
 
     public ObservableCollection<TaskItem> Tasks { get; } = new();
 
@@ -22,25 +21,31 @@ public partial class TasksViewModel : ViewModelBase
     [ObservableProperty] private string _newTaskRouteId = string.Empty;
     [ObservableProperty] private int _newTaskPriority = 2;
     [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private string _searchText = string.Empty;
 
-    public TasksViewModel(IWcsApiService api, IWcsRealtimeService realtime)
+    public TasksViewModel(IWcsApiService api)
     {
         _api = api;
-        _realtime = realtime;
+    }
 
-        _realtime.TaskStateChanged += msg =>
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                var existing = Tasks.FirstOrDefault(t => t.TaskId == msg.TaskId);
-                if (existing is not null)
-                {
-                    existing.Status = msg.Runtime.Status.ToString();
-                    existing.StartTime = msg.Runtime.StartTime;
-                    existing.EndTime = msg.Runtime.EndTime;
-                }
-            });
-        };
+    partial void OnSearchTextChanged(string value)
+    {
+        ApplyFilter(value);
+    }
+
+    private void ApplyFilter(string? filter)
+    {
+        Tasks.Clear();
+        var items = string.IsNullOrWhiteSpace(filter)
+            ? _allTasks
+            : _allTasks.Where(t =>
+                t.TaskId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                t.DeviceId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                t.Status.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                t.RouteId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                (t.ErrorMessage?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false));
+        foreach (var item in items)
+            Tasks.Add(item);
     }
 
     protected override async Task OnInitializeAsync()
@@ -57,27 +62,20 @@ public partial class TasksViewModel : ViewModelBase
         try
         {
             var tasks = await _api.GetTasksFromDbAsync();
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
+            _allTasks = tasks.Select(t => new TaskItem
             {
-                Tasks.Clear();
-                foreach (var t in tasks)
-                {
-                    Tasks.Add(new TaskItem
-                    {
-                        TaskId = t.TaskId,
-                        DeviceId = t.DeviceId,
-                        Status = t.Status.ToString(),
-                        Priority = t.Priority,
-                        RouteId = t.RouteId,
-                        CreatedTime = t.CreatedTime,
-                        StartTime = t.StartTime,
-                        EndTime = t.EndTime,
-                        RetryCount = t.RetryCount,
-                        ErrorMessage = t.ErrorMessage
-                    });
-                }
-            });
+                TaskId = t.TaskId,
+                DeviceId = t.DeviceId,
+                Status = t.Status.ToString(),
+                Priority = t.Priority,
+                RouteId = t.RouteId,
+                CreatedTime = t.CreatedTime,
+                StartTime = t.StartTime,
+                EndTime = t.EndTime,
+                RetryCount = t.RetryCount,
+                ErrorMessage = t.ErrorMessage
+            }).ToList();
+            ApplyFilter(SearchText);
         }
         finally
         {

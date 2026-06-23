@@ -1,7 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
-             xmlns:ursa="https://irihi.tech/ursa"
              x:Class="Wcs.Desktop.Views.TrackingLogView"
              x:DataType="vm:TrackingLogViewModel"
              Background="{DynamicResource BgPrimary}">
@@ -21,9 +20,11 @@
 
         <!-- ========== 底部分页器 ========== -->
         <Border DockPanel.Dock="Bottom" Padding="0,8,0,0" Background="Transparent">
-            <ursa:Pagination CurrentPage="{Binding Page}" 
-                             PageSize="{Binding PageSize}" 
-                             TotalCount="{Binding TotalCount}"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                <Button Content="上一页" Command="{Binding PreviousPageCommand}" />
+                <TextBlock Text="{Binding PageInfo}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="8,0" />
+                <Button Content="下一页" Command="{Binding NextPageCommand}" />
+            </StackPanel>
         </Border>
 
         <!-- ========== 查询面板 ========== -->

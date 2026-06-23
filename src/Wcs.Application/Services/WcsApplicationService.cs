@@ -33,6 +33,7 @@ public class WcsApplicationService
     private readonly IIdempotencyManager _idempotency;
     private readonly IAlarmQueryService _alarmQuery;
     private readonly ITaskQueryService _taskQuery;
+    private readonly IDeviceQueryService _deviceQuery;
 
     public WcsApplicationService(
         IStateCenter stateCenter,
@@ -46,7 +47,8 @@ public class WcsApplicationService
         IRecoveryManager recoveryManager,
         IIdempotencyManager idempotency,
         IAlarmQueryService alarmQuery,
-        ITaskQueryService taskQuery)
+        ITaskQueryService taskQuery,
+        IDeviceQueryService deviceQuery)
     {
         _stateCenter = stateCenter;
         _eventBus = eventBus;
@@ -60,6 +62,7 @@ public class WcsApplicationService
         _idempotency = idempotency;
         _alarmQuery = alarmQuery;
         _taskQuery = taskQuery;
+        _deviceQuery = deviceQuery;
     }
 
     #region Tasks
@@ -301,6 +304,20 @@ public class WcsApplicationService
             Page = page,
             PageSize = pageSize
         };
+    }
+
+    /// <summary>
+    /// 从 Wcs_DeviceRuntime 表读取持久化的设备状态
+    /// </summary>
+    public async Task<List<DeviceState>> GetDevicesFromDbAsync(CancellationToken ct = default)
+    {
+        var entities = await _deviceQuery.GetDeviceRuntimesAsync(ct);
+        return entities.Select(e => new DeviceState
+        {
+            DeviceId = e.DeviceId,
+            Status = Enum.TryParse<DeviceStatusEnum>(e.Status, out var s) ? s : DeviceStatusEnum.Offline,
+            LastUpdateTime = e.LastUpdateTime
+        }).ToList();
     }
 
     #endregion

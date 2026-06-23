@@ -1,16 +1,16 @@
+using AtomUI.Theme;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
-using Wcs.Desktop.Services;
 using Wcs.Desktop.Views;
 
 namespace Wcs.Desktop.Controls;
 
 public partial class ProfileMenuView : UserControl
 {
-    private ThemeService _theme => App.GetService<ThemeService>()!;
+    private IThemeManager? _theme => App.GetService<IThemeManager>();
 
     public ProfileMenuView()
     {
@@ -27,7 +27,8 @@ public partial class ProfileMenuView : UserControl
 
     private void UpdateThemeButtonText()
     {
-        ThemeButton.Content = _theme.Current == ThemeVariant.Dark ? "🎨 浅色主题" : "🎨 深色主题";
+        var isDark = _theme?.IsDarkThemeMode == true;
+        ThemeButton.Content = isDark ? "🎨 浅色主题" : "🎨 深色主题";
     }
 
     private void OnPersonalInfoClick(object? sender, RoutedEventArgs e)
@@ -48,7 +49,8 @@ public partial class ProfileMenuView : UserControl
 
     private void OnThemeToggleClick(object? sender, RoutedEventArgs e)
     {
-        _theme.Toggle();
+        if (_theme is null) return;
+        _theme.IsDarkThemeMode = !_theme.IsDarkThemeMode;
         UpdateThemeButtonText();
     }
 

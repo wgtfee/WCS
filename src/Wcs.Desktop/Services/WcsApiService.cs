@@ -108,6 +108,9 @@ public class WcsApiService : IWcsApiService
         return await _http.GetFromJsonAsync<List<TaskContext>>(query, ct) ?? [];
     }
 
+    public async Task<List<DeviceState>> GetDevicesFromDbAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<DeviceState>>("/api/devices/db", ct) ?? [];
+
     /// <summary>构建查询字符串，跳过 null/空参数</summary>
     private static string BuildQuery(string basePath, params (string Name, string? Value)[] parameters)
     {

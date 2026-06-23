@@ -26,6 +26,7 @@ public static class DependencyInjection
         // 数据库查询服务（依赖 ISqlSugarClient，在 Host Program.cs 中注册）
         services.AddSingleton<IAlarmQueryService, AlarmQueryService>();
         services.AddSingleton<ITaskQueryService, TaskQueryService>();
+        services.AddSingleton<IDeviceQueryService, DeviceQueryService>();
 
         return services;
     }

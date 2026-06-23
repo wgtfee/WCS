@@ -1,14 +1,17 @@
+using AtomUI;
+using AtomUI.Desktop.Controls;
+using AtomUI.Theme;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
+using System.Globalization;
 using Wcs.Desktop.Interface;
 using Wcs.Desktop.Models;
 using Wcs.Desktop.Services;
 using Wcs.Desktop.ViewModels;
 using Wcs.Desktop.Views;
-//using Wcs.Service;
 
 namespace Wcs.Desktop;
 
@@ -18,6 +21,14 @@ public partial class App : Application
 
     public override void Initialize()
     {
+        this.UseAtomUI(builder =>
+        {
+            builder.WithDefaultCultureInfo(CultureInfo.CurrentUICulture);
+            builder.WithDefaultTheme(IThemeManager.DEFAULT_THEME_ID);
+            builder.UseDesktopControls();
+            builder.UseDesktopDataGrid();
+        });
+
         AvaloniaXamlLoader.Load(this);
         _services = ConfigureServices();
     }
@@ -31,7 +42,7 @@ public partial class App : Application
             var loginVm = _services!.GetRequiredService<LoginViewModel>();
             var loginView = new LoginView { DataContext = loginVm };
 
-            var window = new Window
+            var window = new Avalonia.Controls.Window
             {
                 Content = loginView,
                 SizeToContent = SizeToContent.WidthAndHeight,
@@ -67,7 +78,7 @@ public partial class App : Application
 
             desktop.MainWindow = window;
         }
- 
+
         base.OnFrameworkInitializationCompleted();
     }
 

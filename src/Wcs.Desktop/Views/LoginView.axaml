@@ -2,6 +2,7 @@
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
              x:DataType="vm:LoginViewModel"
              Background="{DynamicResource BgPrimary}">
     <UserControl.Styles>
@@ -135,7 +136,7 @@
             </StackPanel>
 
             <!-- 登录按钮 -->
-            <Button Grid.Row="2"
+            <atom:Button Grid.Row="2"
                     Content="登 录"
                     Command="{Binding LoginCommand}"
                     IsEnabled="{Binding !IsLoading}"
@@ -150,7 +151,7 @@
                         <Setter Property="Background" Value="#106EBE"/>
                     </Style>
                 </Button.Styles>
-            </Button>
+            </atom:Button>
         </Grid>
     </Grid>
 </UserControl>

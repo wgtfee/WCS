@@ -2,8 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:Wcs.Desktop"
              xmlns:conv="using:Wcs.Desktop.Converters"
-             xmlns:semi="https://irihi.tech/semi"
-             xmlns:u-semi="https://irihi.tech/ursa/themes/semi"
              x:Class="Wcs.Desktop.App">
     <Application.Resources>
         <ResourceDictionary>
@@ -25,7 +23,5 @@
 
     <Application.Styles>
         <FluentTheme />
-        <semi:SemiTheme Locale="zh-CN" />
-        <u-semi:SemiTheme Locale="zh-CN" />
     </Application.Styles>
 </Application>

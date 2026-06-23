@@ -41,6 +41,11 @@ public partial class TrackingLogViewModel : ObservableObject
 
     public ObservableCollection<TrackingLogItem> PagedItems { get; } = [];
 
+    /// <summary>分页信息文字</summary>
+    public string PageInfo => $"第 {Page} 页 / 共 {TotalPages} 页（共 {TotalCount} 条）";
+
+    private int TotalPages => TotalCount > 0 ? (int)Math.Ceiling((double)TotalCount / PageSize) : 1;
+
     [RelayCommand]
     private void Search()
     {
@@ -51,10 +56,27 @@ public partial class TrackingLogViewModel : ObservableObject
     {
     }
 
+    [RelayCommand]
+    private void PreviousPage()
+    {
+        if (Page > 1) Page--;
+    }
 
-   // 当分页改变时，重新切片数据
-    partial void OnPageChanged(int value) => UpdatePage();
+    [RelayCommand]
+    private void NextPage()
+    {
+        if (Page < TotalPages) Page++;
+    }
+
+    // 当分页改变时，重新切片数据
+    partial void OnPageChanged(int value)
+    {
+        UpdatePage();
+        OnPropertyChanged(nameof(PageInfo));
+    }
+
     partial void OnPageSizeChanged(int value) => UpdatePage();
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(PageInfo));
 
     private void UpdatePage()
     {
@@ -63,5 +85,4 @@ public partial class TrackingLogViewModel : ObservableObject
         foreach (var item in items)
             PagedItems.Add(item);
     }
-
 }
