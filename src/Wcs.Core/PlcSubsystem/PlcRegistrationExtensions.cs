@@ -1,10 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wcs.Core.PlcSubsystem.Abstractions;
+using Wcs.Core.PlcSubsystem.Label;
 using Wcs.Core.PlcSubsystem.Modbus;
 using Wcs.Core.PlcSubsystem.OpcUa;
 using Wcs.Core.PlcSubsystem.Eip;
 using Wcs.Core.PlcSubsystem.Mqtt;
+using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
 
 namespace Wcs.Core.PlcSubsystem;
 
@@ -27,6 +29,10 @@ public static class PlcRegistrationExtensions
         services.TryAddTransient<EipConnection>();
         services.TryAddTransient<MqttConnection>();
 
+        // 标签式读写
+        services.AddSingleton<PlcTagRegistry>();
+        services.TryAddTransient<PlcTagSerializer>();
+
         return services;
     }
 
@@ -42,6 +48,19 @@ public static class PlcRegistrationExtensions
             return factory.Create(config);
         });
 
+        return services;
+    }
+
+    /// <summary>
+    /// 使用 S7CommPlus 符号标签协议（适用于 S7-1500）
+    /// 从 appsettings.json 读取连接配置（S7CommPlus 节）
+    /// </summary>
+    public static IServiceCollection AddS7CommPlus(this IServiceCollection services,
+        S7CommPlusConfig config)
+    {
+        if (config == null) throw new ArgumentNullException(nameof(config));
+        services.AddSingleton(config);
+        services.TryAddTransient<IPlcClient, S7CommPlusPlcClient>();
         return services;
     }
 }

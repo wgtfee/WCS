@@ -1,17 +1,28 @@
 using System.Reflection;
+using Wcs.Core.PlcSubsystem.Abstractions;
 
-namespace Wcs.Core.PlcSubsystem;
+namespace Wcs.Core.PlcSubsystem.Label;
 
-public class PlcSerializer
+/// <summary>
+/// 基于标签特性的序列化器 — 使用 [PlcStruct] / [PlcTag] 特性读写 PLC 数据
+///
+/// 依赖 IPlcClient 实现底层通信，可配合 Snap7PlcClient（Snap7 协议）使用。
+///
+/// 用法：
+///   var serializer = new PlcTagSerializer(new Snap7PlcClient(registry, readPool, writePool));
+///   await serializer.ReadAsync(statusObj);   // 自动读取所有 [PlcTag] 属性
+///   await serializer.WriteAsync(cmdObj);     // 自动写入所有 [PlcTag] 属性
+/// </summary>
+public class PlcTagSerializer
 {
     private readonly IPlcClient _plc;
 
-    public PlcSerializer(IPlcClient plc)
+    public PlcTagSerializer(IPlcClient plc)
     {
-        _plc = plc;
+        _plc = plc ?? throw new ArgumentNullException(nameof(plc));
     }
 
-    /// <summary>读取对象</summary>
+    /// <summary>读取对象 — 自动识别结构体或独立标签模式</summary>
     public async Task ReadAsync(object obj)
     {
         var structAttr = obj.GetType().GetCustomAttribute<PlcStructAttribute>();
@@ -22,7 +33,7 @@ public class PlcSerializer
             await ReadTagsAsync(obj);
     }
 
-    /// <summary>写入对象</summary>
+    /// <summary>写入对象 — 自动识别结构体或独立标签模式</summary>
     public async Task WriteAsync(object obj)
     {
         var structAttr = obj.GetType().GetCustomAttribute<PlcStructAttribute>();
@@ -36,12 +47,15 @@ public class PlcSerializer
     private async Task ReadStructAsync(object obj, PlcStructAttribute attr)
     {
         var props = GetPlcProperties(obj.GetType());
-        var names = props.Select(p => $"{attr.Path}.{p.Name}").ToList();
+        var names = props.Select(p => $"{attr.Path}.{p.Name}").ToArray();
 
         var values = await _plc.ReadBatchAsync(names, attr.TimeoutMs);
 
         for (int i = 0; i < props.Length; i++)
-            props[i].SetValue(obj, Convert.ChangeType(values[i], props[i].PropertyType));
+        {
+            if (values[i] != null)
+                props[i].SetValue(obj, Convert.ChangeType(values[i], props[i].PropertyType));
+        }
     }
 
     private async Task WriteStructAsync(object obj, PlcStructAttribute attr)
@@ -62,7 +76,8 @@ public class PlcSerializer
             if (tag == null || !tag.Monitored) continue;
 
             var value = await _plc.ReadAsync(tag.Name);
-            prop.SetValue(obj, Convert.ChangeType(value, prop.PropertyType));
+            if (value != null)
+                prop.SetValue(obj, Convert.ChangeType(value, prop.PropertyType));
         }
     }
 
@@ -77,10 +92,10 @@ public class PlcSerializer
         }
     }
 
-    /// <summary>过滤出需要映射到 PLC 的属性</summary>
+    /// <summary>过滤出需要映射到 PLC 的属性（忽略带 [PlcIgnore] 的属性）</summary>
     private static PropertyInfo[] GetPlcProperties(Type type)
     {
-        return type.GetProperties()
+        return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.CanWrite)
             .Where(p => p.GetCustomAttribute<PlcIgnoreAttribute>() == null)
             .ToArray();

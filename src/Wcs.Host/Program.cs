@@ -14,6 +14,7 @@ using Wcs.Infrastructure.SignalR;
 using Microsoft.Extensions.Options;
 using Wcs.Simulator.PlcSimulatorEngine;
 using Wcs.Core.PlcSubsystem.Abstractions;
+using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -43,7 +44,13 @@ try
     {
         //西门子PLC 轮询服务
         builder.Services.AddHostedService<S7PollingBackgroundService>();
+        //偏移量地址读取服务
         builder.Services.AddWcsPlcCore();
+        //标签读取服务
+        var plusConfig = builder.Configuration.GetSection("S7CommPlus").Get<S7CommPlusConfig>();
+        if (plusConfig == null)
+            throw new InvalidOperationException("未找到 S7CommPlus 配置节");
+        builder.Services.AddS7CommPlus(plusConfig);
 
         // 按需注册具体的 PLC 连接
         //builder.Services.AddPlcConnection(new ProtocolConnectionConfig

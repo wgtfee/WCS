@@ -22,4 +22,9 @@
     <PackageReference Include="System.Collections.Concurrent" Version="4.3.0" />
   </ItemGroup>
 
+  <!-- S7CommPlus 驱动（net8.0 目标） -->
+  <ItemGroup>
+    <ProjectReference Include="..\Wcs.S7CommPlusDriver\src\S7CommPlusDriver\S7CommPlusDriver.csproj" />
+  </ItemGroup>
+
 </Project>
