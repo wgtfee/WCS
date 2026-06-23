@@ -94,7 +94,12 @@ public class CommandCenter : ICommandCenter, IDisposable
     {
         var record = CreateRecord(commandType, deviceId, taskId);
         _commands[record.CommandId] = record;
-
+        if(commandData == null)
+        {
+            record.Status = DeviceCommandStatus.Failed;
+            record.ErrorMessage = "命令数据不能为空";
+            return record;
+        }
         var serializer = ResolveSerializer(commandData);
         if (serializer == null)
         {
