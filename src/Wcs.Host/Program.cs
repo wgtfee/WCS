@@ -14,10 +14,12 @@ using Wcs.Infrastructure.SignalR;
 using Microsoft.Extensions.Options;
 using Wcs.Simulator.PlcSimulatorEngine;
 using Wcs.Core.PlcSubsystem.Abstractions;
+using Wcs.Core.EventDetection;
 using Wcs.Core.PlcSubsystem.Label;
 using Wcs.Core.PlcSubsystem.Modbus;
 using Wcs.Core.PlcSubsystem.OpcUa;
 using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
+using Wcs.Core.SignalSnapshot;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -59,7 +61,9 @@ try
         {
             var serializer = sp.GetRequiredService<PlcTagSerializer>();
             var logger = sp.GetRequiredService<ILogger<TagPollingService>>();
-            var service = new TagPollingService(serializer, logger);
+            var snapshot = sp.GetService<SignalSnapshotCenter>();
+            var detector = sp.GetService<EventDetector>();
+            var service = new TagPollingService(serializer, logger, snapshot, detector);
 
             // 从 appsettings.json → PlcTagPolls 读取所有轮询类型
             var tagPolls = builder.Configuration.GetSection("PlcTagPolls").Get<TagPollConfig[]>();
@@ -82,7 +86,9 @@ try
             {
                 var serializer = sp.GetRequiredService<ModbusTagSerializer>();
                 var logger = sp.GetRequiredService<ILogger<ModbusPollingService>>();
-                var service = new ModbusPollingService(serializer, logger);
+                var snapshot = sp.GetService<SignalSnapshotCenter>();
+                var detector = sp.GetService<EventDetector>();
+                var service = new ModbusPollingService(serializer, logger, snapshot, detector);
                 service.AddFromConfig(modbusConfig);
                 return service;
             });
@@ -99,7 +105,9 @@ try
             {
                 var serializer = sp.GetRequiredService<OpcUaTagSerializer>();
                 var logger = sp.GetRequiredService<ILogger<OpcUaPollingService>>();
-                var service = new OpcUaPollingService(serializer, logger);
+                var snapshot = sp.GetService<SignalSnapshotCenter>();
+                var detector = sp.GetService<EventDetector>();
+                var service = new OpcUaPollingService(serializer, logger, snapshot, detector);
                 service.AddFromConfig(opcuaConfig);
                 return service;
             });

@@ -1,5 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging;
+using Wcs.Core.EventDetection;
+using Wcs.Core.SignalSnapshot;
 
 namespace Wcs.Core.PlcSubsystem.Label;
 
@@ -15,21 +17,30 @@ namespace Wcs.Core.PlcSubsystem.Label;
 ///   2. JSON 配置：PlcTagPolls → AddFromConfig()
 ///
 /// 轮询间隔从 [PlcStruct(RefreshRateMs)] 特性读取。
+///
+/// 事件链路（与 S7PollingService 一致）：
+///   读取后 → StateCenter 同步 → 快照更新 → EventDetector 边沿检测
 /// </summary>
 public class TagPollingService : IDisposable
 {
     private readonly PlcTagSerializer _serializer;
     private readonly ILogger<TagPollingService>? _logger;
+    private readonly SignalSnapshotCenter? _snapshotCenter;
+    private readonly EventDetector? _eventDetector;
     private readonly List<TagPollRegistration> _registrations = new();
     private readonly List<Timer> _timers = new();
     private bool _running;
 
     public TagPollingService(
         PlcTagSerializer serializer,
-        ILogger<TagPollingService>? logger = null)
+        ILogger<TagPollingService>? logger = null,
+        SignalSnapshotCenter? snapshotCenter = null,
+        EventDetector? eventDetector = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _logger = logger;
+        _snapshotCenter = snapshotCenter;
+        _eventDetector = eventDetector;
     }
 
     /// <summary>从 JSON 配置注册轮询（PlcTagPolls）</summary>
@@ -77,6 +88,8 @@ public class TagPollingService : IDisposable
 
         foreach (var reg in _registrations)
         {
+            var blockKey = reg.StructType.FullName ?? reg.StructType.Name;
+
             var timer = new Timer(async _ =>
             {
                 try
@@ -86,15 +99,12 @@ public class TagPollingService : IDisposable
 
                     await _serializer.ReadAsync(instance);
 
-                    foreach (var prop in reg.StructType.GetProperties(
-                        BindingFlags.Public | BindingFlags.Instance))
-                    {
-                        if (prop.GetCustomAttribute<PlcIgnoreAttribute>() != null) continue;
-                        var tagAttr = prop.GetCustomAttribute<PlcTagAttribute>();
-                        if (tagAttr == null || !tagAttr.Monitored) continue;
+                    // === 事件链路（与 S7PollingService 一致） ===
+                    // 1. 快照更新（为 EventDetector 提供 previous）
+                    _snapshotCenter?.Update(blockKey, instance, reg.StructType);
 
-                        _logger?.LogDebug("[TagPoll] {Tag} = {Value}", tagAttr.Name, prop.GetValue(instance));
-                    }
+                    // 2. EventDetector 边沿检测 → 业务事件
+                    _eventDetector?.Detect(blockKey, instance);
                 }
                 catch (Exception ex)
                 {

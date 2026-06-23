@@ -1,5 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging;
+using Wcs.Core.EventDetection;
+using Wcs.Core.SignalSnapshot;
 using Wcs.Core.PlcSubsystem.Label;
 
 namespace Wcs.Core.PlcSubsystem.OpcUa;
@@ -11,16 +13,22 @@ public class OpcUaPollingService : IDisposable
 {
     private readonly OpcUaTagSerializer _serializer;
     private readonly ILogger<OpcUaPollingService>? _logger;
+    private readonly SignalSnapshotCenter? _snapshotCenter;
+    private readonly EventDetector? _eventDetector;
     private readonly List<OpcUaPollRegistration> _registrations = new();
     private readonly List<Timer> _timers = new();
     private bool _running;
 
     public OpcUaPollingService(
         OpcUaTagSerializer serializer,
-        ILogger<OpcUaPollingService>? logger = null)
+        ILogger<OpcUaPollingService>? logger = null,
+        SignalSnapshotCenter? snapshotCenter = null,
+        EventDetector? eventDetector = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _logger = logger;
+        _snapshotCenter = snapshotCenter;
+        _eventDetector = eventDetector;
     }
 
     public void AddFromConfig(IEnumerable<TagPollConfig> configs)
@@ -64,6 +72,8 @@ public class OpcUaPollingService : IDisposable
 
         foreach (var reg in _registrations)
         {
+            var blockKey = reg.StructType.FullName ?? reg.StructType.Name;
+
             var timer = new Timer(async _ =>
             {
                 try
@@ -71,6 +81,10 @@ public class OpcUaPollingService : IDisposable
                     var instance = Activator.CreateInstance(reg.StructType);
                     if (instance == null) return;
                     await _serializer.ReadAsync(instance);
+
+                    // 事件链路
+                    _snapshotCenter?.Update(blockKey, instance, reg.StructType);
+                    _eventDetector?.Detect(blockKey, instance);
                 }
                 catch (Exception ex)
                 {
