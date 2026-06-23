@@ -9,7 +9,7 @@
         <conv:StatusToColorConverter x:Key="StatusToColor" />
     </UserControl.Resources>
 
-    <DockPanel Margin="16">
+    <DockPanel Margin="16" Grid.IsSharedSizeScope="True">
         <!-- Toolbar -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
@@ -21,50 +21,81 @@
             </Grid>
         </Border>
 
-        <!-- 报警列表 DataGrid -->
-        <DataGrid ItemsSource="{Binding Alarms}" AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  Background="{DynamicResource BgStatusBar}"
-                  BorderBrush="{DynamicResource BorderColor}"
-                  RowHeight="36"
-                  Margin="0,0,0,8">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="报警 ID" Binding="{Binding AlarmId}" Width="SizeToCells" />
-                <DataGridTextColumn Header="报警码" Binding="{Binding AlarmCode}" Width="SizeToCells" />
-                <DataGridTextColumn Header="级别" Binding="{Binding Level}" Width="SizeToCells" />
-                <DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="3*" />
-                <DataGridTemplateColumn Header="状态" Width="SizeToCells">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Border CornerRadius="3" Padding="6,2"
-                                    Background="{Binding Level, Converter={StaticResource StatusToColor}, ConverterParameter=bg}"
-                                    Opacity="0.8">
-                                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource TextPrimary}" FontSize="12" />
-                            </Border>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTextColumn Header="发生时间" Binding="{Binding OccurTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Width="SizeToCells" />
-                <DataGridTextColumn Header="恢复时间" Binding="{Binding RecoverTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Width="SizeToCells" />
-                <DataGridTextColumn Header="根因报警" Binding="{Binding RootCauseAlarmId}" Width="SizeToCells" />
-                <DataGridTextColumn Header="根因深度" Binding="{Binding RootCauseDepth}" Width="60" />
-                <DataGridTemplateColumn Header="操作" Width="140">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <Button Content="确认"
-                                        Command="{Binding $parent[DataGrid].DataContext.AckAlarmCommand}"
-                                        CommandParameter="{Binding AlarmId}"
-                                        Classes="Warning" />
-                                <Button Content="恢复"
-                                        Command="{Binding $parent[DataGrid].DataContext.RecoverAlarmCommand}"
-                                        CommandParameter="{Binding AlarmCode}"
-                                        Classes="Primary" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+        <!-- 报警列表表头 -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" CornerRadius="4,4,0,0" Padding="8,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="120" SharedSizeGroup="Col0" />
+                    <ColumnDefinition Width="80" SharedSizeGroup="Col1" />
+                    <ColumnDefinition Width="60" SharedSizeGroup="Col2" />
+                    <ColumnDefinition Width="*" SharedSizeGroup="Col3" />
+                    <ColumnDefinition Width="80" SharedSizeGroup="Col4" />
+                    <ColumnDefinition Width="160" SharedSizeGroup="Col5" />
+                    <ColumnDefinition Width="160" SharedSizeGroup="Col6" />
+                    <ColumnDefinition Width="100" SharedSizeGroup="Col7" />
+                    <ColumnDefinition Width="60" SharedSizeGroup="Col8" />
+                    <ColumnDefinition Width="140" SharedSizeGroup="Col9" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="报警 ID" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="报警码" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="级别" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3" Text="消息" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="4" Text="状态" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="5" Text="发生时间" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="6" Text="恢复时间" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="7" Text="根因报警" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="8" Text="根因深度" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="9" Text="操作" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- 报警列表 -->
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Alarms}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Padding="8,6" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120" SharedSizeGroup="Col0" />
+                                    <ColumnDefinition Width="80" SharedSizeGroup="Col1" />
+                                    <ColumnDefinition Width="60" SharedSizeGroup="Col2" />
+                                    <ColumnDefinition Width="*" SharedSizeGroup="Col3" />
+                                    <ColumnDefinition Width="80" SharedSizeGroup="Col4" />
+                                    <ColumnDefinition Width="160" SharedSizeGroup="Col5" />
+                                    <ColumnDefinition Width="160" SharedSizeGroup="Col6" />
+                                    <ColumnDefinition Width="100" SharedSizeGroup="Col7" />
+                                    <ColumnDefinition Width="60" SharedSizeGroup="Col8" />
+                                    <ColumnDefinition Width="140" SharedSizeGroup="Col9" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding AlarmId}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding AlarmCode}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="8,0" />
+                                <TextBlock Grid.Column="2" Text="{Binding Level}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="3" Text="{Binding Message}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="8,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                <Border Grid.Column="4" CornerRadius="3" Padding="6,2"
+                                        Background="{Binding Level, Converter={StaticResource StatusToColor}, ConverterParameter=bg}"
+                                        Opacity="0.8" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource TextPrimary}" FontSize="12" />
+                                </Border>
+                                <TextBlock Grid.Column="5" Text="{Binding OccurTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="8,0" />
+                                <TextBlock Grid.Column="6" Text="{Binding RecoverTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="8,0" />
+                                <TextBlock Grid.Column="7" Text="{Binding RootCauseAlarmId}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="8,0" />
+                                <TextBlock Grid.Column="8" Text="{Binding RootCauseDepth}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="8,0" />
+                                <StackPanel Grid.Column="9" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="8,0">
+                                    <Button Content="确认"
+                                            Command="{Binding $parent[ItemsControl].DataContext.AckAlarmCommand}"
+                                            CommandParameter="{Binding AlarmId}"
+                                            Classes="Warning" />
+                                    <Button Content="恢复"
+                                            Command="{Binding $parent[ItemsControl].DataContext.RecoverAlarmCommand}"
+                                            CommandParameter="{Binding AlarmCode}"
+                                            Classes="Primary" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
     </DockPanel>
 </UserControl>

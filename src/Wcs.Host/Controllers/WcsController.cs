@@ -83,6 +83,32 @@ public class WcsController : ControllerBase
         return Ok();
     }
 
+    // ===== 报警 DB 查询 =====
+
+    [HttpGet("alarms/db")]
+    public async Task<ActionResult<List<AlarmState>>> GetAlarmsFromDb(CancellationToken ct)
+        => Ok(await _wcs.GetAlarmsFromDbAsync(ct));
+
+    [HttpGet("alarms/history")]
+    public async Task<ActionResult<PagedResult<AlarmState>>> GetAlarmHistory(
+        [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null,
+        [FromQuery] string? level = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+        => Ok(await _wcs.GetAlarmHistoryAsync(from, to, level, page, pageSize, ct));
+
+    // ===== 任务 DB 查询 =====
+
+    [HttpGet("tasks/db")]
+    public async Task<ActionResult<List<TaskContext>>> GetTasksFromDb(CancellationToken ct)
+        => Ok(await _wcs.GetTasksFromDbAsync(ct));
+
+    [HttpGet("tasks/history")]
+    public async Task<ActionResult<PagedResult<TaskContext>>> GetTaskHistory(
+        [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null,
+        [FromQuery] string? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+        => Ok(await _wcs.GetTaskHistoryAsync(from, to, status, page, pageSize, ct));
+
     [HttpGet("objects")]
     public ActionResult<IEnumerable<ObjectState>> GetObjects()
     {

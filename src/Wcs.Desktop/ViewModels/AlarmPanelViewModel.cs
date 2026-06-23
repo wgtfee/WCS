@@ -8,50 +8,30 @@ using Wcs.Desktop.Services;
 namespace Wcs.Desktop.ViewModels;
 
 /// <summary>
-/// 报警面板 ViewModel
+/// 报警面板 ViewModel — 点击刷新时从数据库加载
 /// </summary>
 public partial class AlarmsViewModel : ViewModelBase
 {
     private readonly IWcsApiService _api;
-    private readonly IWcsRealtimeService _realtime;
 
     public ObservableCollection<AlarmItem> Alarms { get; } = new();
 
     [ObservableProperty] private bool _isLoading;
 
-    public AlarmsViewModel(IWcsApiService api, IWcsRealtimeService realtime)
+    public AlarmsViewModel(IWcsApiService api)
     {
         _api = api;
-        _realtime = realtime;
-
-        _realtime.AlarmBroadcast += msg =>
-        {
-            if (msg.Action == "Raised" && msg.Alarm is Wcs.Core.StateCenter.Models.AlarmState alarm)
-            {
-                Alarms.Insert(0, new AlarmItem
-                {
-                    AlarmId = alarm.AlarmId,
-                    AlarmCode = alarm.AlarmCode,
-                    Status = alarm.Status.ToString(),
-                    Level = alarm.Level.ToString(),
-                    Message = alarm.Message,
-                    OccurTime = alarm.OccurTime
-                });
-            }
-        };
     }
 
-    public async Task InitializeAsync()
-    {
-        await LoadAsync();
-    }
-
+    /// <summary>
+    /// 从数据库加载报警状态（Wcs_AlarmRuntime 表）
+    /// </summary>
     public async Task LoadAsync()
     {
         IsLoading = true;
         try
         {
-            var alarms = await _api.GetAlarmsAsync();
+            var alarms = await _api.GetAlarmsFromDbAsync();
             Alarms.Clear();
             foreach (var a in alarms)
             {

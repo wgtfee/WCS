@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
@@ -8,7 +9,7 @@ using Wcs.Desktop.Services;
 namespace Wcs.Desktop.ViewModels;
 
 /// <summary>
-/// 任务管理 ViewModel
+/// 任务管理 ViewModel — 全部从数据库加载
 /// </summary>
 public partial class TasksViewModel : ViewModelBase
 {
@@ -29,39 +30,54 @@ public partial class TasksViewModel : ViewModelBase
 
         _realtime.TaskStateChanged += msg =>
         {
-            var existing = Tasks.FirstOrDefault(t => t.TaskId == msg.TaskId);
-            if (existing is not null)
+            Dispatcher.UIThread.Post(() =>
             {
-                existing.Status = msg.Runtime.Status.ToString();
-                existing.StartTime = msg.Runtime.StartTime;
-                existing.EndTime = msg.Runtime.EndTime;
-            }
+                var existing = Tasks.FirstOrDefault(t => t.TaskId == msg.TaskId);
+                if (existing is not null)
+                {
+                    existing.Status = msg.Runtime.Status.ToString();
+                    existing.StartTime = msg.Runtime.StartTime;
+                    existing.EndTime = msg.Runtime.EndTime;
+                }
+            });
         };
     }
 
-    public async Task InitializeAsync()
+    protected override async Task OnInitializeAsync()
     {
         await LoadAsync();
     }
+
+    /// <summary>
+    /// 从数据库加载持久化的任务运行记录（Wcs_TaskRun 表）
+    /// </summary>
     public async Task LoadAsync()
     {
         IsLoading = true;
         try
         {
-            var tasks = await _api.GetActiveTasksAsync();
-            Tasks.Clear();
-            foreach (var t in tasks)
+            var tasks = await _api.GetTasksFromDbAsync();
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Tasks.Add(new TaskItem
+                Tasks.Clear();
+                foreach (var t in tasks)
                 {
-                    TaskId = t.TaskId,
-                    Status = t.Status.ToString(),
-                    Priority = t.Priority,
-                    RouteId = t.RouteId,
-                    StartTime = t.StartTime,
-                    EndTime = t.EndTime
-                });
-            }
+                    Tasks.Add(new TaskItem
+                    {
+                        TaskId = t.TaskId,
+                        DeviceId = t.DeviceId,
+                        Status = t.Status.ToString(),
+                        Priority = t.Priority,
+                        RouteId = t.RouteId,
+                        CreatedTime = t.CreatedTime,
+                        StartTime = t.StartTime,
+                        EndTime = t.EndTime,
+                        RetryCount = t.RetryCount,
+                        ErrorMessage = t.ErrorMessage
+                    });
+                }
+            });
         }
         finally
         {

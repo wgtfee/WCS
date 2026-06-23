@@ -77,4 +77,44 @@ public class WcsApiService : IWcsApiService
 
     public async Task<List<MenuItemDto>> GetMenusAsync(CancellationToken ct = default)
         => await _http.GetFromJsonAsync<List<MenuItemDto>>("/api/menus", ct) ?? [];
+
+    // ---- 数据库查询 ----
+
+    public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
+
+    public async Task<List<AlarmState>> GetAlarmHistoryAsync(
+        DateTime? from = null, DateTime? to = null,
+        string? level = null, int page = 1, int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var query = BuildQuery("/api/alarms/history", ("from", from?.ToString("O")),
+            ("to", to?.ToString("O")), ("level", level),
+            ("page", page.ToString()), ("pageSize", pageSize.ToString()));
+        return await _http.GetFromJsonAsync<List<AlarmState>>(query, ct) ?? [];
+    }
+
+    public async Task<List<TaskContext>> GetTasksFromDbAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TaskContext>>("/api/tasks/db", ct) ?? [];
+
+    public async Task<List<TaskContext>> GetTaskHistoryAsync(
+        DateTime? from = null, DateTime? to = null,
+        string? status = null, int page = 1, int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var query = BuildQuery("/api/tasks/history", ("from", from?.ToString("O")),
+            ("to", to?.ToString("O")), ("status", status),
+            ("page", page.ToString()), ("pageSize", pageSize.ToString()));
+        return await _http.GetFromJsonAsync<List<TaskContext>>(query, ct) ?? [];
+    }
+
+    /// <summary>构建查询字符串，跳过 null/空参数</summary>
+    private static string BuildQuery(string basePath, params (string Name, string? Value)[] parameters)
+    {
+        var parts = parameters
+            .Where(p => !string.IsNullOrEmpty(p.Value))
+            .Select(p => $"{p.Name}={Uri.EscapeDataString(p.Value!)}");
+        var joined = string.Join("&", parts);
+        return string.IsNullOrEmpty(joined) ? basePath : $"{basePath}?{joined}";
+    }
 }

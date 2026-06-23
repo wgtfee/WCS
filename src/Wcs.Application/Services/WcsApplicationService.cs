@@ -4,6 +4,7 @@ using Wcs.Core.AlarmCenter;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.ObjectTracking;
+using Wcs.Core.PlcSubsystem.Examples;
 using Wcs.Core.Recovery;
 using Wcs.Core.ResourceLock;
 using Wcs.Core.StateCenter.Interfaces;
@@ -13,6 +14,7 @@ using Wcs.Core.TaskEngine.Chain;
 using Wcs.Core.TaskEngine.Context;
 using Wcs.Core.TaskEngine.Orchestrator;
 using Wcs.Core.TaskEngine.Scheduler;
+using Wcs.Core.Persistence;
 
 /// <summary>
 /// WCS 应用服务 - 聚合核心模块的高层 API
@@ -29,6 +31,8 @@ public class WcsApplicationService
     private readonly IResourceLockManager _resourceLock;
     private readonly IRecoveryManager _recoveryManager;
     private readonly IIdempotencyManager _idempotency;
+    private readonly IAlarmQueryService _alarmQuery;
+    private readonly ITaskQueryService _taskQuery;
 
     public WcsApplicationService(
         IStateCenter stateCenter,
@@ -40,7 +44,9 @@ public class WcsApplicationService
         IObjectTrackingCenter objectTracking,
         IResourceLockManager resourceLock,
         IRecoveryManager recoveryManager,
-        IIdempotencyManager idempotency)
+        IIdempotencyManager idempotency,
+        IAlarmQueryService alarmQuery,
+        ITaskQueryService taskQuery)
     {
         _stateCenter = stateCenter;
         _eventBus = eventBus;
@@ -52,6 +58,8 @@ public class WcsApplicationService
         _resourceLock = resourceLock;
         _recoveryManager = recoveryManager;
         _idempotency = idempotency;
+        _alarmQuery = alarmQuery;
+        _taskQuery = taskQuery;
     }
 
     #region Tasks
@@ -197,6 +205,103 @@ public class WcsApplicationService
     /// 获取活跃报警
     /// </summary>
     public IEnumerable<AlarmState> GetActiveAlarms() => _alarmCenter.GetActiveAlarms();
+
+    #endregion
+
+    #region Database Queries
+
+    /// <summary>
+    /// 从 Wcs_AlarmRuntime 表读取持久化的报警状态
+    /// </summary>
+    public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default)
+    {
+        var entities = await _alarmQuery.GetRuntimeAlarmsAsync(ct);
+        return entities.Select(e => new AlarmState
+        {
+            AlarmId = e.AlarmId,
+            AlarmCode = e.AlarmCode,
+            Status = Enum.TryParse<AlarmStatusEnum>(e.Status, out var s) ? s : AlarmStatusEnum.Active,
+            Level = Enum.TryParse<AlarmLevelEnum>(e.Level, out var l) ? l : AlarmLevelEnum.Info,
+            Message = e.Message ?? string.Empty,
+            OccurTime = e.OccurTime,
+            RecoverTime = e.RecoverTime
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 从 Wcs_AlarmHistory 表分页查询历史报警
+    /// </summary>
+    public async Task<PagedResult<AlarmState>> GetAlarmHistoryAsync(
+        DateTime? from, DateTime? to, string? level,
+        int page = 1, int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var (items, total) = await _alarmQuery.GetAlarmHistoryAsync(from, to, level, page, pageSize, ct);
+        return new PagedResult<AlarmState>
+        {
+            Items = items.Select(e => new AlarmState
+            {
+                AlarmId = e.Id.ToString(),
+                AlarmCode = e.AlarmCode,
+                Status = AlarmStatusEnum.Recovered,
+                Level = Enum.TryParse<AlarmLevelEnum>(e.Level, out var l) ? l : AlarmLevelEnum.Info,
+                Message = e.Message ?? string.Empty,
+                OccurTime = e.StartTime,
+                RecoverTime = e.EndTime
+            }).ToList(),
+            Total = total,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// <summary>
+    /// 从 Wcs_TaskRun 表读取持久化的任务运行记录
+    /// </summary>
+    public async Task<List<TaskContext>> GetTasksFromDbAsync(CancellationToken ct = default)
+    {
+        var entities = await _taskQuery.GetTaskRunsAsync(ct);
+        return entities.Select(e => new TaskContext
+        {
+            TaskId = e.TaskId,
+            DeviceId = e.DeviceId ?? string.Empty,
+            RouteId = e.RouteId ?? string.Empty,
+            Status = (TaskStatusEnum)e.Status,
+            Priority = e.Priority,
+            CreatedTime = e.CreatedTime,
+            StartTime = e.StartTime,
+            EndTime = e.EndTime,
+            ErrorMessage = e.ErrorMessage,
+            RetryCount = e.RetryCount
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 从 Wcs_TaskHistory 表分页查询历史任务
+    /// </summary>
+    public async Task<PagedResult<TaskContext>> GetTaskHistoryAsync(
+        DateTime? from, DateTime? to, string? status,
+        int page = 1, int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var (items, total) = await _taskQuery.GetTaskHistoryAsync(from, to, status, page, pageSize, ct);
+        return new PagedResult<TaskContext>
+        {
+            Items = items.Select(e => new TaskContext
+            {
+                TaskId = e.TaskId,
+                RouteId = e.RouteId ?? string.Empty,
+                Priority = e.Priority,
+                Status = e.Success ? TaskStatusEnum.Completed : TaskStatusEnum.Failed,
+                StartTime = e.StartTime,
+                EndTime = e.EndTime,
+                ErrorMessage = e.ErrorMessage
+            }).ToList(),
+            Total = total,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
 
     #endregion
 

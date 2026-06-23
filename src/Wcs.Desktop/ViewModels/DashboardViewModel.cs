@@ -29,7 +29,7 @@ public partial class DashboardViewModel : ViewModelBase
         _realtime.AlarmEvent += _ => RefreshCounts();
     }
 
-    public async Task InitializeAsync()
+    protected override async Task OnInitializeAsync()
     {
         await LoadAsync();
     }

@@ -37,7 +37,7 @@ public partial class DevicesViewModel : ViewModelBase
         };
     }
 
-    public async Task InitializeAsync()
+    protected override async Task OnInitializeAsync()
     {
         await LoadAsync();
     }

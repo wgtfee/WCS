@@ -24,7 +24,9 @@ public class ViewLocator : IDataTemplate
         if (type is not null)
         {
             // 使用 DI 容器创建 View（支持有参构造函数）
-            return (Control)ActivatorUtilities.CreateInstance(_serviceProvider, type);
+            var view = (Control)ActivatorUtilities.CreateInstance(_serviceProvider, type);
+            view.DataContext = param; // 显式绑定 DataContext
+            return view;
         }
 
         return new TextBlock { Text = $"View not found: {name}" };
