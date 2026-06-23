@@ -53,7 +53,6 @@ public static class PlcRegistrationExtensions
 
     /// <summary>
     /// 使用 S7CommPlus 符号标签协议（适用于 S7-1500）
-    /// 从 appsettings.json 读取连接配置（S7CommPlus 节）
     /// </summary>
     public static IServiceCollection AddS7CommPlus(this IServiceCollection services,
         S7CommPlusConfig config)
@@ -61,6 +60,28 @@ public static class PlcRegistrationExtensions
         if (config == null) throw new ArgumentNullException(nameof(config));
         services.AddSingleton(config);
         services.TryAddTransient<IPlcClient, S7CommPlusPlcClient>();
+        return services;
+    }
+
+    /// <summary>
+    /// 使用 Modbus TCP 标签协议
+    /// </summary>
+    public static IServiceCollection AddModbus(this IServiceCollection services)
+    {
+        services.TryAddTransient<IPlcClient, ModbusPlcClient>();
+        services.TryAddTransient<ModbusTagSerializer>();
+        services.TryAddTransient<ModbusPollingService>();
+        return services;
+    }
+
+    /// <summary>
+    /// 使用 OPC UA 标签协议
+    /// </summary>
+    public static IServiceCollection AddOpcUa(this IServiceCollection services)
+    {
+        services.TryAddTransient<IPlcClient, OpcUaPlcClient>();
+        services.TryAddTransient<OpcUaTagSerializer>();
+        services.TryAddTransient<OpcUaPollingService>();
         return services;
     }
 }

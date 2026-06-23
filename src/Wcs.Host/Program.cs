@@ -15,6 +15,8 @@ using Microsoft.Extensions.Options;
 using Wcs.Simulator.PlcSimulatorEngine;
 using Wcs.Core.PlcSubsystem.Abstractions;
 using Wcs.Core.PlcSubsystem.Label;
+using Wcs.Core.PlcSubsystem.Modbus;
+using Wcs.Core.PlcSubsystem.OpcUa;
 using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
 
 Log.Logger = LoggingSetup.CreateLogger();
@@ -70,6 +72,40 @@ try
             return service;
         });
         builder.Services.AddHostedService<TagPollingBackgroundService>();
+
+        //Modbus 标签轮询（按需启用）
+        var modbusConfig = builder.Configuration.GetSection("PlcModbusPolls").Get<TagPollConfig[]>();
+        if (modbusConfig is { Length: > 0 })
+        {
+            builder.Services.AddModbus();
+            builder.Services.AddSingleton<ModbusPollingService>(sp =>
+            {
+                var serializer = sp.GetRequiredService<ModbusTagSerializer>();
+                var logger = sp.GetRequiredService<ILogger<ModbusPollingService>>();
+                var service = new ModbusPollingService(serializer, logger);
+                service.AddFromConfig(modbusConfig);
+                return service;
+            });
+            builder.Services.AddHostedService<ModbusPollingBackgroundService>();
+            Log.Logger.Information("Modbus 标签轮询: 加载 {Count} 个类型", modbusConfig.Length);
+        }
+
+        //OPC UA 标签轮询（按需启用）
+        var opcuaConfig = builder.Configuration.GetSection("PlcOpcUaPolls").Get<TagPollConfig[]>();
+        if (opcuaConfig is { Length: > 0 })
+        {
+            builder.Services.AddOpcUa();
+            builder.Services.AddSingleton<OpcUaPollingService>(sp =>
+            {
+                var serializer = sp.GetRequiredService<OpcUaTagSerializer>();
+                var logger = sp.GetRequiredService<ILogger<OpcUaPollingService>>();
+                var service = new OpcUaPollingService(serializer, logger);
+                service.AddFromConfig(opcuaConfig);
+                return service;
+            });
+            builder.Services.AddHostedService<OpcUaPollingBackgroundService>();
+            Log.Logger.Information("OPC UA 标签轮询: 加载 {Count} 个类型", opcuaConfig.Length);
+        }
 
         // 按需注册具体的 PLC 连接
         //builder.Services.AddPlcConnection(new ProtocolConnectionConfig
