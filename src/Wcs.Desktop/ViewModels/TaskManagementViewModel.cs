@@ -8,7 +8,7 @@ using Wcs.Desktop.Services;
 namespace Wcs.Desktop.ViewModels;
 
 /// <summary>
-/// 任务管理 ViewModel — 全部从数据库加载，支持本地搜索过滤
+/// 任务管理 ViewModel — 全部从数据库加载，支持按列搜索过滤
 /// </summary>
 public partial class TasksViewModel : ViewModelBase
 {
@@ -16,34 +16,44 @@ public partial class TasksViewModel : ViewModelBase
     private List<TaskItem> _allTasks = new();
 
     public ObservableCollection<TaskItem> Tasks { get; } = new();
+    public List<string> SearchFields { get; } = new()
+    {
+        "全部", "任务 ID", "设备", "状态", "路径", "错误信息"
+    };
 
     [ObservableProperty] private string _newTaskDeviceId = string.Empty;
     [ObservableProperty] private string _newTaskRouteId = string.Empty;
     [ObservableProperty] private int _newTaskPriority = 2;
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private string _searchText = string.Empty;
+    [ObservableProperty] private string _searchField = "全部";
 
     public TasksViewModel(IWcsApiService api)
     {
         _api = api;
     }
 
-    partial void OnSearchTextChanged(string value)
-    {
-        ApplyFilter(value);
-    }
+    partial void OnSearchTextChanged(string value) => ApplyFilter();
+    partial void OnSearchFieldChanged(string value) => ApplyFilter();
 
-    private void ApplyFilter(string? filter)
+    private void ApplyFilter()
     {
         Tasks.Clear();
-        var items = string.IsNullOrWhiteSpace(filter)
+        var items = string.IsNullOrWhiteSpace(SearchText)
             ? _allTasks
-            : _allTasks.Where(t =>
-                t.TaskId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                t.DeviceId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                t.Status.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                t.RouteId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                (t.ErrorMessage?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false));
+            : _allTasks.Where(t => SearchField switch
+            {
+                "任务 ID" => t.TaskId.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                "设备" => t.DeviceId.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                "状态" => t.Status.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                "路径" => t.RouteId.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                "错误信息" => t.ErrorMessage?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false,
+                _ => t.TaskId.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     t.DeviceId.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     t.Status.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     t.RouteId.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     (t.ErrorMessage?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false)
+            });
         foreach (var item in items)
             Tasks.Add(item);
     }
@@ -53,9 +63,6 @@ public partial class TasksViewModel : ViewModelBase
         await LoadAsync();
     }
 
-    /// <summary>
-    /// 从数据库加载持久化的任务运行记录（Wcs_TaskRun 表）
-    /// </summary>
     public async Task LoadAsync()
     {
         IsLoading = true;
@@ -75,7 +82,7 @@ public partial class TasksViewModel : ViewModelBase
                 RetryCount = t.RetryCount,
                 ErrorMessage = t.ErrorMessage
             }).ToList();
-            ApplyFilter(SearchText);
+            ApplyFilter();
         }
         finally
         {

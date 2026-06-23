@@ -13,14 +13,16 @@
     <DockPanel Margin="16">
         <!-- Toolbar -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
                 <TextBlock Text="任务管理" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
                            VerticalAlignment="Center" />
-                <TextBox Grid.Column="1" Watermark="搜索任务..." Text="{Binding SearchText}"
-                         Width="200" Margin="16,0,0,0" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="{Binding Tasks.Count, StringFormat='共 {0} 条'}"
+                <ComboBox Grid.Column="1" ItemsSource="{Binding SearchFields}"
+                          SelectedItem="{Binding SearchField}" Width="80" Margin="16,0,0,0" VerticalAlignment="Center" />
+                <TextBox Grid.Column="2" Watermark="搜索..." Text="{Binding SearchText}"
+                         Width="200" Margin="8,0,0,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3" Text="{Binding Tasks.Count, StringFormat='共 {0} 条'}"
                            FontSize="13" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="16,0,0,0" />
-                <Button Grid.Column="3" Content="刷新" Command="{Binding RefreshCommand}" Classes="Secondary" Margin="4,0,0,0" />
+                <Button Grid.Column="4" Content="刷新" Command="{Binding RefreshCommand}" Classes="Secondary" Margin="4,0,0,0" />
             </Grid>
         </Border>
 

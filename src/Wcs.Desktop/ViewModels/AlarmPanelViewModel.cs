@@ -8,7 +8,7 @@ using Wcs.Desktop.Services;
 namespace Wcs.Desktop.ViewModels;
 
 /// <summary>
-/// 报警面板 ViewModel — 点击刷新时从数据库加载，支持本地搜索过滤
+/// 报警面板 ViewModel — 点击刷新时从数据库加载，支持按列搜索过滤
 /// </summary>
 public partial class AlarmsViewModel : ViewModelBase
 {
@@ -16,38 +16,45 @@ public partial class AlarmsViewModel : ViewModelBase
     private List<AlarmItem> _allAlarms = new();
 
     public ObservableCollection<AlarmItem> Alarms { get; } = new();
+    public List<string> SearchFields { get; } = new()
+    {
+        "全部", "报警 ID", "报警码", "级别", "消息", "状态"
+    };
 
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private string _searchText = string.Empty;
+    [ObservableProperty] private string _searchField = "全部";
 
     public AlarmsViewModel(IWcsApiService api)
     {
         _api = api;
     }
 
-    partial void OnSearchTextChanged(string value)
-    {
-        ApplyFilter(value);
-    }
+    partial void OnSearchTextChanged(string value) => ApplyFilter();
+    partial void OnSearchFieldChanged(string value) => ApplyFilter();
 
-    private void ApplyFilter(string? filter)
+    private void ApplyFilter()
     {
         Alarms.Clear();
-        var items = string.IsNullOrWhiteSpace(filter)
+        var items = string.IsNullOrWhiteSpace(SearchText)
             ? _allAlarms
-            : _allAlarms.Where(a =>
-                a.AlarmId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                a.AlarmCode.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                a.Message.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                a.Level.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                a.Status.Contains(filter, StringComparison.OrdinalIgnoreCase));
+            : _allAlarms.Where(a => SearchField switch
+            {
+                "报警 ID" => a.AlarmId.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                "报警码" => a.AlarmCode.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                "级别" => a.Level.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                "消息" => a.Message.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                "状态" => a.Status.Contains(SearchText, StringComparison.OrdinalIgnoreCase),
+                _ => a.AlarmId.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     a.AlarmCode.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     a.Message.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     a.Level.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                     a.Status.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+            });
         foreach (var item in items)
             Alarms.Add(item);
     }
 
-    /// <summary>
-    /// 从数据库加载报警状态（Wcs_AlarmRuntime 表）
-    /// </summary>
     public async Task LoadAsync()
     {
         IsLoading = true;
@@ -64,7 +71,7 @@ public partial class AlarmsViewModel : ViewModelBase
                 OccurTime = a.OccurTime,
                 RecoverTime = a.RecoverTime
             }).ToList();
-            ApplyFilter(SearchText);
+            ApplyFilter();
         }
         finally
         {
@@ -79,7 +86,7 @@ public partial class AlarmsViewModel : ViewModelBase
         try
         {
             await _api.AckAlarmAsync(alarmId);
-            var item = Alarms.FirstOrDefault(a => a.AlarmId == alarmId);
+            var item = Alarms.FirstOrDefault(a => a.AlarmCode == alarmId);
             if (item is not null) item.Status = "Acknowledged";
         }
         catch { }

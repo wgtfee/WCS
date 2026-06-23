@@ -18,7 +18,6 @@ namespace Wcs.Desktop;
 public partial class App : Application
 {
     private IServiceProvider? _services;
-
     public override void Initialize()
     {
         this.UseAtomUI(builder =>

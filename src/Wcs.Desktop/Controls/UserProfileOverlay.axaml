@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Controls.UserProfileOverlay"
              Width="480" Height="340">
     <Border Background="{DynamicResource BgSecondary}" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource BorderColor}">
@@ -37,7 +38,7 @@
 
             <!-- Close button -->
             <Border Grid.Row="2" Padding="16,10" CornerRadius="0,0,8,8" Background="{DynamicResource BgSidebar}">
-                <Button Content="关闭" Width="100" Height="32"
+                <atom:Button Content="关闭" Width="100" Height="32"
                         Classes="Secondary"
                         HorizontalAlignment="Center"
                         VerticalContentAlignment="Center"
