@@ -64,6 +64,7 @@ public class EventDetector
             // 验证管道 — 现在 stateCenter 不为 null 了
             var ctx = new ValidatorContext(_stateCenter, rawStruct: current, previousStruct: previous);
             var rejected = false;
+            SignalValidationResult? commandResult = null;
 
             foreach (var v in _validators)
             {
@@ -76,6 +77,8 @@ public class EventDetector
                     _logger?.LogInformation("[Detector] ❌ {Field} 拒绝: {Reason}", meta.FieldName, vr.Reason);
                     break;
                 }
+                if (vr?.Command != null)
+                    commandResult = vr;
             }
 
             if (!rejected)
@@ -86,6 +89,20 @@ public class EventDetector
                 {
                     rawSignal.DomainEventType = domainEvent.GetType().Name;
                     _eventBus.PublishAsync(domainEvent).GetAwaiter().GetResult();
+                }
+
+                // 验证通过 + 有命令 → 发布命令请求事件，自动写入 PLC
+                if (commandResult != null)
+                {
+                    var cmdEvent = new CommandRequestedEvent
+                    {
+                        Command = commandResult.Command!,
+                        CommandType = commandResult.CommandType ?? meta.FieldName,
+                        DeviceId = commandResult.TargetDeviceId ?? meta.DeviceId ?? "",
+                    };
+                    _eventBus.PublishAsync(cmdEvent).GetAwaiter().GetResult();
+                    _logger?.LogInformation("[Detector] ⚡ {Field} 验证通过 → 发命令 {Cmd}",
+                        meta.FieldName, commandResult.CommandType);
                 }
             }
             //验证成功的数据进行推送

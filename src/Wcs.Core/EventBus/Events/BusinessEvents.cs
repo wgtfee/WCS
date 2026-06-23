@@ -191,3 +191,16 @@ public class RawSignalEvent : EventBase
     public string? ValidatorReason { get; set; }
     public string? DomainEventType { get; set; }
 }
+
+/// <summary>
+/// 命令请求事件 — 验证器验证通过后，携带要执行的命令信息
+/// CommandRequestHandler 订阅此事件，自动调用写入 PLC，无需手写 if/else
+/// </summary>
+public class CommandRequestedEvent : EventBase
+{
+    public override EventPriority Priority => EventPriority.High;
+    public object Command { get; set; } = null!;
+    public string CommandType { get; set; } = string.Empty;
+    public string DeviceId { get; set; } = string.Empty;
+    public string? TaskId { get; set; }
+}

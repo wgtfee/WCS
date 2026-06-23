@@ -1,20 +1,43 @@
-namespace Wcs.Core.CommandCenter;
-
 using System.Collections.Concurrent;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
+using SqlSugar;
 using Wcs.Core.PlcSubsystem;
+using Wcs.Core.PlcSubsystem.Abstractions;
+using Wcs.Core.PlcSubsystem.Label;
+using Wcs.Core.PlcSubsystem.Modbus;
+using Wcs.Core.PlcSubsystem.OpcUa;
+using Wcs.Core.PlcSubsystem.S7;
+
+namespace Wcs.Core.CommandCenter;
 
 public class CommandCenter : ICommandCenter, IDisposable
 {
     private readonly ConcurrentDictionary<string, DeviceCommandRecord> _commands = new();
     private readonly PlcWriter _plcWriter;
+    private readonly IEnumerable<ITagSerializer> _tagSerializers;
+    private readonly ISqlSugarClient? _db;
     private readonly ILogger<CommandCenter>? _logger;
     private readonly Timer _timeoutTimer;
     private bool _disposed;
 
-    public CommandCenter(PlcWriter plcWriter, ILogger<CommandCenter>? logger = null)
+    /// <summary>特性类型 → 匹配的序列化器索引</summary>
+    private static readonly Dictionary<Type, Type> AttrToSerializer = new()
+    {
+        [typeof(PlcStructAttribute)] = typeof(PlcTagSerializer),
+        [typeof(PlcModbusBlockAttribute)] = typeof(ModbusTagSerializer),
+        [typeof(PlcOpcUaBlockAttribute)] = typeof(OpcUaTagSerializer),
+        [typeof(PlcBlockAttribute)] = typeof(Snap7TagSerializer),
+    };
+
+    public CommandCenter(PlcWriter plcWriter,
+        IEnumerable<ITagSerializer> tagSerializers,
+        ILogger<CommandCenter>? logger = null,
+        ISqlSugarClient? db = null)
     {
         _plcWriter = plcWriter;
+        _tagSerializers = tagSerializers;
+        _db = db;
         _logger = logger;
         _timeoutTimer = new Timer(CheckTimeouts, null, 2000, 2000);
     }
@@ -33,15 +56,7 @@ public class CommandCenter : ICommandCenter, IDisposable
         return record;
     }
 
-    /// <summary>
-    /// 发送带 [PlcBlock] + [PlcOffset] 的结构化命令
-    /// 自动从 [PlcBlock] 特性中读取目标 PLC/DB 块，无需外部映射
-    ///
-    /// 用法：
-    ///   var cmd = new ConveyorCommand { Start = true };
-    ///   await cmdCenter.SendStructuredCommandAsync("CV01", "StartConveyor", cmd);
-    ///   // 自动通过 [PlcBlock("PLC1", 101)] 写入 PLC1.DB101
-    /// </summary>
+    /// <summary>发送 [PlcBlock] struct 命令（Snap7 专用）</summary>
     public async Task<DeviceCommandRecord> SendStructuredCommandAsync<T>(
         string deviceId, string commandType, T commandData,
         string? taskId = null, CancellationToken ct = default) where T : struct
@@ -62,6 +77,72 @@ public class CommandCenter : ICommandCenter, IDisposable
         record.Status = DeviceCommandStatus.Sent;
         record.SentTime = DateTime.UtcNow;
         return record;
+    }
+
+    /// <summary>
+    /// 发送标签命令 — 自动根据命令类上的特性路由到对应的协议序列化器
+    ///
+    /// 支持的特性：
+    ///   [PlcStruct]      → S7CommPlus
+    ///   [PlcModbusBlock] → Modbus
+    ///   [PlcOpcUaBlock]  → OPC UA
+    ///   [PlcBlock]       → Snap7（通过 Snap7TagSerializer 适配）
+    /// </summary>
+    public async Task<DeviceCommandRecord> SendTagCommandAsync<T>(
+        string deviceId, string commandType, T commandData,
+        string? taskId = null, CancellationToken ct = default)
+    {
+        var record = CreateRecord(commandType, deviceId, taskId);
+        _commands[record.CommandId] = record;
+
+        var serializer = ResolveSerializer(commandData);
+        if (serializer == null)
+        {
+            record.Status = DeviceCommandStatus.Failed;
+            record.ErrorMessage = "找不到匹配的命令序列化器，请检查是否注册了对应协议";
+            return record;
+        }
+
+        _logger?.LogInformation("[Cmd] {Type}({Protocol}) → {Device}",
+            commandType, serializer.GetType().Name, deviceId);
+
+        try
+        {
+            // 检查连接健康
+            var healthy = await serializer.CheckHealthAsync();
+            if (!healthy)
+            {
+                record.Status = DeviceCommandStatus.Failed;
+                record.ErrorMessage = $"PLC 连接不可用 ({serializer.GetType().Name})";
+                _logger?.LogWarning("[Cmd] ❌ {Type} 连接不可用", commandType);
+                return record;
+            }
+
+            await serializer.WriteAsync(commandData);
+            record.Status = DeviceCommandStatus.Sent;
+            record.SentTime = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            record.Status = DeviceCommandStatus.Failed;
+            record.ErrorMessage = ex.Message;
+            _logger?.LogError(ex, "[Cmd] ❌ {Type} → {Device}", commandType, deviceId);
+        }
+        return record;
+    }
+
+    /// <summary>根据命令对象的特性查找匹配的序列化器</summary>
+    private ITagSerializer? ResolveSerializer(object command)
+    {
+        var type = command.GetType();
+
+        // 遍历特性 → 序列化器映射表，找第一个匹配的
+        foreach (var (attrType, serializerType) in AttrToSerializer)
+        {
+            if (type.GetCustomAttribute(attrType) != null)
+                return _tagSerializers.FirstOrDefault(s => s.GetType() == serializerType);
+        }
+        return null;
     }
 
     private DeviceCommandRecord CreateRecord(string commandType, string deviceId,

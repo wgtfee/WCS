@@ -36,6 +36,13 @@ public interface ICommandCenter
     Task<DeviceCommandRecord> SendStructuredCommandAsync<T>(string deviceId, string commandType,
         T commandData, string? taskId = null, CancellationToken ct = default) where T : struct;
 
+    /// <summary>
+    /// 发送标签命令 — 支持 [PlcStruct]、[PlcModbusBlock]、[PlcOpcUaBlock]
+    /// 通过 TagWriter + ITagSerializer 写入，协议无关
+    /// </summary>
+    Task<DeviceCommandRecord> SendTagCommandAsync<T>(string deviceId, string commandType,
+        T commandData, string? taskId = null, CancellationToken ct = default);
+
     bool ConfirmAcked(string commandId);
     bool ConfirmExecuting(string commandId);
     bool ConfirmDone(string commandId);

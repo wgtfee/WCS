@@ -8,7 +8,7 @@ namespace Wcs.Core.PlcSubsystem.OpcUa;
 ///
 /// 标签名直接使用 NodeId 字符串，例如 "ns=2;s=CV01.Speed"
 /// </summary>
-public class OpcUaTagSerializer
+public class OpcUaTagSerializer : ITagSerializer
 {
     private readonly IPlcClient _plc;
 
@@ -92,5 +92,16 @@ public class OpcUaTagSerializer
             .Where(p => p.GetCustomAttribute<PlcOpcUaTagAttribute>() != null)
             .Where(p => p.GetCustomAttribute<PlcIgnoreAttribute>() == null)
             .ToArray();
+    }
+
+    public Task<bool> CheckHealthAsync()
+    {
+        try
+        {
+            if (_plc is OpcUaPlcClient opcua)
+                return Task.FromResult(opcua.IsConnected);
+            return Task.FromResult(true);
+        }
+        catch { return Task.FromResult(false); }
     }
 }

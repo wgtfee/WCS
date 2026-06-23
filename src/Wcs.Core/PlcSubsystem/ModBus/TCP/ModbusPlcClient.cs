@@ -13,6 +13,9 @@ public class ModbusPlcClient : IPlcClient
 {
     private readonly ModbusConnection _connection;
 
+    /// <summary>Modbus TCP 连接状态</summary>
+    public bool IsConnected => _connection.IsConnected;
+
     public ModbusPlcClient(ModbusConnection connection)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));

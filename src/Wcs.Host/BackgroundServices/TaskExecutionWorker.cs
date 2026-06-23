@@ -73,30 +73,12 @@ public class TaskExecutionWorker : BackgroundService
     {
         var d = task.DeviceId;
         await Task.Delay(2000, ct);
-        if (d.StartsWith("CV"))
-        {
-            _logger.LogInformation("[Worker] ⚡ {Device} → PLC1.DB101", d);
-            await _commandCenter.SendStructuredCommandAsync(d, "StartConveyor",
-                new ConveyorControlCommand { StartStation1 = true, SpeedSetpoint1 = 1200 }, task.TaskId, ct);
-        }
-        else if (d.StartsWith("LIFT"))
-        {
-            _logger.LogInformation("[Worker] ⚡ {Device} → PLC1.DB102", d);
-            await _commandCenter.SendStructuredCommandAsync(d, "LiftUp",
-                new LiftCommand { GoUp = true, TargetFloor = 2 }, task.TaskId, ct);
-        }
-        else if (d.StartsWith("ASRS"))
-        {
-            _logger.LogInformation("[Worker] ⚡ {Device} → PLC2.DB201", d);
-            await _commandCenter.SendStructuredCommandAsync(d, "Store",
-                new StackerControlCommand { StoreCmd1 = true }, task.TaskId, ct);
-        }
-        else if (d.StartsWith("ROBOT"))
-        {
-            _logger.LogInformation("[Worker] ⚡ {Device} → PLC3.DB101", d);
-            await _commandCenter.SendStructuredCommandAsync(d, "Grip",
-                new RobotControlCommand { GripCmd1 = true }, task.TaskId, ct);
-        }
+
+        // 直接写入，CommandCenter 根据命令的 [PlcStruct] / [PlcBlock] 自动路由协议
+        await _commandCenter.SendTagCommandAsync(d, "ExecuteTask",
+            new TagControlCommand { StartStation1 = true, SpeedSetpoint1 = 1200 }, task.TaskId, ct);
+
+        _logger.LogInformation("[Worker] ⚡ {Device} → ExecuteTask", d);
     }
 
     /// <summary>写入 Wcs_TaskEvent（SqlSugar）</summary>

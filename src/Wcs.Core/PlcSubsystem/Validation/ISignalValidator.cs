@@ -53,6 +53,13 @@ public class SignalValidationResult
     public string? Reason { get; set; }
     public int? RetryAfterMs { get; set; }
 
+    /// <summary>验证通过后要执行的命令（可选）</summary>
+    public object? Command { get; set; }
+    /// <summary>命令类型名称</summary>
+    public string? CommandType { get; set; }
+    /// <summary>目标设备 ID</summary>
+    public string? TargetDeviceId { get; set; }
+
     public static SignalValidationResult Pass(string? reason = null) =>
         new() { Action = SignalValidationAction.Pass, Reason = reason };
 
@@ -61,6 +68,20 @@ public class SignalValidationResult
 
     public static SignalValidationResult Defer(string reason, int retryAfterMs = 1000) =>
         new() { Action = SignalValidationAction.Defer, Reason = reason, RetryAfterMs = retryAfterMs };
+}
+
+/// <summary>验证结果扩展 — 携带命令</summary>
+public static class SignalValidationResultExtensions
+{
+    /// <summary>指定验证通过后要执行的命令</summary>
+    public static SignalValidationResult WithCommand(this SignalValidationResult result,
+        object command, string commandType, string? deviceId = null)
+    {
+        result.Command = command;
+        result.CommandType = commandType;
+        result.TargetDeviceId = deviceId;
+        return result;
+    }
 }
 
 /// <summary>

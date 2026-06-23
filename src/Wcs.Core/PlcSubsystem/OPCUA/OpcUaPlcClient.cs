@@ -12,6 +12,9 @@ public class OpcUaPlcClient : IPlcClient
 {
     private readonly OpcUaConnection _connection;
 
+    /// <summary>OPC UA 连接状态</summary>
+    public bool IsConnected => _connection.IsConnected;
+
     public OpcUaPlcClient(OpcUaConnection connection)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));

@@ -16,8 +16,10 @@ using Wcs.Simulator.PlcSimulatorEngine;
 using Wcs.Core.PlcSubsystem.Abstractions;
 using Wcs.Core.EventDetection;
 using Wcs.Core.PlcSubsystem.Label;
+using Wcs.Core.PlcSubsystem.Validation.Examples;
 using Wcs.Core.PlcSubsystem.Modbus;
 using Wcs.Core.PlcSubsystem.OpcUa;
+using Wcs.Core.PlcSubsystem.S7;
 using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
 using Wcs.Core.SignalSnapshot;
 
@@ -115,6 +117,12 @@ try
             Log.Logger.Information("OPC UA 标签轮询: 加载 {Count} 个类型", opcuaConfig.Length);
         }
 
+        // ===== 注册所有可用的 ITagSerializer 到 DI（给 CommandCenter 路由用） =====
+        builder.Services.AddSingleton<ITagSerializer>(sp =>
+            new Snap7TagSerializer(sp.GetRequiredService<PlcWriter>()));
+        builder.Services.AddSingleton<ITagSerializer>(sp =>
+            new PlcTagSerializer(sp.GetRequiredService<IPlcClient>()));
+
         // 按需注册具体的 PLC 连接
         //builder.Services.AddPlcConnection(new ProtocolConnectionConfig
         //{
@@ -144,6 +152,7 @@ try
     builder.Services.AddHostedService<TaskGeneratorService>();
     builder.Services.AddHostedService<TaskExecutionWorker>();
     builder.Services.AddHostedService<AlarmWiringService>();
+    builder.Services.AddHostedService<SignalResponseService>();
 
     builder.Services.AddWindowsService(options => options.ServiceName = "WCS Runtime Engine");
     builder.Services.AddSignalR();
@@ -192,6 +201,8 @@ try
     }
     catch { }
 
+    RegisterPlcValidators(app.Services, logger);
+
     app.MapHub<WcsHub>("/wcs");
     app.MapControllers();
     app.MapHealthChecks("/health/ready", new() { Predicate = r => r.Name == "readiness" });
@@ -208,4 +219,29 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+/// <summary>注册所有 PLC 验证器</summary>
+static void RegisterPlcValidators(IServiceProvider services, Microsoft.Extensions.Logging.ILogger logger)
+{
+    try
+    {
+        var detector = services.GetRequiredService<EventDetector>();
+
+        // === Snap7 struct 验证器 ===
+        // detector.RegisterValidator(new StationInterlockValidator());
+
+        // === 标签验证器 ===
+        //detector.RegisterValidator(new TagStationInterlockValidator());
+        //detector.RegisterValidator(new TagBarcodeDbValidator());
+        
+        // === Modbus / OPC UA ===
+        // detector.RegisterValidator(new ModbusConveyorValidator());
+
+        logger.LogInformation("PLC 验证器注册完成，共 2 个");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "PLC 验证器注册失败");
+    }
 }

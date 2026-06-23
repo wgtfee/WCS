@@ -109,4 +109,7 @@ public class PlcWriter
 
     private static PlcBlockAttribute? GetPlcBlockAttr<T>() where T : struct
         => typeof(T).GetCustomAttribute<PlcBlockAttribute>();
+
+    /// <summary>获取写连接池（用于健康检查）</summary>
+    internal WritePool? GetWritePool() => _registry?.WritePool;
 }

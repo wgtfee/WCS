@@ -9,7 +9,7 @@ namespace Wcs.Core.PlcSubsystem.Modbus;
 /// 自动构造标签名：{RegisterType}:{Offset}
 /// 例如 [PlcModbusBlock("HR")] + [PlcModbusTag(0)] → "HR:0"
 /// </summary>
-public class ModbusTagSerializer
+public class ModbusTagSerializer : ITagSerializer
 {
     private readonly IPlcClient _plc;
 
@@ -102,5 +102,16 @@ public class ModbusTagSerializer
             .Where(p => p.GetCustomAttribute<PlcModbusTagAttribute>() != null)
             .Where(p => p.GetCustomAttribute<PlcIgnoreAttribute>() == null)
             .ToArray();
+    }
+
+    public Task<bool> CheckHealthAsync()
+    {
+        try
+        {
+            if (_plc is ModbusPlcClient modbus)
+                return Task.FromResult(modbus.IsConnected);
+            return Task.FromResult(true);
+        }
+        catch { return Task.FromResult(false); }
     }
 }

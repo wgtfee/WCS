@@ -1,19 +1,20 @@
 using System.Reflection;
 using Wcs.Core.PlcSubsystem.Abstractions;
+using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
 
 namespace Wcs.Core.PlcSubsystem.Label;
 
 /// <summary>
 /// 基于标签特性的序列化器 — 使用 [PlcStruct] / [PlcTag] 特性读写 PLC 数据
 ///
-/// 依赖 IPlcClient 实现底层通信，可配合 Snap7PlcClient（Snap7 协议）使用。
+/// 依赖 IPlcClient 实现底层通信，可配合 S7CommPlusPlcClient 使用。
 ///
 /// 用法：
-///   var serializer = new PlcTagSerializer(new Snap7PlcClient(registry, readPool, writePool));
-///   await serializer.ReadAsync(statusObj);   // 自动读取所有 [PlcTag] 属性
-///   await serializer.WriteAsync(cmdObj);     // 自动写入所有 [PlcTag] 属性
+///   var serializer = new PlcTagSerializer(s7plusClient);
+///   await serializer.ReadAsync(statusObj);
+///   await serializer.WriteAsync(cmdObj);
 /// </summary>
-public class PlcTagSerializer
+public class PlcTagSerializer : ITagSerializer
 {
     private readonly IPlcClient _plc;
 
@@ -99,5 +100,18 @@ public class PlcTagSerializer
             .Where(p => p.CanWrite)
             .Where(p => p.GetCustomAttribute<PlcIgnoreAttribute>() == null)
             .ToArray();
+    }
+
+    /// <summary>检查连接状态</summary>
+    public Task<bool> CheckHealthAsync()
+    {
+        // S7CommPlusPlcClient 内部有连接管理，首次调用会自动连接
+        try
+        {
+            if (_plc is S7CommPlusPlcClient plus)
+                return Task.FromResult(plus.IsConnected);
+            return Task.FromResult(true);
+        }
+        catch { return Task.FromResult(false); }
     }
 }

@@ -1,5 +1,7 @@
 namespace Wcs.Core.PlcSubsystem.Validation.Examples;
 
+using Wcs.Core.PlcSubsystem.Examples;
+
 /// <summary>
 /// 工位互锁验证器 — 从 ctx.RawStruct 强类型读取 PLC 信号，
 /// 结合 StateCenter 中的设备状态，判断是否允许信号通过。
@@ -27,7 +29,10 @@ public class StationInterlockValidator : ISignalValidator
         if (!db1.LIFT01_Idle)
             return SignalValidationResult.Defer("LIFT01 不为空闲，延迟处理", retryAfterMs: 3000);
 
-        return SignalValidationResult.Pass("上下游就绪，允许到位");
+        // 验证通过 + 携带命令 → EventDetector 自动发 CommandRequestedEvent → SignalResponseService 写入
+        return SignalValidationResult.Pass("上下游就绪，允许到位")
+            .WithCommand(new ConveyorControlCommand { StartStation1 = true, SpeedSetpoint1 = 1200 },
+                "StartConveyor", deviceId: "CV01");
     }
 }
 

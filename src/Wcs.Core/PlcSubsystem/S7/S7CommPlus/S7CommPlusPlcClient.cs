@@ -39,6 +39,9 @@ public class S7CommPlusPlcClient : IPlcClient
     private readonly ConcurrentDictionary<string, PlcTag> _tagCache = new();
     private bool _disposed;
 
+    /// <summary>是否已建立连接</summary>
+    public bool IsConnected => _connection != null;
+
     public S7CommPlusPlcClient(PlcTagRegistry registry, S7CommPlusConfig config)
     {
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
