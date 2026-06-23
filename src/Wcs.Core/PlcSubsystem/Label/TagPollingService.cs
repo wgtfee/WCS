@@ -1,20 +1,20 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging;
-using Wcs.Core.PlcSubsystem.Abstractions;
 
 namespace Wcs.Core.PlcSubsystem.Label;
 
 /// <summary>
-/// 标签轮询服务 — 按 [PlcStruct] 注册的类定时从 PLC 读取标签数据
+/// 标签轮询服务 — 注册 [PlcStruct] 类型后定时读取标签数据
 ///
-/// 与 S7PollingService 的区别：
-///   - S7PollingService 按 DB 块读取 byte[]，使用 Struct.FromBytes() 反序列化
-///   - TagPollingService 通过 IPlcClient 按标签名读取，使用 PlcTagSerializer
-///   - 协议无关（可配合 Snap7PlcClient 或 S7CommPlusPlcClient 使用）
+/// 对标 S7PollingService 的模式：
+///   - S7PollingService 从 PlcStructRegistry 读取所有 DB 块注册
+///   - TagPollingService 从内部列表读取所有 [PlcStruct] 类型注册
 ///
-/// 配置方式（两种）：
-///   1. appsettings.json 中定义 PlcTagPolls 数组
-///   2. 代码中 AddPoll<T>() 直接注册
+/// 注册方式：
+///   1. 代码注册：service.AddPoll{ConveyorStatus}()
+///   2. JSON 配置：PlcTagPolls → AddFromConfig()
+///
+/// 轮询间隔从 [PlcStruct(RefreshRateMs)] 特性读取。
 /// </summary>
 public class TagPollingService : IDisposable
 {
@@ -32,7 +32,7 @@ public class TagPollingService : IDisposable
         _logger = logger;
     }
 
-    /// <summary>从配置注册轮询任务</summary>
+    /// <summary>从 JSON 配置注册轮询（PlcTagPolls）</summary>
     public void AddFromConfig(IEnumerable<TagPollConfig> configs)
     {
         foreach (var cfg in configs)
@@ -43,16 +43,15 @@ public class TagPollingService : IDisposable
                 _logger?.LogWarning("[TagPoll] 找不到类型 '{Type}'", cfg.StructType);
                 continue;
             }
-            AddPoll(type, cfg.PollIntervalMs);
+            AddPoll(type);
         }
     }
 
-    /// <summary>代码注册轮询任务</summary>
-    public void AddPoll<T>(int pollIntervalMs = 0) where T : class, new()
-        => AddPoll(typeof(T), pollIntervalMs);
+    /// <summary>代码注册轮询</summary>
+    public void AddPoll<T>() where T : class, new() => AddPoll(typeof(T));
 
-    /// <summary>代码注册轮询任务</summary>
-    public void AddPoll(Type type, int pollIntervalMs = 0)
+    /// <summary>代码注册轮询</summary>
+    public void AddPoll(Type type)
     {
         var structAttr = type.GetCustomAttribute<PlcStructAttribute>();
         if (structAttr == null)
@@ -61,15 +60,13 @@ public class TagPollingService : IDisposable
             return;
         }
 
-        var interval = pollIntervalMs > 0 ? pollIntervalMs : structAttr.RefreshRateMs;
-
         _registrations.Add(new TagPollRegistration
         {
             StructType = type,
-            PollIntervalMs = interval
+            PollIntervalMs = structAttr.RefreshRateMs
         });
 
-        _logger?.LogInformation("[TagPoll] 注册 {Type} (间隔 {Interval}ms)", type.Name, interval);
+        _logger?.LogInformation("[TagPoll] 注册 {Type} (间隔 {Interval}ms)", type.Name, structAttr.RefreshRateMs);
     }
 
     /// <summary>启动所有轮询任务</summary>
@@ -89,7 +86,6 @@ public class TagPollingService : IDisposable
 
                     await _serializer.ReadAsync(instance);
 
-                    // 输出每个标签的值
                     foreach (var prop in reg.StructType.GetProperties(
                         BindingFlags.Public | BindingFlags.Instance))
                     {
@@ -97,8 +93,7 @@ public class TagPollingService : IDisposable
                         var tagAttr = prop.GetCustomAttribute<PlcTagAttribute>();
                         if (tagAttr == null || !tagAttr.Monitored) continue;
 
-                        var value = prop.GetValue(instance);
-                        _logger?.LogDebug("[TagPoll] {Tag} = {Value}", tagAttr.Name, value);
+                        _logger?.LogDebug("[TagPoll] {Tag} = {Value}", tagAttr.Name, prop.GetValue(instance));
                     }
                 }
                 catch (Exception ex)
@@ -110,7 +105,7 @@ public class TagPollingService : IDisposable
             _timers.Add(timer);
         }
 
-        _logger?.LogInformation("[TagPoll] 启动完成，共 {Count} 个轮询任务", _registrations.Count);
+        _logger?.LogInformation("[TagPoll] 启动完成，共 {Count} 个类型", _registrations.Count);
     }
 
     /// <summary>停止所有轮询任务</summary>
@@ -127,7 +122,6 @@ public class TagPollingService : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>单个标签轮询注册项</summary>
     public class TagPollRegistration
     {
         public Type StructType { get; init; } = null!;

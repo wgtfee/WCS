@@ -14,6 +14,7 @@ using Wcs.Infrastructure.SignalR;
 using Microsoft.Extensions.Options;
 using Wcs.Simulator.PlcSimulatorEngine;
 using Wcs.Core.PlcSubsystem.Abstractions;
+using Wcs.Core.PlcSubsystem.Label;
 using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
 
 Log.Logger = LoggingSetup.CreateLogger();
@@ -51,6 +52,24 @@ try
         if (plusConfig == null)
             throw new InvalidOperationException("未找到 S7CommPlus 配置节");
         builder.Services.AddS7CommPlus(plusConfig);
+        //标签轮询服务
+        builder.Services.AddSingleton<TagPollingService>(sp =>
+        {
+            var serializer = sp.GetRequiredService<PlcTagSerializer>();
+            var logger = sp.GetRequiredService<ILogger<TagPollingService>>();
+            var service = new TagPollingService(serializer, logger);
+
+            // 从 appsettings.json → PlcTagPolls 读取所有轮询类型
+            var tagPolls = builder.Configuration.GetSection("PlcTagPolls").Get<TagPollConfig[]>();
+            if (tagPolls != null && tagPolls.Length > 0)
+            {
+                service.AddFromConfig(tagPolls);
+                logger.LogInformation("标签轮询: 从配置加载 {Count} 个类型", tagPolls.Length);
+            }
+
+            return service;
+        });
+        builder.Services.AddHostedService<TagPollingBackgroundService>();
 
         // 按需注册具体的 PLC 连接
         //builder.Services.AddPlcConnection(new ProtocolConnectionConfig
