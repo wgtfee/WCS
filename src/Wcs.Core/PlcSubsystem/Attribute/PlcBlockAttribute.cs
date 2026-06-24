@@ -28,11 +28,21 @@ public class PlcBlockAttribute : Attribute
     /// <summary>起始字节偏移（默认 0）</summary>
     public int StartByte { get; set; }
 
+     public int Length { get; set; }
+
     /// <param name="plcName">PLC 名称</param>
     /// <param name="dbBlock">DB 块号</param>
     public PlcBlockAttribute(string plcName, int dbBlock)
     {
         PlcName = plcName ?? throw new ArgumentNullException(nameof(plcName));
         DbBlock = dbBlock;
+    }
+
+      public PlcBlockAttribute(string plcName, int dbBlock,int startByte,int length)
+    {
+        PlcName = plcName ?? throw new ArgumentNullException(nameof(plcName));
+        DbBlock = dbBlock;
+        StartByte = startByte;
+        Length = length;
     }
 }

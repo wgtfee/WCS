@@ -13,6 +13,8 @@ public partial class MainWindow : Window
     public void ShowProfileOverlay()
     {
         ProfileOverlay.IsVisible = true;
+        // 将焦点移到覆盖层
+        ProfileOverlay.Focus();
     }
 
     /// <summary>关闭个人信息覆盖层</summary>
@@ -25,6 +27,8 @@ public partial class MainWindow : Window
     public void ShowChangePasswordOverlay()
     {
         ChangePasswordOverlay.IsVisible = true;
+        // 将焦点移到覆盖层
+        ChangePasswordOverlay.Focus();
     }
 
     /// <summary>关闭修改密码覆盖层</summary>
