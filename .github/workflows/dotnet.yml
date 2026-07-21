@@ -1,0 +1,63 @@
+name: WCS Core CI
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-core-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests:
+    name: Build and test Wcs.Core
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+      TEST_PROJECT: src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Show .NET information
+        run: dotnet --info
+
+      - name: Restore dependencies
+        run: dotnet restore $env:TEST_PROJECT
+
+      - name: Build core tests
+        run: dotnet build $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-restore
+
+      - name: Run core tests
+        run: >-
+          dotnet test $env:TEST_PROJECT
+          --configuration $env:CONFIGURATION
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=wcs-core-tests.trx"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-core-test-results-${{ github.run_number }}
+          path: TestResults
+          if-no-files-found: warn
+          retention-days: 14
