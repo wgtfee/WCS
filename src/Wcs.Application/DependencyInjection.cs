@@ -7,6 +7,7 @@ using Wcs.Core.Common.Interfaces;
 using Wcs.Core.EventBus.Persistence;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.ObjectTracking;
+using Wcs.Core.ObjectTracking.Topology;
 using Wcs.Core.PlcSubsystem;
 using Wcs.Core.Recovery;
 using Wcs.Core.ResourceLock;
@@ -14,6 +15,7 @@ using Wcs.Core.StateCenter.Interfaces;
 using Wcs.Core.TaskEngine.Chain;
 using Wcs.Core.TaskEngine.Orchestrator;
 using Wcs.Core.TaskEngine.Scheduler;
+using Wcs.Core.TransportScheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Wcs.Core.StateCenter.Implementation;
 using Wcs.Core.EventBus.Events;
@@ -31,6 +33,9 @@ public static class DependencyInjection
         services.AddSingleton<ITaskScheduler, TaskScheduler>();
         services.AddSingleton<IResourceLockManager, ResourceLockManager>();
 
+        // EMS / RGV unified scheduling phase 1
+        services.AddUnifiedTransportScheduling();
+
         // EventStore
         services.AddSingleton<IEventStore, FileEventStore>();
         services.AddSingleton<EventReplayService>();
@@ -40,8 +45,13 @@ public static class DependencyInjection
         services.AddSingleton<IAlarmCenter>(sp => sp.GetRequiredService<AlarmCenter>());
         services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<AlarmCenter>());
 
-        // ObjectTracking
-        services.AddSingleton<ObjectTrackingCenter>();
+        // ObjectTracking shares the same topology graph with transport scheduling
+        services.AddSingleton<ObjectTrackingCenter>(sp =>
+        {
+            var center = new ObjectTrackingCenter(sp.GetRequiredService<IEventBus>());
+            center.SetTopologyGraph(sp.GetRequiredService<TopologyGraph>());
+            return center;
+        });
         services.AddSingleton<IObjectTrackingCenter>(sp => sp.GetRequiredService<ObjectTrackingCenter>());
         services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<ObjectTrackingCenter>());
         services.AddSingleton<DeadlockDetector>();
