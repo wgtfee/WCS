@@ -2,9 +2,9 @@ name: WCS Windows CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "develop" ]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: [ "develop" ]
   workflow_dispatch:
 
 permissions:
@@ -39,6 +39,24 @@ jobs:
           path: TestResults
           if-no-files-found: warn
           retention-days: 14
+
+  host-build:
+    name: Build Wcs.Host
+    needs: core-tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+      HOST_PROJECT: src/Wcs.Host/Wcs.Host.csproj
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore $env:HOST_PROJECT
+      - run: dotnet build $env:HOST_PROJECT --configuration $env:CONFIGURATION --no-restore
 
   desktop-build:
     name: Build Wcs.Desktop
