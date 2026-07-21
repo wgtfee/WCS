@@ -75,6 +75,11 @@ public sealed record TransportDispatchRequest
     public IReadOnlySet<TransportVehicleKind>? AllowedVehicleKinds { get; init; }
     public TransportRouteStrategy RouteStrategy { get; init; } = TransportRouteStrategy.Balanced;
     public TimeSpan ReservationLease { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// 第二阶段滚动预留窗口。派单时只预留车辆前方若干条边，位置推进后动态释放和补充。
+    /// </summary>
+    public int ReservationWindowEdges { get; init; } = 2;
 }
 
 /// <summary>
@@ -114,7 +119,17 @@ public sealed record TransportDispatchAssignment
     public IReadOnlyList<string> LoadedNodePath { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> LoadedEdgePath { get; init; } = Array.Empty<string>();
     public string ReservationId { get; init; } = string.Empty;
+    public TimeSpan ReservationLease { get; init; } = TimeSpan.FromSeconds(30);
+    public int ReservationWindowEdges { get; init; } = 2;
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
+
+    public IReadOnlyList<string> FullNodePath =>
+        PickupNodePath
+            .Concat(LoadedNodePath.Skip(PickupNodePath.Count > 0 ? 1 : 0))
+            .ToArray();
+
+    public IReadOnlyList<string> FullEdgePath =>
+        PickupEdgePath.Concat(LoadedEdgePath).ToArray();
 }
 
 /// <summary>
