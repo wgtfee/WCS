@@ -14,8 +14,8 @@ public interface IUnifiedTransportDispatchEngine
 }
 
 /// <summary>
-/// EMS/RGV 统一派单引擎第一阶段。
-/// 负责候选排序、双段路径计算、原子预留、车辆占用和请求幂等。
+/// EMS/RGV 统一派单引擎。
+/// 第二阶段改为仅预留滚动窗口，完整路径仍保留在 Assignment 中。
 /// </summary>
 public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEngine
 {
@@ -80,14 +80,17 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
                 if (!loadedRoute.Found)
                     continue;
 
-                var allEdges = candidate.PickupRoute.EdgePath
+                var fullEdgePath = candidate.PickupRoute.EdgePath
                     .Concat(loadedRoute.EdgePath)
-                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+
+                var initialWindow = fullEdgePath
+                    .Take(request.ReservationWindowEdges)
                     .ToArray();
 
                 if (!_reservationManager.TryReserve(
                         request.RequestId,
-                        allEdges,
+                        initialWindow,
                         request.ReservationLease,
                         out var reservation) || reservation is null)
                 {
@@ -110,7 +113,9 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
                     PickupEdgePath = candidate.PickupRoute.EdgePath,
                     LoadedNodePath = loadedRoute.NodePath,
                     LoadedEdgePath = loadedRoute.EdgePath,
-                    ReservationId = reservation.ReservationId
+                    ReservationId = reservation.ReservationId,
+                    ReservationLease = request.ReservationLease,
+                    ReservationWindowEdges = request.ReservationWindowEdges
                 };
 
                 if (_assignments.TryAdd(request.RequestId, assignment))
@@ -123,7 +128,7 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
                     return TransportDispatchResult.Succeeded(existing);
             }
 
-            return TransportDispatchResult.Failed("无车辆能够同时完成路径规划和路段预留");
+            return TransportDispatchResult.Failed("无车辆能够同时完成路径规划和初始滚动窗口预留");
         }
         finally
         {
@@ -165,5 +170,7 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
             throw new ArgumentException("DestinationNodeId 不能为空", nameof(request));
         if (request.ReservationLease <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(request), "ReservationLease 必须大于 0");
+        if (request.ReservationWindowEdges <= 0)
+            throw new ArgumentOutOfRangeException(nameof(request), "ReservationWindowEdges 必须大于 0");
     }
 }
