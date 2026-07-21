@@ -1,4 +1,4 @@
-name: WCS Core CI
+name: WCS Windows CI
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: wcs-core-ci-${{ github.workflow }}-${{ github.ref }}
+  group: wcs-windows-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,45 +19,41 @@ jobs:
     name: Build and test Wcs.Core
     runs-on: windows-latest
     timeout-minutes: 20
-
     env:
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       CONFIGURATION: Release
       TEST_PROJECT: src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-
-      - name: Show .NET information
-        run: dotnet --info
-
-      - name: Restore dependencies
-        run: dotnet restore $env:TEST_PROJECT
-
-      - name: Build core tests
-        run: dotnet build $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-restore
-
-      - name: Run core tests
-        run: >-
-          dotnet test $env:TEST_PROJECT
-          --configuration $env:CONFIGURATION
-          --no-build
-          --verbosity normal
-          --logger "trx;LogFileName=wcs-core-tests.trx"
-          --results-directory TestResults
-
-      - name: Upload test results
-        if: always()
+      - run: dotnet restore $env:TEST_PROJECT
+      - run: dotnet build $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-restore
+      - run: dotnet test $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-build --verbosity normal --logger "trx;LogFileName=wcs-core-tests.trx" --results-directory TestResults
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wcs-core-test-results-${{ github.run_number }}
           path: TestResults
           if-no-files-found: warn
           retention-days: 14
+
+  desktop-build:
+    name: Build Wcs.Desktop
+    needs: core-tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+      DESKTOP_PROJECT: src/Wcs.Desktop/Wcs.Desktop.csproj
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore $env:DESKTOP_PROJECT
+      - run: dotnet build $env:DESKTOP_PROJECT --configuration $env:CONFIGURATION --no-restore
