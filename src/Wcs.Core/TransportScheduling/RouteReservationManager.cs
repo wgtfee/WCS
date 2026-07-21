@@ -10,14 +10,23 @@ public interface IRouteReservationManager
         TimeSpan lease,
         out RouteReservation? reservation);
 
+    bool TryExtend(
+        string reservationId,
+        IReadOnlyCollection<string> edgeIds,
+        TimeSpan lease,
+        out RouteReservation? reservation);
+
+    bool ReleaseEdges(string reservationId, IReadOnlyCollection<string> edgeIds);
+    bool Renew(string reservationId, TimeSpan lease);
+    bool TryGet(string reservationId, out RouteReservation? reservation);
     bool Release(string reservationId);
     int CleanupExpired(DateTime? nowUtc = null);
     IReadOnlyList<RouteReservation> GetActiveReservations();
 }
 
 /// <summary>
-/// 路段原子预留管理器。一次派单的全部路段要么全部成功，要么全部失败。
-/// 第一阶段采用进程内锁，后续由持久化快照和恢复服务接管重启恢复。
+/// 路段原子预留管理器。
+/// 第二阶段支持滚动窗口：释放已通过路段、向前扩展新路段并续租。
 /// </summary>
 public sealed class InMemoryRouteReservationManager : IRouteReservationManager
 {
@@ -40,13 +49,9 @@ public sealed class InMemoryRouteReservationManager : IRouteReservationManager
         if (string.IsNullOrWhiteSpace(ownerId))
             throw new ArgumentException("ownerId 不能为空", nameof(ownerId));
         ArgumentNullException.ThrowIfNull(edgeIds);
-        if (lease <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(lease), "lease 必须大于 0");
+        ValidateLease(lease);
 
-        var normalizedEdges = edgeIds
-            .Where(edgeId => !string.IsNullOrWhiteSpace(edgeId))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        var normalizedEdges = Normalize(edgeIds);
 
         lock (_sync)
         {
@@ -73,6 +78,133 @@ public sealed class InMemoryRouteReservationManager : IRouteReservationManager
 
             _routeCenter.OccupyPath(normalizedEdges, ownerId);
             return true;
+        }
+    }
+
+    public bool TryExtend(
+        string reservationId,
+        IReadOnlyCollection<string> edgeIds,
+        TimeSpan lease,
+        out RouteReservation? reservation)
+    {
+        if (string.IsNullOrWhiteSpace(reservationId))
+            throw new ArgumentException("reservationId 不能为空", nameof(reservationId));
+        ArgumentNullException.ThrowIfNull(edgeIds);
+        ValidateLease(lease);
+
+        var normalizedEdges = Normalize(edgeIds);
+
+        lock (_sync)
+        {
+            var now = DateTime.UtcNow;
+            CleanupExpiredUnsafe(now);
+
+            if (!_reservations.TryGetValue(reservationId, out var current))
+            {
+                reservation = null;
+                return false;
+            }
+
+            var additions = normalizedEdges
+                .Where(edgeId => !current.EdgeIds.Contains(edgeId, StringComparer.Ordinal))
+                .ToArray();
+
+            if (additions.Any(edgeId =>
+                    _edgeToReservation.TryGetValue(edgeId, out var ownerReservationId) &&
+                    !string.Equals(ownerReservationId, reservationId, StringComparison.Ordinal)))
+            {
+                reservation = current;
+                return false;
+            }
+
+            foreach (var edgeId in additions)
+                _edgeToReservation[edgeId] = reservationId;
+
+            reservation = current with
+            {
+                EdgeIds = current.EdgeIds.Concat(additions).Distinct(StringComparer.Ordinal).ToArray(),
+                ExpiresAtUtc = now.Add(lease)
+            };
+            _reservations[reservationId] = reservation;
+
+            if (additions.Length > 0)
+                _routeCenter.OccupyPath(additions, current.OwnerId);
+
+            return true;
+        }
+    }
+
+    public bool ReleaseEdges(string reservationId, IReadOnlyCollection<string> edgeIds)
+    {
+        if (string.IsNullOrWhiteSpace(reservationId))
+            return false;
+        ArgumentNullException.ThrowIfNull(edgeIds);
+
+        var normalizedEdges = Normalize(edgeIds);
+
+        lock (_sync)
+        {
+            if (!_reservations.TryGetValue(reservationId, out var current))
+                return false;
+
+            var releasable = normalizedEdges
+                .Where(edgeId => current.EdgeIds.Contains(edgeId, StringComparer.Ordinal))
+                .ToArray();
+
+            if (releasable.Length == 0)
+                return true;
+
+            foreach (var edgeId in releasable)
+            {
+                if (_edgeToReservation.TryGetValue(edgeId, out var ownerReservationId) &&
+                    string.Equals(ownerReservationId, reservationId, StringComparison.Ordinal))
+                {
+                    _edgeToReservation.Remove(edgeId);
+                }
+            }
+
+            var remaining = current.EdgeIds
+                .Where(edgeId => !releasable.Contains(edgeId, StringComparer.Ordinal))
+                .ToArray();
+
+            _reservations[reservationId] = current with { EdgeIds = remaining };
+            _routeCenter.ReleasePath(releasable, current.OwnerId);
+            return true;
+        }
+    }
+
+    public bool Renew(string reservationId, TimeSpan lease)
+    {
+        if (string.IsNullOrWhiteSpace(reservationId))
+            return false;
+        ValidateLease(lease);
+
+        lock (_sync)
+        {
+            CleanupExpiredUnsafe(DateTime.UtcNow);
+            if (!_reservations.TryGetValue(reservationId, out var current))
+                return false;
+
+            _reservations[reservationId] = current with
+            {
+                ExpiresAtUtc = DateTime.UtcNow.Add(lease)
+            };
+            return true;
+        }
+    }
+
+    public bool TryGet(string reservationId, out RouteReservation? reservation)
+    {
+        if (string.IsNullOrWhiteSpace(reservationId))
+        {
+            reservation = null;
+            return false;
+        }
+
+        lock (_sync)
+        {
+            CleanupExpiredUnsafe(DateTime.UtcNow);
+            return _reservations.TryGetValue(reservationId, out reservation);
         }
     }
 
@@ -133,7 +265,21 @@ public sealed class InMemoryRouteReservationManager : IRouteReservationManager
             }
         }
 
-        _routeCenter.ReleasePath(reservation.EdgeIds, reservation.OwnerId);
+        if (reservation.EdgeIds.Count > 0)
+            _routeCenter.ReleasePath(reservation.EdgeIds, reservation.OwnerId);
+
         return true;
+    }
+
+    private static string[] Normalize(IEnumerable<string> edgeIds) =>
+        edgeIds
+            .Where(edgeId => !string.IsNullOrWhiteSpace(edgeId))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    private static void ValidateLease(TimeSpan lease)
+    {
+        if (lease <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(lease), "lease 必须大于 0");
     }
 }

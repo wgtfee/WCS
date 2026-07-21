@@ -8,7 +8,7 @@ using Wcs.Core.RouteCenter;
 public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
-    /// 注册 EMS/RGV 统一调度第一阶段核心组件。
+    /// 注册 EMS/RGV 统一调度与第二阶段执行组件。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
     {
@@ -20,6 +20,7 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportVehicleSelector, DefaultTransportVehicleSelector>();
         services.TryAddSingleton<IRouteReservationManager, InMemoryRouteReservationManager>();
         services.TryAddSingleton<IUnifiedTransportDispatchEngine, UnifiedTransportDispatchEngine>();
+        services.TryAddSingleton<ITransportExecutionEngine, InMemoryTransportExecutionEngine>();
 
         return services;
     }
