@@ -6,8 +6,8 @@ using Wcs.Core.TransportScheduling;
 
 /// <summary>
 /// 将执行状态机生成的协议无关命令自动交给可靠命令分发器。
-/// 命令失败后不重新塞回执行队列，避免 Move/Load/Unload 在物理结果未知时重复执行；
-/// 持久化命令记录由第三阶段状态存储和第八阶段补偿流程继续处理。
+/// 不同车辆并行、同一车辆顺序下发；命令失败后不重新塞回执行队列，
+/// 避免 Move/Load/Unload 在物理结果未知时重复执行。
 /// </summary>
 public sealed class TransportExecutionCommandPumpHostedService : BackgroundService
 {
@@ -58,28 +58,36 @@ public sealed class TransportExecutionCommandPumpHostedService : BackgroundServi
 
     private async Task PumpAsync(CancellationToken cancellationToken)
     {
-        foreach (var vehicle in _vehicles.GetAll().Where(x => x.IsOnline))
+        var tasks = _vehicles.GetAll()
+            .Where(x => x.IsOnline)
+            .Select(vehicle => PumpVehicleAsync(vehicle, cancellationToken))
+            .ToArray();
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private async Task PumpVehicleAsync(
+        TransportVehicleSnapshot vehicle,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var commands = _executions.DequeueCommands(vehicle.VehicleId, 20);
+        foreach (var command in commands)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var commands = _executions.DequeueCommands(vehicle.VehicleId, 20);
-            foreach (var command in commands)
+            var result = await _dispatcher.DispatchAsync(
+                command,
+                vehicle.Kind,
+                maxRetries: 2,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (result.Status is not (
+                TransportCommandStatus.Acknowledged or
+                TransportCommandStatus.Completed))
             {
-                var result = await _dispatcher.DispatchAsync(
-                    command,
-                    vehicle.Kind,
-                    maxRetries: 2,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-                if (result.Status is not (
-                    TransportCommandStatus.Acknowledged or
-                    TransportCommandStatus.Completed))
-                {
-                    _logger.LogWarning(
-                        "EMS/RGV 执行命令下发未成功，车辆 {VehicleId}，命令 {CommandId}，状态 {Status}，错误 {Error}",
-                        vehicle.VehicleId,
-                        command.CommandId,
-                        result.Status,
-                        result.Error);
-                }
+                _logger.LogWarning(
+                    "EMS/RGV 执行命令下发未成功，车辆 {VehicleId}，命令 {CommandId}，状态 {Status}，错误 {Error}",
+                    vehicle.VehicleId,
+                    command.CommandId,
+                    result.Status,
+                    result.Error);
             }
         }
     }
