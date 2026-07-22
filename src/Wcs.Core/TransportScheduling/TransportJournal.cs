@@ -21,7 +21,12 @@ public enum TransportJournalCategory
     ProductionReadiness = 14,
     OperationalBaseline = 15,
     LogicalBackup = 16,
-    RecoveryDrill = 17
+    RecoveryDrill = 17,
+    SimulationRun = 18,
+    StrategyComparison = 19,
+    CapacityBenchmark = 20,
+    FinalAcceptanceReport = 21,
+    OptimizationRecommendation = 22
 }
 
 public sealed record TransportJournalRecord
