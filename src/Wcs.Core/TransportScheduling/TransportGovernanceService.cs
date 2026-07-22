@@ -9,7 +9,9 @@ public sealed record TransportGovernanceResult
     public static TransportGovernanceResult Ok(TransportGovernedOperation operation) =>
         new() { Success = true, Operation = operation };
 
-    public static TransportGovernanceResult Fail(string error, TransportGovernedOperation? operation = null) =>
+    public static TransportGovernanceResult Fail(
+        string error,
+        TransportGovernedOperation? operation = null) =>
         new() { Error = error, Operation = operation };
 }
 
@@ -49,8 +51,13 @@ public interface ITransportOperationGovernanceService
         string resultMessage,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<TransportGovernedOperation>> GetOperationsAsync(int maxCount = 200, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<TransportAuditRecord>> GetAuditsAsync(int maxCount = 500, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TransportGovernedOperation>> GetOperationsAsync(
+        int maxCount = 200,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TransportAuditRecord>> GetAuditsAsync(
+        int maxCount = 500,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class TransportOperationGovernanceService : ITransportOperationGovernanceService
@@ -76,8 +83,11 @@ public sealed class TransportOperationGovernanceService : ITransportOperationGov
             return TransportGovernanceResult.Fail($"缺少权限：{permission}");
         if (string.IsNullOrWhiteSpace(requester.UserId))
             return TransportGovernanceResult.Fail("认证身份缺少稳定 UserId");
-        if (validity.HasValue && (validity.Value <= TimeSpan.Zero || validity.Value > TimeSpan.FromHours(24)))
+        if (validity.HasValue &&
+            (validity.Value <= TimeSpan.Zero || validity.Value > TimeSpan.FromHours(24)))
+        {
             return TransportGovernanceResult.Fail("审批有效期必须大于 0 且不超过 24 小时");
+        }
         if (string.IsNullOrWhiteSpace(targetId))
             return TransportGovernanceResult.Fail("TargetId 不能为空");
         if (string.IsNullOrWhiteSpace(reason))
@@ -137,7 +147,6 @@ public sealed class TransportOperationGovernanceService : ITransportOperationGov
                 DisplayName = approver.DisplayName,
                 Comment = comment
             }).ToArray();
-
             var next = current with
             {
                 Approvals = approvals,
@@ -173,8 +182,12 @@ public sealed class TransportOperationGovernanceService : ITransportOperationGov
             var current = await _store.GetOperationAsync(operationId, cancellationToken).ConfigureAwait(false);
             if (current is null)
                 return TransportGovernanceResult.Fail("审批操作不存在");
-            if (current.State is not (TransportGovernedOperationState.PendingApproval or TransportGovernedOperationState.Approved))
+            if (current.State is not (
+                TransportGovernedOperationState.PendingApproval or
+                TransportGovernedOperationState.Approved))
+            {
                 return TransportGovernanceResult.Fail("当前状态不允许拒绝", current);
+            }
 
             var next = current with
             {
@@ -253,12 +266,20 @@ public sealed class TransportOperationGovernanceService : ITransportOperationGov
 
             var next = current with
             {
-                State = success ? TransportGovernedOperationState.Executed : TransportGovernedOperationState.Failed,
+                State = success
+                    ? TransportGovernedOperationState.Executed
+                    : TransportGovernedOperationState.Failed,
                 ResultMessage = resultMessage,
                 UpdatedAtUtc = DateTime.UtcNow
             };
             await _store.SaveOperationAsync(next, cancellationToken).ConfigureAwait(false);
-            await AuditAsync(next, success ? "ExecutionCompleted" : "ExecutionFailed", executor, success, resultMessage, cancellationToken).ConfigureAwait(false);
+            await AuditAsync(
+                next,
+                success ? "ExecutionCompleted" : "ExecutionFailed",
+                executor,
+                success,
+                resultMessage,
+                cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -266,10 +287,14 @@ public sealed class TransportOperationGovernanceService : ITransportOperationGov
         }
     }
 
-    public Task<IReadOnlyList<TransportGovernedOperation>> GetOperationsAsync(int maxCount = 200, CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<TransportGovernedOperation>> GetOperationsAsync(
+        int maxCount = 200,
+        CancellationToken cancellationToken = default) =>
         _store.GetOperationsAsync(maxCount, cancellationToken);
 
-    public Task<IReadOnlyList<TransportAuditRecord>> GetAuditsAsync(int maxCount = 500, CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<TransportAuditRecord>> GetAuditsAsync(
+        int maxCount = 500,
+        CancellationToken cancellationToken = default) =>
         _store.GetAuditsAsync(maxCount, cancellationToken);
 
     private async Task<TransportGovernanceResult?> ExpireIfNeededAsync(
@@ -309,19 +334,27 @@ public sealed class TransportOperationGovernanceService : ITransportOperationGov
             Success = success
         }, cancellationToken);
 
-    private static string RequiredPermission(TransportGovernedOperationType operationType) => operationType switch
+    private static string RequiredPermission(
+        TransportGovernedOperationType operationType) => operationType switch
     {
         TransportGovernedOperationType.ChangeConfiguration => TransportPermissions.ChangeConfiguration,
         TransportGovernedOperationType.ReassignTask => TransportPermissions.ReassignTask,
         TransportGovernedOperationType.ForceReleaseTraffic => TransportPermissions.ForceReleaseTraffic,
         TransportGovernedOperationType.OverrideLowBattery => TransportPermissions.OverrideLowBattery,
         TransportGovernedOperationType.SendManualDriverCommand => TransportPermissions.SendManualDriverCommand,
+        TransportGovernedOperationType.WritePlcSignal => TransportPermissions.WritePlcSignal,
+        TransportGovernedOperationType.ResolveRecoveryConflict => TransportPermissions.ResolveRecoveryConflict,
+        TransportGovernedOperationType.RetryCommandCompensation => TransportPermissions.RetryCommandCompensation,
         _ => throw new ArgumentOutOfRangeException(nameof(operationType))
     };
 
-    private static bool RequiresIndependentApproval(TransportGovernedOperationType operationType) => operationType is
+    private static bool RequiresIndependentApproval(
+        TransportGovernedOperationType operationType) => operationType is
         TransportGovernedOperationType.ChangeConfiguration or
         TransportGovernedOperationType.ReassignTask or
         TransportGovernedOperationType.ForceReleaseTraffic or
-        TransportGovernedOperationType.SendManualDriverCommand;
+        TransportGovernedOperationType.SendManualDriverCommand or
+        TransportGovernedOperationType.WritePlcSignal or
+        TransportGovernedOperationType.ResolveRecoveryConflict or
+        TransportGovernedOperationType.RetryCommandCompensation;
 }
