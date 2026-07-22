@@ -109,6 +109,39 @@ public class WcsApiService : IWcsApiService
         return await response.Content.ReadFromJsonAsync<TransportDriverReconciliationReport>(ct);
     }
 
+    public async Task<List<TransportSignalTemplate>> GetTransportSignalTemplatesAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportSignalTemplate>>("/api/transport/commissioning/templates", ct) ?? [];
+
+    public async Task<List<TransportFaultDefinition>> GetTransportFaultDefinitionsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportFaultDefinition>>("/api/transport/commissioning/faults", ct) ?? [];
+
+    public async Task<List<TransportRecoveryConflictCase>> GetTransportRecoveryConflictsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportRecoveryConflictCase>>("/api/transport/commissioning/conflicts", ct) ?? [];
+
+    public async Task<List<TransportRecoveryConflictCase>> RefreshTransportRecoveryConflictsAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/commissioning/conflicts/refresh", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<TransportRecoveryConflictCase>>(ct) ?? [];
+    }
+
+    public async Task<TransportCommandCompensationReport?> GetTransportCommandCompensationAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportCommandCompensationReport>("/api/transport/commissioning/compensation", ct);
+
+    public async Task<List<TransportCommunicationTrace>> GetTransportCommunicationTracesAsync(
+        int maxCount = 500,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportCommunicationTrace>>(
+            $"/api/transport/commissioning/traces?maxCount={Math.Clamp(maxCount, 1, 2000)}",
+            ct) ?? [];
+
+    public async Task<TransportSignalProbeResult?> ProbeTransportVehicleAsync(
+        string vehicleId,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportSignalProbeResult>(
+            $"/api/transport/commissioning/vehicles/{Uri.EscapeDataString(vehicleId)}/probe",
+            ct);
+
     public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
 
     public async Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null, string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default)
