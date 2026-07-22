@@ -56,13 +56,20 @@ public sealed class JournalTransportDispatchDecisionStore : ITransportDispatchDe
     {
         ArgumentNullException.ThrowIfNull(frame);
         Enqueue(frame);
-        _journal.UpsertAsync(new TransportJournalRecord
+        try
         {
-            Category = TransportJournalCategory.DispatchDecision,
-            RecordId = frame.DecisionId,
-            PayloadJson = JsonSerializer.Serialize(frame),
-            OccurredAtUtc = frame.OccurredAtUtc
-        }).GetAwaiter().GetResult();
+            _journal.UpsertAsync(new TransportJournalRecord
+            {
+                Category = TransportJournalCategory.DispatchDecision,
+                RecordId = frame.DecisionId,
+                PayloadJson = JsonSerializer.Serialize(frame),
+                OccurredAtUtc = frame.OccurredAtUtc
+            }).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // 决策日志落库异常不能反向中断已经完成的现场派单；内存记录仍可用于当前进程追溯。
+        }
     }
 
     public IReadOnlyList<TransportDispatchDecisionFrame> GetRecent(int maxCount = 500) =>
@@ -81,12 +88,13 @@ public sealed class JournalTransportDispatchDecisionStore : ITransportDispatchDe
 }
 
 /// <summary>
-/// 第九阶段生产派单实现。与早期原型相比，每一次真实派单尝试只累计一次 AttemptCount，
-/// 站点拒绝也只记录一次等待周期，不会在 Dispatching 与最终结果阶段重复加二。
+/// 第九阶段生产派单实现。每一次真实派单周期只累计一次 AttemptCount；
+/// 只有执行引擎创建并成功启动后，生产队列才进入 Assigned。
 /// </summary>
 public sealed class ReliableTransportProductionDispatchService : ITransportProductionDispatchService
 {
     private readonly IUnifiedTransportDispatchEngine _dispatch;
+    private readonly ITransportExecutionEngine _execution;
     private readonly ITransportDynamicPriorityService _priority;
     private readonly ITransportStationCongestionService _stations;
     private readonly ITransportProductionTuningService _tuning;
@@ -96,12 +104,14 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
 
     public ReliableTransportProductionDispatchService(
         IUnifiedTransportDispatchEngine dispatch,
+        ITransportExecutionEngine execution,
         ITransportDynamicPriorityService priority,
         ITransportStationCongestionService stations,
         ITransportProductionTuningService tuning,
         ITransportDispatchDecisionStore decisions)
     {
         _dispatch = dispatch ?? throw new ArgumentNullException(nameof(dispatch));
+        _execution = execution ?? throw new ArgumentNullException(nameof(execution));
         _priority = priority ?? throw new ArgumentNullException(nameof(priority));
         _stations = stations ?? throw new ArgumentNullException(nameof(stations));
         _tuning = tuning ?? throw new ArgumentNullException(nameof(tuning));
@@ -203,15 +213,9 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
                 TransportProductionQueueItem final;
                 if (dispatchResult.Success && dispatchResult.Assignment is not null)
                 {
-                    final = Save(current with
-                    {
-                        State = TransportProductionQueueState.Assigned,
-                        AssignedVehicleId = dispatchResult.Assignment.VehicleId,
-                        AttemptCount = current.AttemptCount + 1,
-                        LastReason = null,
-                        UpdatedAtUtc = DateTime.UtcNow
-                    });
-                    assignedCount++;
+                    final = StartExecutionOrFail(current, dispatchResult.Assignment);
+                    if (final.State == TransportProductionQueueState.Assigned)
+                        assignedCount++;
                 }
                 else
                 {
@@ -225,7 +229,7 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
                 }
 
                 results.Add(final);
-                RecordDecision(final, candidates, dispatchResult.Assignment?.VehicleId);
+                RecordDecision(final, candidates, final.AssignedVehicleId);
             }
 
             RefreshStationQueues();
@@ -288,6 +292,48 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
     public IReadOnlyList<TransportDispatchDecisionFrame> GetDecisions(int maxCount = 500) =>
         _decisions.GetRecent(maxCount);
 
+    private TransportProductionQueueItem StartExecutionOrFail(
+        TransportProductionQueueItem current,
+        TransportDispatchAssignment assignment)
+    {
+        var created = _execution.Create(assignment.RequestId);
+        if (!created.Success)
+        {
+            _dispatch.Complete(assignment.RequestId);
+            return Save(current with
+            {
+                State = TransportProductionQueueState.Failed,
+                AttemptCount = current.AttemptCount + 1,
+                LastReason = created.FailureReason ?? "执行任务创建失败",
+                UpdatedAtUtc = DateTime.UtcNow
+            });
+        }
+
+        var started = _execution.Start(assignment.RequestId);
+        if (!started.Success)
+        {
+            _execution.Cancel(
+                assignment.RequestId,
+                started.FailureReason ?? "生产派单执行启动失败");
+            return Save(current with
+            {
+                State = TransportProductionQueueState.Failed,
+                AttemptCount = current.AttemptCount + 1,
+                LastReason = started.FailureReason ?? "执行任务启动失败",
+                UpdatedAtUtc = DateTime.UtcNow
+            });
+        }
+
+        return Save(current with
+        {
+            State = TransportProductionQueueState.Assigned,
+            AssignedVehicleId = assignment.VehicleId,
+            AttemptCount = current.AttemptCount + 1,
+            LastReason = null,
+            UpdatedAtUtc = DateTime.UtcNow
+        });
+    }
+
     private TransportProductionQueueItem Save(TransportProductionQueueItem item)
     {
         _queue[item.ProductionRequest.Request.RequestId] = item;
@@ -345,8 +391,7 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
             TransportProductionQueueState.Queued or
             TransportProductionQueueState.WaitingForStation or
             TransportProductionQueueState.WaitingForTraffic or
-            TransportProductionQueueState.WaitingForVehicle or
-            TransportProductionQueueState.Failed;
+            TransportProductionQueueState.WaitingForVehicle;
 
     private static TransportProductionQueueState ClassifyFailure(string? reason)
     {
