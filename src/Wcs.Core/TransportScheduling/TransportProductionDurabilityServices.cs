@@ -253,11 +253,19 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
     {
         CleanupTerminalAssignments();
         RefreshPriorities(DateTime.UtcNow);
-        return _queue.Values
+        return PeekQueue();
+    }
+
+    /// <summary>
+    /// 返回当前队列的纯快照，不清理终态任务、不刷新动态优先级，也不修改站点排队数。
+    /// 用于离线仿真、诊断和只读看板，避免读操作改变生产状态。
+    /// </summary>
+    public IReadOnlyList<TransportProductionQueueItem> PeekQueue() =>
+        _queue.Values
             .OrderByDescending(x => x.EffectivePriority)
             .ThenBy(x => x.ProductionRequest.EnqueuedAtUtc)
+            .ThenBy(x => x.ProductionRequest.Request.RequestId, StringComparer.Ordinal)
             .ToArray();
-    }
 
     public TransportProductionDryRunReport DryRun(DateTime? nowUtc = null)
     {
