@@ -51,9 +51,10 @@ public sealed class SqlSugarTransportCommissioningStore : ITransportCommissionin
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var stateKey = Key(category, recordId);
         using var db = CreateClient();
         var affected = db.Deleteable<TransportCommissioningEntity>()
-            .Where(x => x.StateKey == Key(category, recordId))
+            .Where(x => x.StateKey == stateKey)
             .ExecuteCommand();
         return Task.FromResult(affected > 0);
     }
