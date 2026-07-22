@@ -26,6 +26,10 @@ public sealed record TransportProtocolStateFrame
     public bool CommandAccepted { get; init; }
     public bool CommandCompleted { get; init; }
     public string? CommandError { get; init; }
+    public int BatteryPercent { get; init; } = 100;
+    public int FaultCode { get; init; }
+    public string? FaultMessage { get; init; }
+    public bool LoadPresent { get; init; }
     public DateTime HeartbeatAtUtc { get; init; } = DateTime.UtcNow;
 }
 
@@ -73,17 +77,20 @@ public sealed class ReliableTransportVehicleDriver : ITransportVehicleDriver
     {
         var state = await _channel.ReadStateAsync(vehicleId, cancellationToken).ConfigureAwait(false);
         var heartbeatAlive = DateTime.UtcNow - state.HeartbeatAtUtc <= _options.HeartbeatTimeout;
+        var online = state.DeviceOnline && heartbeatAlive;
 
         return new TransportDriverState
         {
             VehicleId = vehicleId,
-            IsOnline = state.DeviceOnline && heartbeatAlive,
+            IsOnline = online,
             CurrentNodeId = state.CurrentNodeId,
-            OperatingState = state.DeviceOnline && heartbeatAlive
-                ? state.OperatingState
-                : TransportVehicleOperatingState.Offline,
+            OperatingState = online ? state.OperatingState : TransportVehicleOperatingState.Offline,
             ActiveCommandId = state.ActiveCommandId,
             Sequence = state.StateSequence,
+            BatteryPercent = state.BatteryPercent,
+            FaultCode = state.FaultCode,
+            FaultMessage = state.FaultMessage ?? state.CommandError,
+            LoadPresent = state.LoadPresent,
             UpdatedAtUtc = state.HeartbeatAtUtc
         };
     }
@@ -218,6 +225,7 @@ public sealed class InMemoryTransportDriverChannel : ITransportDriverChannel
             VehicleId = vehicleId,
             DeviceOnline = true,
             OperatingState = TransportVehicleOperatingState.Idle,
+            BatteryPercent = 100,
             HeartbeatAtUtc = DateTime.UtcNow
         };
         return Task.FromResult(state);

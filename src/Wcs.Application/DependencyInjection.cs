@@ -25,7 +25,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddWcsApplication(this IServiceCollection services)
     {
-        // Core singletons
         services.AddSingleton<StateCenter>(_ => new StateCenter());
         services.AddSingleton<IStateCenter>(sp => sp.GetRequiredService<StateCenter>());
         services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<StateCenter>());
@@ -34,22 +33,21 @@ public static class DependencyInjection
         services.AddSingleton<ITaskScheduler, TaskScheduler>();
         services.AddSingleton<IResourceLockManager, ResourceLockManager>();
 
-        // EMS / RGV unified scheduling
         services.AddUnifiedTransportScheduling();
         services.AddHostedService<TransportConfigurationHostedService>();
+        services.AddHostedService<TransportPlcSignalMapHostedService>();
+        services.AddHostedService<TransportDriverReconciliationHostedService>();
+        services.AddHostedService<TransportDriverPollingHostedService>();
         services.AddHostedService<TransportOptimizationHostedService>();
         services.AddHostedService<TransportJournalHostedService>();
 
-        // EventStore
         services.AddSingleton<IEventStore, FileEventStore>();
         services.AddSingleton<EventReplayService>();
 
-        // AlarmCenter
         services.AddSingleton<AlarmCenter>(sp => new AlarmCenter(sp.GetRequiredService<IEventBus>()));
         services.AddSingleton<IAlarmCenter>(sp => sp.GetRequiredService<AlarmCenter>());
         services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<AlarmCenter>());
 
-        // ObjectTracking shares the same topology graph with transport scheduling
         services.AddSingleton<ObjectTrackingCenter>(sp =>
         {
             var center = new ObjectTrackingCenter(sp.GetRequiredService<IEventBus>());
@@ -60,25 +58,18 @@ public static class DependencyInjection
         services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<ObjectTrackingCenter>());
         services.AddSingleton<DeadlockDetector>();
 
-        // Recovery
         services.AddSingleton<ISnapshotRepository, SnapshotRepository>();
         services.AddSingleton<IRecoveryManager>(sp => new RecoveryManager(
             sp.GetServices<ISnapshotProvider>(), sp.GetRequiredService<ISnapshotRepository>()));
 
-        // Task engine
         services.AddSingleton<ITaskOrchestrator>(sp => new TaskOrchestrator(
             sp.GetRequiredService<IStateCenter>(), sp.GetRequiredService<ITaskScheduler>()));
         services.AddSingleton<ITaskChainEngine>(sp => new TaskChainEngine(
             sp.GetRequiredService<ITaskOrchestrator>(), sp.GetRequiredService<ITaskScheduler>()));
 
-        // PlcWriter + CommandCenter（写 PLC 的唯一入口）
         services.AddSingleton<PlcWriter>();
         services.AddSingleton<ICommandCenter, CommandCenter>();
-
-        // Application service
         services.AddSingleton<WcsApplicationService>();
-
-        // Register EventBus subscriptions
         services.AddHostedService<EventBusSubscriberHostedService>();
 
         return services;
@@ -98,7 +89,6 @@ internal sealed class TransportOptimizationHostedService : Microsoft.Extensions.
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(_interval);
-
         while (!stoppingToken.IsCancellationRequested)
         {
             try

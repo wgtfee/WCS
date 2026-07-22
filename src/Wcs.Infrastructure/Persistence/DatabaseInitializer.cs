@@ -49,10 +49,12 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(TransportConfigurationEntity),
                 typeof(TransportJournalEntity),
                 typeof(TransportGovernedOperationEntity),
-                typeof(TransportAuditEntity)
+                typeof(TransportAuditEntity),
+                typeof(TransportPlcSignalMapEntity),
+                typeof(TransportRuntimeStateEntity)
             );
 
-            _logger.LogInformation("数据库和所有表已就绪 (15 张)");
+            _logger.LogInformation("数据库和所有表已就绪 (17 张)");
             await Task.CompletedTask;
             return true;
         }

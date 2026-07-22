@@ -42,6 +42,11 @@ public interface IWcsApiService
         TransportJournalCategory? category = null,
         CancellationToken ct = default);
 
+    Task<List<TransportPlcSignalMap>> GetTransportPlcSignalMapsAsync(CancellationToken ct = default);
+    Task<List<TransportDriverDiagnosticSnapshot>> GetTransportDriverDiagnosticsAsync(CancellationToken ct = default);
+    Task<TransportDriverSyncReport?> PollTransportDriversAsync(CancellationToken ct = default);
+    Task<TransportDriverReconciliationReport?> ReconcileTransportDriversAsync(CancellationToken ct = default);
+
     Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default);
     Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null,
         string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default);

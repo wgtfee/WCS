@@ -8,6 +8,10 @@ public sealed record TransportDriverState
     public TransportVehicleOperatingState OperatingState { get; init; }
     public string? ActiveCommandId { get; init; }
     public long Sequence { get; init; }
+    public int BatteryPercent { get; init; } = 100;
+    public int FaultCode { get; init; }
+    public string? FaultMessage { get; init; }
+    public bool LoadPresent { get; init; }
     public DateTime UpdatedAtUtc { get; init; } = DateTime.UtcNow;
 }
 
@@ -69,7 +73,8 @@ public sealed class SimulatorTransportVehicleDriver : ITransportVehicleDriver
             {
                 VehicleId = vehicleId,
                 IsOnline = true,
-                OperatingState = TransportVehicleOperatingState.Idle
+                OperatingState = TransportVehicleOperatingState.Idle,
+                BatteryPercent = 100
             });
         }
     }
@@ -79,14 +84,16 @@ public sealed class SimulatorTransportVehicleDriver : ITransportVehicleDriver
         cancellationToken.ThrowIfCancellationRequested();
         lock (_sync)
         {
+            var current = _states.GetValueOrDefault(command.VehicleId);
             _states[command.VehicleId] = new TransportDriverState
             {
                 VehicleId = command.VehicleId,
                 IsOnline = true,
-                CurrentNodeId = command.TargetNodeId ?? _states.GetValueOrDefault(command.VehicleId)?.CurrentNodeId ?? string.Empty,
+                CurrentNodeId = command.TargetNodeId ?? current?.CurrentNodeId ?? string.Empty,
                 OperatingState = TransportVehicleOperatingState.Executing,
                 ActiveCommandId = command.CommandId,
-                Sequence = (_states.GetValueOrDefault(command.VehicleId)?.Sequence ?? 0) + 1
+                Sequence = (current?.Sequence ?? 0) + 1,
+                BatteryPercent = current?.BatteryPercent ?? 100
             };
         }
 

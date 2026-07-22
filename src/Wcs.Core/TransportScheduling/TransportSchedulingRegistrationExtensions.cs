@@ -9,9 +9,9 @@ using Wcs.Core.RouteCenter;
 public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
-    /// 注册 EMS/RGV 统一调度、执行、持久化恢复、交通控制、充电调度、
-    /// 故障换车、效率统计、配置治理、审计与设备驱动组件。
-    /// 生产环境应在 Infrastructure 中覆盖内存存储，并按现场协议替换模拟车辆驱动。
+    /// 注册 EMS/RGV 统一调度、执行、恢复、交通控制、充电、配置治理、审计、
+    /// PLC 点位驱动、状态同步和设备诊断组件。
+    /// 生产 Host 可用 PlcClientTransportPlcAccessor 替换默认内存 PLC 访问器。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
     {
@@ -38,22 +38,43 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportDeadlockService, TransportDeadlockService>();
 
         services.TryAddSingleton<ITransportStateStore, InMemoryTransportStateStore>();
-        services.AddSingleton<ITransportVehicleDriver>(_ => new SimulatorTransportVehicleDriver(TransportVehicleKind.Ems));
-        services.AddSingleton<ITransportVehicleDriver>(_ => new SimulatorTransportVehicleDriver(TransportVehicleKind.Rgv));
+
+        services.TryAddSingleton<ITransportPlcSignalMapRegistry, InMemoryTransportPlcSignalMapRegistry>();
+        services.TryAddSingleton<ITransportDriverDiagnosticsService, TransportDriverDiagnosticsService>();
+        services.TryAddSingleton<InMemoryTransportPlcAccessor>();
+        services.TryAddSingleton<HybridTransportPlcAccessor>();
+        services.TryAddSingleton<ITransportPlcAccessor>(sp =>
+            sp.GetRequiredService<HybridTransportPlcAccessor>());
+        services.TryAddSingleton<TransportPlcDriverChannel>();
+        services.TryAddSingleton<ITransportDriverChannel>(sp =>
+            sp.GetRequiredService<TransportPlcDriverChannel>());
+
+        services.AddSingleton<ITransportVehicleDriver>(sp =>
+            new SwitchableTransportVehicleDriver(
+                TransportVehicleKind.Ems,
+                sp.GetRequiredService<ITransportPlcSignalMapRegistry>(),
+                sp.GetRequiredService<ITransportDriverChannel>()));
+        services.AddSingleton<ITransportVehicleDriver>(sp =>
+            new SwitchableTransportVehicleDriver(
+                TransportVehicleKind.Rgv,
+                sp.GetRequiredService<ITransportPlcSignalMapRegistry>(),
+                sp.GetRequiredService<ITransportDriverChannel>()));
         services.TryAddSingleton<ITransportDriverResolver, TransportDriverResolver>();
         services.TryAddSingleton<ITransportCommandDispatcher, TransportCommandDispatcher>();
         services.TryAddSingleton<ITransportRecoveryCoordinator, TransportRecoveryCoordinator>();
+        services.TryAddSingleton<ITransportDriverSynchronizationService, TransportDriverSynchronizationService>();
 
         services.TryAddSingleton<ITransportChargingCoordinator, TransportChargingCoordinator>();
         services.TryAddSingleton<ITransportTaskReassignmentService, TransportTaskReassignmentService>();
         services.TryAddSingleton<ITransportPerformanceService, TransportPerformanceService>();
 
-        // 第六阶段默认内存实现；Infrastructure 在生产 Host 中替换为 SqlSugar/SQL Server。
         services.TryAddSingleton<ITransportConfigurationStore, InMemoryTransportConfigurationStore>();
         services.TryAddSingleton<ITransportJournalStore, InMemoryTransportJournalStore>();
         services.TryAddSingleton<ITransportGovernanceStore, InMemoryTransportGovernanceStore>();
+        services.TryAddSingleton<ITransportPlcSignalMapStore, InMemoryTransportPlcSignalMapStore>();
         services.TryAddSingleton<ITransportConfigurationService, TransportConfigurationService>();
         services.TryAddSingleton<ITransportOperationGovernanceService, TransportOperationGovernanceService>();
+        services.TryAddSingleton<ITransportPlcSignalMapService, TransportPlcSignalMapService>();
 
         return services;
     }
