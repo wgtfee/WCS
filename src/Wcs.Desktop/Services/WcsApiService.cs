@@ -142,6 +142,54 @@ public class WcsApiService : IWcsApiService
             $"/api/transport/commissioning/vehicles/{Uri.EscapeDataString(vehicleId)}/probe",
             ct);
 
+    public async Task<TransportProductionTuningOptions?> GetTransportProductionTuningAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportProductionTuningOptions>("/api/transport/production/tuning", ct);
+
+    public async Task<List<TransportStationRuntimeSnapshot>> GetTransportProductionStationsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportStationRuntimeSnapshot>>("/api/transport/production/stations", ct) ?? [];
+
+    public async Task<List<TransportSingleTrackSectionSnapshot>> GetTransportSingleTrackAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportSingleTrackSectionSnapshot>>("/api/transport/production/single-track", ct) ?? [];
+
+    public async Task<List<TransportProductionQueueItem>> GetTransportProductionQueueAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportProductionQueueItem>>("/api/transport/production/queue", ct) ?? [];
+
+    public async Task<TransportProductionDispatchCycleResult?> RunTransportProductionDispatchCycleAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/production/dispatch-cycle", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportProductionDispatchCycleResult>(ct);
+    }
+
+    public async Task<TransportProductionDryRunReport?> GetTransportProductionDryRunAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportProductionDryRunReport>("/api/transport/production/dry-run", ct);
+
+    public async Task<List<TransportDispatchDecisionFrame>> GetTransportDispatchDecisionsAsync(
+        int maxCount = 500,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportDispatchDecisionFrame>>(
+            $"/api/transport/production/decisions?maxCount={Math.Clamp(maxCount, 1, 5000)}",
+            ct) ?? [];
+
+    public async Task<TransportProductionTrendSummary?> GetTransportProductionTrendsAsync(
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
+        CancellationToken ct = default)
+    {
+        var path = BuildQuery(
+            "/api/transport/production/trends",
+            ("fromUtc", fromUtc?.ToString("O")),
+            ("toUtc", toUtc?.ToString("O")));
+        return await _http.GetFromJsonAsync<TransportProductionTrendSummary>(path, ct);
+    }
+
+    public async Task<TransportFaultTakeoverReport?> EvaluateTransportFaultTakeoverAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/production/fault-takeover/evaluate", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportFaultTakeoverReport>(ct);
+    }
+
     public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
 
     public async Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null, string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default)
