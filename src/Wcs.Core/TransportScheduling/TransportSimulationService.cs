@@ -815,7 +815,7 @@ public sealed class TransportSimulationService : ITransportSimulationService
         int? serviceSeconds = null)
     {
         var allowedKinds = request.Request.AllowedVehicleKinds;
-        var requiredKind = allowedKinds is { Count: 1 } ? allowedKinds.First() : null;
+        TransportVehicleKind? requiredKind = allowedKinds is { Count: 1 } ? allowedKinds.First() : null;
         return new TransportSimulationTask
         {
             TaskId = request.Request.RequestId,
