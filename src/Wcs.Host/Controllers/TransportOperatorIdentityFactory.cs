@@ -13,6 +13,9 @@ internal static class TransportOperatorIdentityFactory
         TransportPermissions.ForceReleaseTraffic,
         TransportPermissions.OverrideLowBattery,
         TransportPermissions.SendManualDriverCommand,
+        TransportPermissions.WritePlcSignal,
+        TransportPermissions.ResolveRecoveryConflict,
+        TransportPermissions.RetryCommandCompensation,
         TransportPermissions.ApproveCriticalOperation
     };
 
