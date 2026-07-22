@@ -17,7 +17,11 @@ public enum TransportJournalCategory
     ProductionQueue = 10,
     ConsistencyReport = 11,
     ConfigurationSnapshot = 12,
-    ObservabilityHealth = 13
+    ObservabilityHealth = 13,
+    ProductionReadiness = 14,
+    OperationalBaseline = 15,
+    LogicalBackup = 16,
+    RecoveryDrill = 17
 }
 
 public sealed record TransportJournalRecord
