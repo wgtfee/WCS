@@ -138,8 +138,31 @@ public sealed class ObservableTransportProductionDispatchService : ITransportPro
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
     }
 
-    public TransportProductionQueueItem Enqueue(TransportProductionDispatchRequest request) =>
-        _inner.Enqueue(request);
+    public TransportProductionQueueItem Enqueue(TransportProductionDispatchRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        using var operation = _telemetry.StartOperation(
+            TransportTraceOperationKind.Dispatch,
+            "transport.queue.enqueue",
+            request.Request.RequestId,
+            tags: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["source.node"] = request.Request.SourceNodeId,
+                ["destination.node"] = request.Request.DestinationNodeId,
+                ["destination.station"] = request.DestinationStationId ?? string.Empty
+            });
+        try
+        {
+            var item = _inner.Enqueue(request);
+            operation.Complete(true, "生产运输任务已入队");
+            return item;
+        }
+        catch (Exception ex)
+        {
+            operation.Complete(false, ex.Message);
+            throw;
+        }
+    }
 
     public bool Cancel(string requestId) => _inner.Cancel(requestId);
 
