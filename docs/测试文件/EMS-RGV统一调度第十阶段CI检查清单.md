@@ -1,0 +1,26 @@
+# EMS / RGV 统一调度第十阶段 Windows CI 检查清单
+
+- [ ] OpenTelemetry 1.17.0 系列包恢复成功
+- [ ] Prometheus ASP.NET Core 1.17.0-beta.1 包恢复成功
+- [ ] `TransportTelemetryService` 的 ActivitySource、Meter、TagList 编译通过
+- [ ] 统一派单装饰器 DI 无循环依赖
+- [ ] 生产派单装饰器 DI 无循环依赖
+- [ ] PLC 命令装饰器 DI 无循环依赖
+- [ ] 三方一致性服务可解析 IAlarmCenter 和 SQL TransportStateStore
+- [ ] `RaiseConsistencyAlarms=false` 时不触发 AlarmCenter
+- [ ] 健康评分排除 TRANSPORT_HEALTH 和 TRANSPORT_CONSISTENCY
+- [ ] 配置回滚先创建安全快照
+- [ ] 配置版本冲突时拒绝回滚
+- [ ] 回滚接口使用 ChangeConfiguration 审批且 TargetId=SnapshotId
+- [ ] `UseOpenTelemetryPrometheusScrapingEndpoint` 编译通过
+- [ ] `/metrics` 与 `/api/transport/observability/metrics` 路径不冲突
+- [ ] Readiness HealthCheck 可解析 ITransportObservabilityService
+- [ ] Desktop IWcsApiService 与 WcsApiService 方法完全对应
+- [ ] TransportObservabilityViewModel 源生成命令名称正确
+- [ ] TransportObservabilityView.axaml 编译绑定通过
+- [ ] Desktop 菜单可解析 TransportObservabilityViewModel
+- [ ] Wcs.Core.Tests 全部通过
+- [ ] Wcs.Host Release 编译通过
+- [ ] Wcs.Desktop Release 编译通过
+- [ ] develop 快进更新
+- [ ] main 保持不变
