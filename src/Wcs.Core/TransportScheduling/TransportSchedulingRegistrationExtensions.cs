@@ -120,7 +120,10 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportConsistencyInspectionService, TransportConsistencyInspectionService>();
         services.TryAddSingleton<ITransportObservabilityService, TransportObservabilityService>();
         services.TryAddSingleton<ITransportResilienceService, TransportResilienceService>();
-        services.TryAddSingleton<ITransportSimulationService, TransportSimulationService>();
+        services.TryAddSingleton<TransportSimulationService>();
+        services.TryAddSingleton<SafeTransportSimulationService>();
+        services.TryAddSingleton<ITransportSimulationService>(sp =>
+            sp.GetRequiredService<SafeTransportSimulationService>());
 
         return services;
     }
