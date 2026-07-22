@@ -1,0 +1,148 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+               xmlns:vm="using:Wcs.Desktop.ViewModels"
+               x:Class="Wcs.Desktop.Views.TransportProductionView"
+               x:DataType="vm:TransportProductionViewModel"
+               Background="{DynamicResource BgPrimary}">
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+            <StackPanel>
+                <TextBlock Text="EMS / RGV 生产级调度"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <TextBlock Text="任务竞争、动态优先级、站点拥堵、单轨会车、故障接管与趋势回放"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+                <TextBlock Text="{Binding StatusText}"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="无副作用试算" Command="{Binding DryRunCommand}" Padding="14,8" />
+            <Button Grid.Column="2" Content="立即派单" Command="{Binding DispatchCycleCommand}" Padding="14,8" />
+            <Button Grid.Column="3" Content="故障接管评估" Command="{Binding EvaluateTakeoverCommand}" Padding="14,8" />
+            <Button Grid.Column="4" Content="刷新" Command="{Binding RefreshCommand}" Padding="18,8" />
+        </Grid>
+
+        <UniformGrid Grid.Row="1" Columns="7" Rows="1">
+            <Border Margin="0,0,5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="参数版本" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding TuningVersion}" FontSize="22" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="队列任务" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding QueuedTaskCount}" FontSize="22" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="等待站点" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding WaitingForStationCount}" FontSize="22" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="等待交通" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding WaitingForTrafficCount}" FontSize="22" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="单轨许可" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ActiveSingleTrackPermitCount}" FontSize="22" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="站点最高占用 %" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding MaximumStationUtilizationPercent}" FontSize="22" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0,0,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="平均车队利用率 %" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding AverageFleetUtilizationPercent}" FontSize="22" FontWeight="Bold" /></StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="生产队列">
+                <DataGrid ItemsSource="{Binding Queue}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="任务" Binding="{Binding ProductionRequest.Request.RequestId}" Width="*" />
+                        <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="140" />
+                        <DataGridTextColumn Header="动态优先级" Binding="{Binding EffectivePriority}" Width="110" />
+                        <DataGridTextColumn Header="目标站点" Binding="{Binding ProductionRequest.DestinationStationId}" Width="120" />
+                        <DataGridTextColumn Header="车辆" Binding="{Binding AssignedVehicleId}" Width="110" />
+                        <DataGridTextColumn Header="尝试次数" Binding="{Binding AttemptCount}" Width="90" />
+                        <DataGridTextColumn Header="原因" Binding="{Binding LastReason}" Width="2*" />
+                        <DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="180" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="站点拥堵">
+                <DataGrid ItemsSource="{Binding Stations}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="站点" Binding="{Binding StationId}" Width="*" />
+                        <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="*" />
+                        <DataGridTextColumn Header="容量" Binding="{Binding Capacity}" Width="80" />
+                        <DataGridTextColumn Header="占用" Binding="{Binding OccupiedCount}" Width="80" />
+                        <DataGridTextColumn Header="排队" Binding="{Binding QueuedTaskCount}" Width="80" />
+                        <DataGridTextColumn Header="利用率 %" Binding="{Binding UtilizationPercent}" Width="100" />
+                        <DataGridCheckBoxColumn Header="启用" Binding="{Binding Enabled}" Width="80" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="单轨会车">
+                <DataGrid ItemsSource="{Binding SingleTracks}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="区段" Binding="{Binding Definition.SectionId}" Width="*" />
+                        <DataGridTextColumn Header="名称" Binding="{Binding Definition.Name}" Width="*" />
+                        <DataGridTextColumn Header="当前方向" Binding="{Binding ActiveDirection}" Width="120" />
+                        <DataGridTextColumn Header="活动许可" Binding="{Binding ActivePermits.Count}" Width="100" />
+                        <DataGridTextColumn Header="等待车辆" Binding="{Binding WaitingRequests.Count}" Width="100" />
+                        <DataGridTextColumn Header="同向上限" Binding="{Binding Definition.MaximumSameDirectionConvoy}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="调度试算">
+                <DataGrid ItemsSource="{Binding DryRunItems}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="排名" Binding="{Binding Rank}" Width="70" />
+                        <DataGridTextColumn Header="任务" Binding="{Binding RequestId}" Width="*" />
+                        <DataGridTextColumn Header="动态优先级" Binding="{Binding EffectivePriority}" Width="110" />
+                        <DataGridCheckBoxColumn Header="站点准入" Binding="{Binding StationAdmitted}" Width="100" />
+                        <DataGridTextColumn Header="解释" Binding="{Binding Explanation}" Width="2*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="决策回放">
+                <DataGrid ItemsSource="{Binding Decisions}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="任务" Binding="{Binding RequestId}" Width="*" />
+                        <DataGridTextColumn Header="优先级" Binding="{Binding EffectivePriority}" Width="90" />
+                        <DataGridTextColumn Header="结果" Binding="{Binding ResultState}" Width="140" />
+                        <DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="100" />
+                        <DataGridTextColumn Header="原因" Binding="{Binding Reason}" Width="2*" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding OccurredAtUtc}" Width="180" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="故障接管">
+                <DataGrid ItemsSource="{Binding Takeovers}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="任务" Binding="{Binding RequestId}" Width="*" />
+                        <DataGridTextColumn Header="故障车辆" Binding="{Binding VehicleId}" Width="110" />
+                        <DataGridTextColumn Header="接替车辆" Binding="{Binding ReplacementVehicleId}" Width="110" />
+                        <DataGridTextColumn Header="结果" Binding="{Binding Decision}" Width="170" />
+                        <DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="2*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="运行趋势">
+                <DataGrid ItemsSource="{Binding TrendPoints}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="时间" Binding="{Binding CapturedAtUtc}" Width="180" />
+                        <DataGridTextColumn Header="队列" Binding="{Binding QueueLength}" Width="80" />
+                        <DataGridTextColumn Header="等站点" Binding="{Binding WaitingForStationCount}" Width="90" />
+                        <DataGridTextColumn Header="等交通" Binding="{Binding WaitingForTrafficCount}" Width="90" />
+                        <DataGridTextColumn Header="故障车辆" Binding="{Binding FaultedVehicleCount}" Width="90" />
+                        <DataGridTextColumn Header="单轨等待" Binding="{Binding SingleTrackWaitingCount}" Width="90" />
+                        <DataGridTextColumn Header="站点最高 %" Binding="{Binding MaximumStationUtilizationPercent}" Width="110" />
+                        <DataGridTextColumn Header="车队利用率 %" Binding="{Binding FleetUtilizationPercent}" Width="110" />
+                        <DataGridTextColumn Header="完成率 %" Binding="{Binding CompletionRatePercent}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>
