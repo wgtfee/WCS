@@ -172,7 +172,6 @@ public class TransportResilienceTests
     private static ServiceProvider CreateProvider()
     {
         var services = new ServiceCollection();
-        services.AddLogging();
         services.AddSingleton<IAlarmCenter>(new AlarmCenter(new EventBus()));
         services.AddUnifiedTransportScheduling();
         return services.BuildServiceProvider();
