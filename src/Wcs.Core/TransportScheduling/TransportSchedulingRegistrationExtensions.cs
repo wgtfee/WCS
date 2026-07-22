@@ -85,7 +85,9 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportChargingCoordinator, TransportChargingCoordinator>();
         services.TryAddSingleton<ITransportTaskReassignmentService, TransportTaskReassignmentService>();
         services.TryAddSingleton<ITransportPerformanceService, TransportPerformanceService>();
-        services.TryAddSingleton<ITransportFaultTakeoverService, TransportFaultTakeoverService>();
+        services.TryAddSingleton<SafeTransportFaultTakeoverService>();
+        services.TryAddSingleton<ITransportFaultTakeoverService>(sp =>
+            sp.GetRequiredService<SafeTransportFaultTakeoverService>());
         services.TryAddSingleton<ITransportProductionTrendService, TransportProductionTrendService>();
 
         services.TryAddSingleton<ITransportConfigurationService, TransportConfigurationService>();
