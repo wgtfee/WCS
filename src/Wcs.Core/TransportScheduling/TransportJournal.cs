@@ -8,7 +8,12 @@ public enum TransportJournalCategory
     TaskReassignment = 1,
     TrafficIncident = 2,
     PerformanceSnapshot = 3,
-    DriverState = 4
+    DriverState = 4,
+    ProductionTuning = 5,
+    ProductionStation = 6,
+    SingleTrackSection = 7,
+    ProductionTrend = 8,
+    DispatchDecision = 9
 }
 
 public sealed record TransportJournalRecord
