@@ -77,7 +77,7 @@ public class TransportResilienceTests
 
         Assert.True(result.Success, result.Error);
         Assert.NotNull(result.ImportedSnapshot);
-        Assert.Equal(before, after);
+        AssertConfigurationUnchanged(before, after);
         Assert.Contains(result.ManualRecoveryActions, x => x.Contains("活动任务", StringComparison.Ordinal));
         Assert.Contains(result.ManualRecoveryActions, x => x.Contains("PLC 点位映射", StringComparison.Ordinal));
     }
@@ -167,6 +167,21 @@ public class TransportResilienceTests
             !x.Passed &&
             x.Severity == TransportReadinessSeverity.Critical);
         Assert.False(report.IsReady);
+    }
+
+    private static void AssertConfigurationUnchanged(
+        TransportRuntimeConfiguration before,
+        TransportRuntimeConfiguration after)
+    {
+        Assert.Equal(before.ConfigurationId, after.ConfigurationId);
+        Assert.Equal(before.Version, after.Version);
+        Assert.Equal(before.ChargingPolicy, after.ChargingPolicy);
+        Assert.Equal(before.UpdatedBy, after.UpdatedBy);
+        Assert.Equal(before.UpdatedAtUtc, after.UpdatedAtUtc);
+        Assert.True(before.TrafficResources.SequenceEqual(after.TrafficResources));
+        Assert.True(before.ChargingStations.SequenceEqual(after.ChargingStations));
+        Assert.True(before.Vehicles.SequenceEqual(after.Vehicles));
+        Assert.True(before.Drivers.SequenceEqual(after.Drivers));
     }
 
     private static ServiceProvider CreateProvider()
