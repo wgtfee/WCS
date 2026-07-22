@@ -6,14 +6,17 @@ namespace Wcs.Core.TransportScheduling;
 /// </summary>
 public sealed class SafeTransportSimulationService : ITransportSimulationService
 {
+    private const int MaximumExecutableScenarioTasks = 5000;
     private const int MaximumVehiclesPerScenario = 1000;
     private const int MaximumStationsPerScenario = 10000;
     private const int MaximumFaultsPerScenario = 10000;
     private const int MaximumCapacityVehicles = 200;
     private const int MaximumCapacityTaskRatePerHour = 10000;
     private const int MaximumCapacityGridPoints = 200;
-    private const long MaximumCapacityEstimatedTasks = 2_000_000;
+    private const long MaximumCapacityEstimatedTasks = 250_000;
+    private const long MaximumForecastWorkItems = 5_000_000;
     private static readonly TimeSpan MaximumHistoricalWindow = TimeSpan.FromDays(30);
+    private static readonly int MaximumHorizonSeconds = (int)MaximumHistoricalWindow.TotalSeconds;
 
     private readonly TransportSimulationService _inner;
     private readonly ITransportTelemetryService _telemetry;
@@ -40,8 +43,8 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
         CancellationToken cancellationToken = default) =>
         _inner.BuildCurrentScenarioAsync(
             name,
-            horizonSeconds,
-            Math.Clamp(maximumTasks, 1, Math.Max(1, _options.MaximumScenarioTasks)),
+            Math.Clamp(horizonSeconds, 60, MaximumHorizonSeconds),
+            Math.Clamp(maximumTasks, 1, MaximumAllowedScenarioTasks),
             cancellationToken);
 
     public Task<TransportSimulationScenario> BuildHistoricalScenarioAsync(
@@ -56,10 +59,7 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
         return _inner.BuildHistoricalScenarioAsync(
             request with
             {
-                MaximumTasks = Math.Clamp(
-                    request.MaximumTasks,
-                    1,
-                    Math.Max(1, _options.MaximumScenarioTasks))
+                MaximumTasks = Math.Clamp(request.MaximumTasks, 1, MaximumAllowedScenarioTasks)
             },
             cancellationToken);
     }
@@ -71,6 +71,7 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
         CancellationToken cancellationToken = default)
     {
         ValidateScenarioEnvelope(scenario);
+        ValidatePolicyEnvelope(policy);
         return _inner.RunAsync(scenario, policy, initiatedBy, cancellationToken);
     }
 
@@ -82,6 +83,10 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
     {
         ValidateScenarioEnvelope(scenario);
         ArgumentNullException.ThrowIfNull(policies);
+        if (policies.Any(x => x is null))
+            throw new ArgumentException("策略对比不能包含空策略", nameof(policies));
+        foreach (var policy in policies)
+            ValidatePolicyEnvelope(policy);
         if (policies.Select(x => x.PolicyId).Distinct(StringComparer.Ordinal).Count() != policies.Count)
             throw new ArgumentException("策略对比中的 PolicyId 不能重复", nameof(policies));
         return _inner.CompareAsync(scenario, policies, initiatedBy, cancellationToken);
@@ -105,6 +110,7 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
         ArgumentNullException.ThrowIfNull(request.VehicleCounts);
         ArgumentNullException.ThrowIfNull(request.TaskRatesPerHour);
         ArgumentNullException.ThrowIfNull(request.Policy);
+        ValidatePolicyEnvelope(request.Policy);
         var vehicles = request.VehicleCounts
             .Distinct()
             .Where(x => x > 0)
@@ -126,8 +132,14 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
         var durationMinutes = Math.Clamp(request.DurationMinutes, 5, 24 * 60);
         var repetitions = Math.Clamp(request.Repetitions, 1, 10);
         var maximumRate = rates.Max();
-        var estimatedTasks = gridPoints * repetitions *
-            Math.Max(1L, (long)Math.Ceiling(maximumRate * durationMinutes / 60d));
+        var maximumTasksPerPoint = Math.Max(1L, (long)Math.Ceiling(maximumRate * durationMinutes / 60d));
+        if (maximumTasksPerPoint > MaximumAllowedScenarioTasks)
+        {
+            throw new ArgumentException(
+                $"单个容量点预计生成 {maximumTasksPerPoint:N0} 个任务，超过单场景安全上限 {MaximumAllowedScenarioTasks:N0}",
+                nameof(request));
+        }
+        var estimatedTasks = gridPoints * repetitions * maximumTasksPerPoint;
         if (estimatedTasks > MaximumCapacityEstimatedTasks)
             throw new ArgumentException(
                 $"容量请求预计生成 {estimatedTasks:N0} 个任务，超过安全上限 {MaximumCapacityEstimatedTasks:N0}",
@@ -221,22 +233,78 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
 
     public TransportSimulationSummary GetSummary() => _inner.GetSummary();
 
+    private int MaximumAllowedScenarioTasks =>
+        Math.Min(MaximumExecutableScenarioTasks, Math.Max(1, _options.MaximumScenarioTasks));
+
     private void ValidateScenarioEnvelope(TransportSimulationScenario scenario)
     {
         ArgumentNullException.ThrowIfNull(scenario);
-        if (scenario.Tasks.Count > _options.MaximumScenarioTasks)
-            throw new ArgumentException($"仿真任务数量不能超过 {_options.MaximumScenarioTasks}", nameof(scenario));
+        ArgumentNullException.ThrowIfNull(scenario.Tasks);
+        ArgumentNullException.ThrowIfNull(scenario.Vehicles);
+        ArgumentNullException.ThrowIfNull(scenario.Stations);
+        ArgumentNullException.ThrowIfNull(scenario.Faults);
+        if (scenario.HorizonSeconds <= 0 || scenario.HorizonSeconds > MaximumHorizonSeconds)
+            throw new ArgumentException("仿真窗口必须大于 0 且不能超过 30 天", nameof(scenario));
+        if (scenario.Tasks.Count > MaximumAllowedScenarioTasks)
+            throw new ArgumentException($"仿真任务数量不能超过 {MaximumAllowedScenarioTasks}", nameof(scenario));
         if (scenario.Vehicles.Count > MaximumVehiclesPerScenario)
             throw new ArgumentException($"单场景车辆数不能超过 {MaximumVehiclesPerScenario}", nameof(scenario));
         if (scenario.Stations.Count > MaximumStationsPerScenario)
             throw new ArgumentException($"单场景站点数不能超过 {MaximumStationsPerScenario}", nameof(scenario));
         if (scenario.Faults.Count > MaximumFaultsPerScenario)
             throw new ArgumentException($"单场景故障数不能超过 {MaximumFaultsPerScenario}", nameof(scenario));
+        var forecastBuckets = scenario.HorizonSeconds / Math.Max(10, _options.ForecastBucketSeconds) + 1L;
+        var forecastWork = forecastBuckets * Math.Max(1, scenario.Tasks.Count);
+        if (forecastWork > MaximumForecastWorkItems)
+        {
+            throw new ArgumentException(
+                $"场景的任务数与预测时间桶组合为 {forecastWork:N0}，超过安全上限 {MaximumForecastWorkItems:N0}；请缩短窗口、增大时间桶或减少任务数",
+                nameof(scenario));
+        }
+        foreach (var task in scenario.Tasks)
+        {
+            if (task.Priority is < -1_000_000 or > 1_000_000 ||
+                task.ProductionOrderPriority is < -1_000_000 or > 1_000_000)
+            {
+                throw new ArgumentException($"任务 {task.TaskId} 的优先级超出安全范围", nameof(scenario));
+            }
+            if (task.ArrivalOffsetSeconds < 0 || task.ArrivalOffsetSeconds > scenario.HorizonSeconds ||
+                task.EstimatedTravelSeconds is < 1 or > 86400 ||
+                task.ServiceSeconds is < 0 or > 86400)
+            {
+                throw new ArgumentException($"任务 {task.TaskId} 的时间参数超出安全范围", nameof(scenario));
+            }
+        }
+    }
+
+    private static void ValidatePolicyEnvelope(TransportSimulationPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        if (policy.AgingPointsPerMinute is < 0 or > 100_000 ||
+            policy.DeadlineUrgencyPoints is < 0 or > 1_000_000 ||
+            policy.RecoveryTaskBoost is < 0 or > 1_000_000 ||
+            policy.CongestionPenaltyPerQueuedTask is < 0 or > 100_000 ||
+            policy.MaximumBatchSize is < 1 or > 1000 ||
+            policy.MinimumBatteryPercent is < 0 or > 100)
+        {
+            throw new ArgumentException("仿真策略参数超出安全范围", nameof(policy));
+        }
     }
 
     private static void ValidateAcceptanceCriteria(TransportAcceptanceCriteria criteria)
     {
         ArgumentNullException.ThrowIfNull(criteria);
+        var values = new[]
+        {
+            criteria.MinimumThroughputPerHour,
+            criteria.MaximumP95WaitingSeconds,
+            criteria.MaximumDeadlineMissRatePercent,
+            criteria.MaximumFailureRatePercent,
+            criteria.MaximumFleetUtilizationPercent,
+            criteria.MaximumQueueLength
+        };
+        if (values.Any(x => !double.IsFinite(x)))
+            throw new ArgumentException("验收门槛不能包含 NaN 或无穷值", nameof(criteria));
         if (criteria.MinimumThroughputPerHour < 0 ||
             criteria.MaximumP95WaitingSeconds < 0 ||
             criteria.MaximumQueueLength < 0)
