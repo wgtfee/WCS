@@ -22,6 +22,12 @@ using Wcs.Core.PlcSubsystem.OpcUa;
 using Wcs.Core.PlcSubsystem.S7;
 using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
 using Wcs.Core.SignalSnapshot;
+using Wcs.Core.TransportScheduling;
+using Wcs.Host.Middleware;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -33,6 +39,46 @@ try
     builder.Services.AddWcsApplication();
     builder.Services.AddWcsInfrastructure(builder.Configuration);
     builder.Services.Configure<WcsOptions>(builder.Configuration.GetSection("WcsOptions"));
+
+    var transportObservability = builder.Configuration
+        .GetSection("TransportObservability")
+        .Get<TransportObservabilityOptions>() ?? new TransportObservabilityOptions();
+    builder.Services.AddSingleton(transportObservability);
+
+    Uri? otlpEndpoint = null;
+    if (transportObservability.EnableOtlpExporter &&
+        !string.IsNullOrWhiteSpace(transportObservability.OtlpEndpoint) &&
+        Uri.TryCreate(transportObservability.OtlpEndpoint, UriKind.Absolute, out var configuredOtlpEndpoint))
+    {
+        otlpEndpoint = configuredOtlpEndpoint;
+    }
+
+    var openTelemetry = builder.Services
+        .AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService(
+            serviceName: TransportTelemetryNames.ServiceName,
+            serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString()))
+        .WithTracing(tracing =>
+        {
+            tracing
+                .AddSource(TransportTelemetryNames.ActivitySourceName)
+                .AddAspNetCoreInstrumentation(options => options.RecordException = true)
+                .AddHttpClientInstrumentation(options => options.RecordException = true);
+            if (otlpEndpoint is not null)
+                tracing.AddOtlpExporter(options => options.Endpoint = otlpEndpoint);
+        })
+        .WithMetrics(metrics =>
+        {
+            metrics
+                .AddMeter(TransportTelemetryNames.MeterName)
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddRuntimeInstrumentation();
+            if (transportObservability.EnablePrometheusEndpoint)
+                metrics.AddPrometheusExporter();
+            if (otlpEndpoint is not null)
+                metrics.AddOtlpExporter(options => options.Endpoint = otlpEndpoint);
+        });
 
     builder.Services.AddSingleton<IPlcBlockDiffEngine, PlcBlockDiffEngine>();
 
@@ -170,7 +216,6 @@ try
         var dbInit = app.Services.GetRequiredService<IDatabaseInitializer>();
         await dbInit.EnsureDatabaseAsync();
         logger.LogInformation("数据库就绪");
-
     }
     catch (Exception ex)
     {
@@ -203,6 +248,10 @@ try
 
     RegisterPlcValidators(app.Services, logger);
 
+    app.UseMiddleware<TransportTraceContextMiddleware>();
+    if (transportObservability.EnablePrometheusEndpoint)
+        app.UseOpenTelemetryPrometheusScrapingEndpoint();
+
     app.MapHub<WcsHub>("/wcs");
     app.MapControllers();
     app.MapHealthChecks("/health/ready", new() { Predicate = r => r.Name == "readiness" });
@@ -234,9 +283,9 @@ static void RegisterPlcValidators(IServiceProvider services, Microsoft.Extension
         // === 标签验证器 ===
         //detector.RegisterValidator(new TagStationInterlockValidator());
         //detector.RegisterValidator(new TagBarcodeDbValidator());
-        
+
         // === Modbus / OPC UA ===
-        // detector.RegisterValidator(new ModbusConveyorValidator());
+        //detector.RegisterValidator(new ModbusConveyorValidator());
 
         logger.LogInformation("PLC 验证器注册完成，共 2 个");
     }
