@@ -51,9 +51,9 @@ public sealed class TransportConsistencyInspectionHostedService : BackgroundServ
         if (!_options.Enabled)
             return;
 
-        await InspectAsync(stoppingToken).ConfigureAwait(false);
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(
-            Math.Clamp(_options.ConsistencyInspectionIntervalSeconds, 5, 3600)));
+        var interval = TimeSpan.FromSeconds(
+            Math.Clamp(_options.ConsistencyInspectionIntervalSeconds, 5, 3600));
+        using var timer = new PeriodicTimer(interval);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
