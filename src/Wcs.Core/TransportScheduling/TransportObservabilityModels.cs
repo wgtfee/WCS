@@ -18,7 +18,11 @@ public enum TransportTraceOperationKind
     ResiliencePreflight = 6,
     LogicalBackup = 7,
     RecoveryDrill = 8,
-    RestorePreparation = 9
+    RestorePreparation = 9,
+    Simulation = 10,
+    StrategyComparison = 11,
+    CapacityBenchmark = 12,
+    FinalAcceptance = 13
 }
 
 public sealed record TransportTraceRecord
