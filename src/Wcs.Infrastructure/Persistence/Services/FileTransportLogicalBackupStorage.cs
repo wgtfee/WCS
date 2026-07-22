@@ -30,23 +30,34 @@ public sealed class FileTransportLogicalBackupStorage : ITransportLogicalBackupS
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(payload);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        string? payloadTemp = null;
+        string? manifestTemp = null;
         try
         {
             Directory.CreateDirectory(_directory);
             var payloadPath = ResolvePayloadPath(manifest.FileName);
             var manifestPath = ResolveManifestPath(manifest.BackupId);
-            var payloadTemp = payloadPath + ".tmp";
-            var manifestTemp = manifestPath + ".tmp";
+            if (File.Exists(payloadPath) || File.Exists(manifestPath))
+                throw new InvalidOperationException($"备份 {manifest.BackupId} 已存在，逻辑备份不可覆盖");
+
+            payloadTemp = payloadPath + $".{Guid.NewGuid():N}.tmp";
+            manifestTemp = manifestPath + $".{Guid.NewGuid():N}.tmp";
             await File.WriteAllBytesAsync(payloadTemp, payload, cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(
                 manifestTemp,
                 JsonSerializer.Serialize(manifest, JsonOptions),
                 cancellationToken).ConfigureAwait(false);
-            File.Move(payloadTemp, payloadPath, overwrite: true);
-            File.Move(manifestTemp, manifestPath, overwrite: true);
+            File.Move(payloadTemp, payloadPath);
+            payloadTemp = null;
+            File.Move(manifestTemp, manifestPath);
+            manifestTemp = null;
         }
         finally
         {
+            if (payloadTemp is not null)
+                TryDelete(payloadTemp);
+            if (manifestTemp is not null)
+                TryDelete(manifestTemp);
             _gate.Release();
         }
     }
@@ -60,9 +71,17 @@ public sealed class FileTransportLogicalBackupStorage : ITransportLogicalBackupS
         var manifestPath = ResolveManifestPath(backupId);
         if (!File.Exists(manifestPath))
             return null;
-        var manifest = JsonSerializer.Deserialize<TransportLogicalBackupManifest>(
-            await File.ReadAllTextAsync(manifestPath, cancellationToken).ConfigureAwait(false),
-            JsonOptions);
+        TransportLogicalBackupManifest? manifest;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<TransportLogicalBackupManifest>(
+                await File.ReadAllTextAsync(manifestPath, cancellationToken).ConfigureAwait(false),
+                JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
         if (manifest is null)
             return null;
         var payloadPath = ResolvePayloadPath(manifest.FileName);
@@ -94,7 +113,7 @@ public sealed class FileTransportLogicalBackupStorage : ITransportLogicalBackupS
             }
             catch (JsonException)
             {
-                // 损坏的清单由备份校验接口暴露，不阻断其他备份列表读取。
+                // 损坏清单不会阻断其他备份列表读取；下载或恢复准备会返回不存在/校验失败。
             }
         }
         return result
@@ -163,6 +182,10 @@ public sealed class FileTransportLogicalBackupStorage : ITransportLogicalBackupS
         catch (IOException)
         {
             // 下一次保留策略清理会重试，不影响本轮备份。
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // 权限问题由后续健康和备份任务再次暴露。
         }
     }
 }
