@@ -20,7 +20,20 @@ public static class DependencyInjection
                 "连接字符串 'WcsDb' 未配置。请在 appsettings.json 中设置 ConnectionStrings:WcsDb。");
         var backupDirectory = configuration["TransportResilience:BackupDirectory"]
             ?? "data/transport-backups";
+        var resilienceOptions = new TransportResilienceOptions
+        {
+            Enabled = GetBool(configuration, "TransportResilience:Enabled", true),
+            PreflightIntervalSeconds = GetInt(configuration, "TransportResilience:PreflightIntervalSeconds", 60),
+            AutomaticBackupEnabled = GetBool(configuration, "TransportResilience:AutomaticBackupEnabled", true),
+            BackupIntervalMinutes = GetInt(configuration, "TransportResilience:BackupIntervalMinutes", 60),
+            BackupRetentionCount = GetInt(configuration, "TransportResilience:BackupRetentionCount", 48),
+            MaximumJournalRecords = GetInt(configuration, "TransportResilience:MaximumJournalRecords", 5000),
+            MaximumBackupAgeMinutes = GetInt(configuration, "TransportResilience:MaximumBackupAgeMinutes", 180),
+            RequireReadyBeforeAutomaticBackup = GetBool(configuration, "TransportResilience:RequireReadyBeforeAutomaticBackup", false),
+            BackupDirectory = backupDirectory
+        };
 
+        services.Replace(ServiceDescriptor.Singleton(resilienceOptions));
         services.AddSingleton<IDatabaseInitializer>(sp =>
             new DatabaseInitializer(
                 connectionString,
@@ -47,4 +60,10 @@ public static class DependencyInjection
 
         return services;
     }
+
+    private static bool GetBool(IConfiguration configuration, string key, bool defaultValue) =>
+        bool.TryParse(configuration[key], out var value) ? value : defaultValue;
+
+    private static int GetInt(IConfiguration configuration, string key, int defaultValue) =>
+        int.TryParse(configuration[key], out var value) ? value : defaultValue;
 }
