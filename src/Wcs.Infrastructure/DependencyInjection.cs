@@ -37,7 +37,7 @@ public static class DependencyInjection
             MaximumScenarioTasks = Math.Clamp(
                 GetInt(configuration, "TransportSimulation:MaximumScenarioTasks", 10000),
                 1,
-                100000),
+                50000),
             MaximumStoredRuns = Math.Clamp(
                 GetInt(configuration, "TransportSimulation:MaximumStoredRuns", 200),
                 10,
