@@ -1,0 +1,59 @@
+# EMS/RGV 统一调度第十二阶段 CI 检查清单
+
+## Core Tests
+
+- [ ] `Simulation_SameScenarioPolicyAndSeed_IsDeterministic`
+- [ ] `Simulation_DoesNotMutateProductionVehicleOrStationState`
+- [ ] `StrategyComparison_DeadlineFirstBeatsBaselineWhenUrgentTaskWouldMiss`
+- [ ] `FaultInjection_IsDeterministicAndDoesNotWriteProductionDriver`
+- [ ] `HistoricalReplay_BuildsScenarioFromPersistedQueueRecords`
+- [ ] `CapacityBenchmark_MoreVehiclesDoNotReduceCompletedTasksAtSameRate`
+- [ ] `AcceptanceReport_UsesExplicitThresholds`
+- [ ] `BatchOptimization_ReturnsRecommendationWithoutChangingProductionTuning`
+- [ ] `CongestionForecast_ReportsHeavyLevelForOverloadedFleet`
+- [ ] 第一至第十一步全部既有测试继续通过
+
+## Core Static Checks
+
+- [ ] `TransportSimulationService` DI 依赖完整
+- [ ] `TransportSimulationOptions` 安全范围有效
+- [ ] 仿真场景最多 50,000 个任务
+- [ ] 历史 Journal 最多查询 50,000 条
+- [ ] 相同任务/故障/Seed 使用相同故障样本
+- [ ] 仿真不调用 `ITransportCommandDispatcher`
+- [ ] 仿真不调用 `ITransportPlcAccessor`
+- [ ] 仿真不调用 `ITransportExecutionEngine.Create/Start`
+- [ ] 优化不调用 `ITransportProductionTuningService.SaveAsync`
+
+## Host Build
+
+- [ ] `TransportSimulationController` 编译通过
+- [ ] 当前场景生成 API 编译通过
+- [ ] 历史回放 API 编译通过
+- [ ] 仿真运行 API 编译通过
+- [ ] 策略对比 API 编译通过
+- [ ] 容量压力 API 编译通过
+- [ ] 最终验收 API 编译通过
+- [ ] 报告导出 API 编译通过
+- [ ] `TransportSimulationInitializationHostedService` 编译通过
+- [ ] 不新增数据库表或迁移
+
+## Desktop Build
+
+- [ ] `TransportSimulationApiService` 编译通过
+- [ ] `TransportSimulationViewModel` 编译通过
+- [ ] `TransportSimulationView.axaml` 编译通过
+- [ ] `/TransportSimulation` 路由可解析
+- [ ] 嵌套 Metrics 绑定有效
+- [ ] 页面仅提供刷新，不提供生产写操作
+
+## 最终安全回归
+
+- [ ] 仿真前后生产车辆状态不变
+- [ ] 仿真前后站点业务状态不变
+- [ ] 仿真前后生产整定参数不变
+- [ ] 仿真不改变等待队列顺序
+- [ ] 仿真不改变活动任务和路权
+- [ ] 故障注入不触发真实 PLC 写入
+- [ ] 验收 Passed 仍保留现场人工检查清单
+- [ ] `main` 分支保持不变
