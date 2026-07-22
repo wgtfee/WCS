@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<TransportDriverDiagnosticsViewModel>();
         services.AddTransient<TransportCommissioningViewModel>();
         services.AddTransient<TransportProductionViewModel>();
+        services.AddTransient<TransportObservabilityViewModel>();
         return services;
     }
 }
