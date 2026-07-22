@@ -55,6 +55,16 @@ public interface IWcsApiService
     Task<List<TransportCommunicationTrace>> GetTransportCommunicationTracesAsync(int maxCount = 500, CancellationToken ct = default);
     Task<TransportSignalProbeResult?> ProbeTransportVehicleAsync(string vehicleId, CancellationToken ct = default);
 
+    Task<TransportProductionTuningOptions?> GetTransportProductionTuningAsync(CancellationToken ct = default);
+    Task<List<TransportStationRuntimeSnapshot>> GetTransportProductionStationsAsync(CancellationToken ct = default);
+    Task<List<TransportSingleTrackSectionSnapshot>> GetTransportSingleTrackAsync(CancellationToken ct = default);
+    Task<List<TransportProductionQueueItem>> GetTransportProductionQueueAsync(CancellationToken ct = default);
+    Task<TransportProductionDispatchCycleResult?> RunTransportProductionDispatchCycleAsync(CancellationToken ct = default);
+    Task<TransportProductionDryRunReport?> GetTransportProductionDryRunAsync(CancellationToken ct = default);
+    Task<List<TransportDispatchDecisionFrame>> GetTransportDispatchDecisionsAsync(int maxCount = 500, CancellationToken ct = default);
+    Task<TransportProductionTrendSummary?> GetTransportProductionTrendsAsync(DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default);
+    Task<TransportFaultTakeoverReport?> EvaluateTransportFaultTakeoverAsync(CancellationToken ct = default);
+
     Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default);
     Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null,
         string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default);
