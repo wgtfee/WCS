@@ -58,7 +58,7 @@ public class TransportSimulationTests
         await service.RunAsync(CreateScenario(), new TransportSimulationPolicy { Name = "baseline" }, "tester");
 
         Assert.Equal(vehicleBefore, Assert.Single(vehicles.GetAll()));
-        Assert.Equal(stationBefore, Assert.Single(stations.GetAll()));
+        AssertStationUnchanged(stationBefore, Assert.Single(stations.GetAll()));
     }
 
     [Fact]
@@ -123,6 +123,7 @@ public class TransportSimulationTests
         var service = provider.GetRequiredService<ITransportSimulationService>();
         var scenario = CreateScenario() with
         {
+            Vehicles = new[] { Vehicle("EMS-01") },
             Faults = new[]
             {
                 new TransportSimulationFault
@@ -366,6 +367,20 @@ public class TransportSimulationTests
         Online = true,
         BatteryPercent = 100
     };
+
+    private static void AssertStationUnchanged(
+        TransportStationRuntimeSnapshot before,
+        TransportStationRuntimeSnapshot after)
+    {
+        Assert.Equal(before.StationId, after.StationId);
+        Assert.Equal(before.Name, after.Name);
+        Assert.Equal(before.Capacity, after.Capacity);
+        Assert.Equal(before.OccupiedCount, after.OccupiedCount);
+        Assert.Equal(before.QueuedTaskCount, after.QueuedTaskCount);
+        Assert.Equal(before.MaximumQueuedTasks, after.MaximumQueuedTasks);
+        Assert.Equal(before.Enabled, after.Enabled);
+        Assert.Equal(before.UtilizationPercent, after.UtilizationPercent);
+    }
 
     private static ServiceProvider CreateProvider()
     {
