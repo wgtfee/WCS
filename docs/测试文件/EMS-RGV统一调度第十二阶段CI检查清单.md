@@ -11,14 +11,23 @@
 - [ ] `AcceptanceReport_UsesExplicitThresholds`
 - [ ] `BatchOptimization_ReturnsRecommendationWithoutChangingProductionTuning`
 - [ ] `CongestionForecast_ReportsHeavyLevelForOverloadedFleet`
+- [ ] `CapacityGuard_RejectsDangerousTaskRate`
+- [ ] `SimulationHistory_RestoresFromJournalAfterRestart`
 - [ ] 第一至第十一步全部既有测试继续通过
 
 ## Core Static Checks
 
 - [ ] `TransportSimulationService` DI 依赖完整
+- [ ] `SafeTransportSimulationService` DI 依赖完整
 - [ ] `TransportSimulationOptions` 安全范围有效
 - [ ] 仿真场景最多 50,000 个任务
+- [ ] 单场景车辆、站点和故障数量受限
+- [ ] 历史回放窗口最多 30 天
 - [ ] 历史 Journal 最多查询 50,000 条
+- [ ] 容量网格最多 200 个组合
+- [ ] 容量任务率不超过 10,000/h
+- [ ] 容量估算任务总量不超过 2,000,000
+- [ ] 同一时刻仅允许一个容量压力任务
 - [ ] 相同任务/故障/Seed 使用相同故障样本
 - [ ] 仿真不调用 `ITransportCommandDispatcher`
 - [ ] 仿真不调用 `ITransportPlcAccessor`
