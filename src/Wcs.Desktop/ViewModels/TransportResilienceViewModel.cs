@@ -132,7 +132,7 @@ public partial class TransportResilienceViewModel : ViewModelBase
         DrillCount = summary.DrillCount;
         LastBackupText = summary.LastBackup is null
             ? "无"
-            : $"{summary.LastBackup.CreatedAtUtc:yyyy-MM-dd HH:mm:ss} / {summary.LastBackup.BackupId[..8]}";
+            : $"{summary.LastBackup.CreatedAtUtc:yyyy-MM-dd HH:mm:ss} / {ShortId(summary.LastBackup.BackupId)}";
         LastDrillText = summary.LastDrill is null
             ? "无"
             : $"{summary.LastDrill.Scenario} / {(summary.LastDrill.Passed ? "通过" : "未通过")}";
@@ -146,6 +146,11 @@ public partial class TransportResilienceViewModel : ViewModelBase
         WarningCount = report.WarningCount;
         Replace(ReadinessChecks, report.Checks);
     }
+
+    private static string ShortId(string value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? "unknown"
+            : value[..Math.Min(8, value.Length)];
 
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> source)
     {
