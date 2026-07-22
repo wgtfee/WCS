@@ -10,13 +10,14 @@ public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
     /// 注册 EMS/RGV 统一调度、执行、恢复、交通控制、充电、治理、PLC 驱动、
-    /// 现场联调、生产调度，以及第十阶段链路追踪、指标、三方一致性、健康评分和配置回滚组件。
+    /// 现场联调、生产调度、可观测性，以及第十一步生产就绪、逻辑备份和隔离恢复演练组件。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton(new TransportObservabilityOptions());
+        services.TryAddSingleton(new TransportResilienceOptions());
         services.TryAddSingleton<TransportTelemetryService>();
         services.TryAddSingleton<ITransportTelemetryService>(sp =>
             sp.GetRequiredService<TransportTelemetryService>());
@@ -35,6 +36,7 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportGovernanceStore, InMemoryTransportGovernanceStore>();
         services.TryAddSingleton<ITransportPlcSignalMapStore, InMemoryTransportPlcSignalMapStore>();
         services.TryAddSingleton<ITransportCommissioningStore, InMemoryTransportCommissioningStore>();
+        services.TryAddSingleton<ITransportLogicalBackupStorage, InMemoryTransportLogicalBackupStorage>();
 
         services.TryAddSingleton<ITransportProductionTuningService, TransportProductionTuningService>();
         services.TryAddSingleton<ITransportStationCongestionService, TransportStationCongestionService>();
@@ -116,6 +118,7 @@ public static class TransportSchedulingRegistrationExtensions
 
         services.TryAddSingleton<ITransportConsistencyInspectionService, TransportConsistencyInspectionService>();
         services.TryAddSingleton<ITransportObservabilityService, TransportObservabilityService>();
+        services.TryAddSingleton<ITransportResilienceService, TransportResilienceService>();
 
         return services;
     }
