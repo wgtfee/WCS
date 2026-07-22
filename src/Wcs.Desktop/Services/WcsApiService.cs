@@ -190,6 +190,37 @@ public class WcsApiService : IWcsApiService
         return await response.Content.ReadFromJsonAsync<TransportFaultTakeoverReport>(ct);
     }
 
+    public async Task<TransportObservabilitySnapshot?> GetTransportObservabilityAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportObservabilitySnapshot>("/api/transport/observability/summary", ct);
+
+    public async Task<TransportHealthSnapshot?> EvaluateTransportHealthAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/observability/health/evaluate", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportHealthSnapshot>(ct);
+    }
+
+    public async Task<TransportConsistencyReport?> InspectTransportConsistencyAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/observability/consistency/inspect", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportConsistencyReport>(ct);
+    }
+
+    public async Task<List<TransportTraceRecord>> GetTransportTracesAsync(
+        int maxCount = 500,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportTraceRecord>>(
+            $"/api/transport/observability/traces?maxCount={Math.Clamp(maxCount, 1, 5000)}",
+            ct) ?? [];
+
+    public async Task<List<TransportConfigurationSnapshot>> GetTransportConfigurationSnapshotsAsync(
+        int maxCount = 100,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportConfigurationSnapshot>>(
+            $"/api/transport/observability/configuration-snapshots?maxCount={Math.Clamp(maxCount, 1, 500)}",
+            ct) ?? [];
+
     public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
 
     public async Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null, string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default)
