@@ -10,7 +10,7 @@ public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
     /// 注册 EMS/RGV 统一调度、执行、恢复、交通控制、充电、治理、PLC 驱动、
-    /// 点位导入、通信跟踪、故障字典、冲突处置和安全命令补偿组件。
+    /// 现场联调，以及第九阶段生产竞争队列、站点拥堵、单轨会车、趋势和故障接管组件。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
     {
@@ -25,9 +25,23 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportTrafficCoordinator>(sp => sp.GetRequiredService<TransportTrafficCoordinator>());
         services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<TransportTrafficCoordinator>());
 
+        services.TryAddSingleton<ITransportConfigurationStore, InMemoryTransportConfigurationStore>();
+        services.TryAddSingleton<ITransportJournalStore, InMemoryTransportJournalStore>();
+        services.TryAddSingleton<ITransportGovernanceStore, InMemoryTransportGovernanceStore>();
+        services.TryAddSingleton<ITransportPlcSignalMapStore, InMemoryTransportPlcSignalMapStore>();
+        services.TryAddSingleton<ITransportCommissioningStore, InMemoryTransportCommissioningStore>();
+
+        services.TryAddSingleton<ITransportProductionTuningService, TransportProductionTuningService>();
+        services.TryAddSingleton<ITransportStationCongestionService, TransportStationCongestionService>();
+        services.TryAddSingleton<ITransportSingleTrackCoordinator, TransportSingleTrackCoordinator>();
+        services.AddSingleton<ITransportDispatchAdmissionPolicy, TransportSingleTrackDispatchAdmissionPolicy>();
+        services.TryAddSingleton<ITransportDispatchDecisionStore, InMemoryTransportDispatchDecisionStore>();
+        services.TryAddSingleton<ITransportDynamicPriorityService, TransportDynamicPriorityService>();
+
         services.TryAddSingleton<InMemoryRouteReservationManager>();
         services.TryAddSingleton<IRouteReservationManager, TrafficAwareRouteReservationManager>();
         services.TryAddSingleton<IUnifiedTransportDispatchEngine, UnifiedTransportDispatchEngine>();
+        services.TryAddSingleton<ITransportProductionDispatchService, TransportProductionDispatchService>();
         services.TryAddSingleton<InMemoryTransportExecutionEngine>();
         services.TryAddSingleton<CoordinatedTransportExecutionEngine>();
         services.TryAddSingleton<ITransportExecutionEngine>(sp =>
@@ -67,12 +81,9 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportChargingCoordinator, TransportChargingCoordinator>();
         services.TryAddSingleton<ITransportTaskReassignmentService, TransportTaskReassignmentService>();
         services.TryAddSingleton<ITransportPerformanceService, TransportPerformanceService>();
+        services.TryAddSingleton<ITransportFaultTakeoverService, TransportFaultTakeoverService>();
+        services.TryAddSingleton<ITransportProductionTrendService, TransportProductionTrendService>();
 
-        services.TryAddSingleton<ITransportConfigurationStore, InMemoryTransportConfigurationStore>();
-        services.TryAddSingleton<ITransportJournalStore, InMemoryTransportJournalStore>();
-        services.TryAddSingleton<ITransportGovernanceStore, InMemoryTransportGovernanceStore>();
-        services.TryAddSingleton<ITransportPlcSignalMapStore, InMemoryTransportPlcSignalMapStore>();
-        services.TryAddSingleton<ITransportCommissioningStore, InMemoryTransportCommissioningStore>();
         services.TryAddSingleton<ITransportConfigurationService, TransportConfigurationService>();
         services.TryAddSingleton<ITransportOperationGovernanceService, TransportOperationGovernanceService>();
         services.TryAddSingleton<ITransportPlcSignalMapService, TransportPlcSignalMapService>();
