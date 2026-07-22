@@ -17,6 +17,23 @@ public class AlarmCenterTests
         return (alarmCenter, bus);
     }
 
+    private static async Task WaitUntilAsync(
+        Func<bool> condition,
+        int timeoutMs = 2000,
+        int pollIntervalMs = 10)
+    {
+        ArgumentNullException.ThrowIfNull(condition);
+        var startedAt = Environment.TickCount64;
+
+        while (!condition())
+        {
+            if (Environment.TickCount64 - startedAt >= timeoutMs)
+                throw new TimeoutException($"等待报警状态条件超时（{timeoutMs}ms）");
+
+            await Task.Delay(pollIntervalMs);
+        }
+    }
+
     // ========== 报警规则 ==========
 
     [Fact]
@@ -50,9 +67,7 @@ public class AlarmCenterTests
         });
 
         await ac.RaiseAlarmAsync("TEST_ERR", AlarmLevelEnum.Error, "Test error");
-
-        // Wait for debounce to complete
-        await Task.Delay(50);
+        await WaitUntilAsync(() => ac.GetActiveAlarms().Any(a => a.AlarmCode == "TEST_ERR"));
 
         var activeAlarms = ac.GetActiveAlarms().ToList();
         Assert.NotEmpty(activeAlarms);
@@ -73,12 +88,12 @@ public class AlarmCenterTests
         });
 
         await ac.RaiseAlarmAsync("LIFECYCLE", AlarmLevelEnum.Warning, "Lifecycle test");
-        await Task.Delay(50);
+        await WaitUntilAsync(() => ac.GetActiveAlarms().Any(a => a.AlarmCode == "LIFECYCLE"));
 
         Assert.True(ac.GetActiveCount() > 0);
 
         await ac.RecoverAlarmAsync("LIFECYCLE");
-        await Task.Delay(50);
+        await WaitUntilAsync(() => !ac.GetActiveAlarms().Any(a => a.AlarmCode == "LIFECYCLE"));
 
         var active = ac.GetActiveAlarms().Where(a => a.AlarmCode == "LIFECYCLE").ToList();
         Assert.Empty(active); // recovered
@@ -97,7 +112,7 @@ public class AlarmCenterTests
         });
 
         await ac.RaiseAlarmAsync("ACK_TEST", AlarmLevelEnum.Error, "Ack test");
-        await Task.Delay(50);
+        await WaitUntilAsync(() => ac.GetActiveAlarms().Any(a => a.AlarmCode == "ACK_TEST"));
 
         var alarm = ac.GetActiveAlarms().First(a => a.AlarmCode == "ACK_TEST");
         await ac.AcknowledgeAlarmAsync(alarm.AlarmId);
@@ -273,7 +288,7 @@ public class AlarmCenterTests
         var (ac, _) = CreateAlarmCenter();
         ac.SetAlarmRule(new AlarmRule { AlarmCode = "TEST", Level = AlarmLevelEnum.Error, DelayRaiseMs = 10 });
         await ac.RaiseAlarmAsync("TEST", AlarmLevelEnum.Error, "Snapshot test");
-        await Task.Delay(50);
+        await WaitUntilAsync(() => ac.GetTotalCount() > 0);
 
         var snap = await ac.CaptureSnapshotAsync(default);
         Assert.NotNull(snap);
