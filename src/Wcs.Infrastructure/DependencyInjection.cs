@@ -32,8 +32,21 @@ public static class DependencyInjection
             RequireReadyBeforeAutomaticBackup = GetBool(configuration, "TransportResilience:RequireReadyBeforeAutomaticBackup", false),
             BackupDirectory = backupDirectory
         };
+        var simulationOptions = new TransportSimulationOptions
+        {
+            MaximumScenarioTasks = GetInt(configuration, "TransportSimulation:MaximumScenarioTasks", 10000),
+            MaximumStoredRuns = GetInt(configuration, "TransportSimulation:MaximumStoredRuns", 200),
+            MaximumStoredComparisons = GetInt(configuration, "TransportSimulation:MaximumStoredComparisons", 100),
+            ForecastBucketSeconds = GetInt(configuration, "TransportSimulation:ForecastBucketSeconds", 60),
+            DefaultTravelSeconds = GetInt(configuration, "TransportSimulation:DefaultTravelSeconds", 30),
+            DefaultServiceSeconds = GetInt(configuration, "TransportSimulation:DefaultServiceSeconds", 10),
+            SustainableP95WaitingSeconds = GetDouble(configuration, "TransportSimulation:SustainableP95WaitingSeconds", 120),
+            SustainableDeadlineMissRatePercent = GetDouble(configuration, "TransportSimulation:SustainableDeadlineMissRatePercent", 5),
+            HistoricalJournalLimit = GetInt(configuration, "TransportSimulation:HistoricalJournalLimit", 20000)
+        };
 
         services.Replace(ServiceDescriptor.Singleton<TransportResilienceOptions>(resilienceOptions));
+        services.Replace(ServiceDescriptor.Singleton<TransportSimulationOptions>(simulationOptions));
         services.AddSingleton<IDatabaseInitializer>(sp =>
             new DatabaseInitializer(
                 connectionString,
@@ -66,4 +79,7 @@ public static class DependencyInjection
 
     private static int GetInt(IConfiguration configuration, string key, int defaultValue) =>
         int.TryParse(configuration[key], out var value) ? value : defaultValue;
+
+    private static double GetDouble(IConfiguration configuration, string key, double defaultValue) =>
+        double.TryParse(configuration[key], out var value) ? value : defaultValue;
 }
