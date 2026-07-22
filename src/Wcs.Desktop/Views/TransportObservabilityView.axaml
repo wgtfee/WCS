@@ -1,0 +1,137 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:Class="Wcs.Desktop.Views.TransportObservabilityView"
+             x:DataType="vm:TransportObservabilityViewModel"
+             Background="{DynamicResource BgPrimary}">
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="12">
+            <StackPanel>
+                <TextBlock Text="EMS / RGV 可观测性与一致性"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <TextBlock Text="全链路追踪、运行指标、三方一致性、健康评分与配置快照"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+                <TextBlock Text="{Binding StatusText}"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Content="健康评估"
+                    Command="{Binding EvaluateHealthCommand}"
+                    Padding="18,8" />
+            <Button Grid.Column="2"
+                    Content="三方巡检"
+                    Command="{Binding InspectConsistencyCommand}"
+                    Padding="18,8" />
+            <Button Grid.Column="3"
+                    Content="刷新"
+                    Command="{Binding RefreshCommand}"
+                    Padding="20,8" />
+        </Grid>
+
+        <UniformGrid Grid.Row="1" Columns="8" Rows="1">
+            <Border Margin="0,0,5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="健康状态" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding HealthState}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="健康评分" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding HealthScore}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="在线车辆" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding OnlineVehicleCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="离线车辆" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding OfflineVehicleCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="活动任务" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ActiveExecutionCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="等待队列" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding QueueLength}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="一致性差异" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ConsistencyIssueCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0,0,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="活动报警" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ActiveAlarmCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="健康组件">
+                <DataGrid ItemsSource="{Binding HealthComponents}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="组件" Binding="{Binding Component}" Width="180" />
+                        <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="120" />
+                        <DataGridTextColumn Header="评分" Binding="{Binding Score}" Width="90" />
+                        <DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="一致性差异">
+                <DataGrid ItemsSource="{Binding ConsistencyIssues}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="级别" Binding="{Binding Severity}" Width="100" />
+                        <DataGridTextColumn Header="类型" Binding="{Binding IssueType}" Width="210" />
+                        <DataGridTextColumn Header="实体" Binding="{Binding EntityType}" Width="110" />
+                        <DataGridTextColumn Header="实体号" Binding="{Binding EntityId}" Width="160" />
+                        <DataGridTextColumn Header="内存" Binding="{Binding RuntimeValue}" Width="180" />
+                        <DataGridTextColumn Header="数据库" Binding="{Binding PersistedValue}" Width="180" />
+                        <DataGridTextColumn Header="PLC" Binding="{Binding PlcValue}" Width="180" />
+                        <DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="2*" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding DetectedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="链路追踪">
+                <DataGrid ItemsSource="{Binding Traces}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="TraceId" Binding="{Binding TraceId}" Width="250" />
+                        <DataGridTextColumn Header="类型" Binding="{Binding Kind}" Width="150" />
+                        <DataGridTextColumn Header="操作" Binding="{Binding OperationName}" Width="220" />
+                        <DataGridTextColumn Header="任务" Binding="{Binding RequestId}" Width="180" />
+                        <DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="120" />
+                        <DataGridCheckBoxColumn Header="成功" Binding="{Binding Success}" Width="80" />
+                        <DataGridTextColumn Header="耗时ms" Binding="{Binding DurationMilliseconds}" Width="110" />
+                        <DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="*" />
+                        <DataGridTextColumn Header="完成时间" Binding="{Binding CompletedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="指标">
+                <Grid RowDefinitions="Auto,*">
+                    <StackPanel Orientation="Horizontal" Spacing="28" Margin="12">
+                        <TextBlock Text="累计一致性差异：" /><TextBlock Text="{Binding TotalConsistencyIssueCount}" FontWeight="Bold" />
+                        <TextBlock Text="最近排队耗时ms：" /><TextBlock Text="{Binding LastQueueWaitMilliseconds}" FontWeight="Bold" />
+                        <TextBlock Text="最近PLC响应ms：" /><TextBlock Text="{Binding LastPlcResponseMilliseconds}" FontWeight="Bold" />
+                        <TextBlock Text="活动路权：" /><TextBlock Text="{Binding ActiveReservationCount}" FontWeight="Bold" />
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding OperationMetrics}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="操作类型" Binding="{Binding Kind}" Width="*" />
+                            <DataGridTextColumn Header="总次数" Binding="{Binding TotalCount}" Width="130" />
+                            <DataGridTextColumn Header="失败次数" Binding="{Binding FailureCount}" Width="130" />
+                            <DataGridTextColumn Header="平均耗时ms" Binding="{Binding AverageDurationMilliseconds}" Width="160" />
+                            <DataGridTextColumn Header="最大耗时ms" Binding="{Binding MaximumDurationMilliseconds}" Width="160" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+            <TabItem Header="配置快照">
+                <DataGrid ItemsSource="{Binding ConfigurationSnapshots}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="快照号" Binding="{Binding SnapshotId}" Width="250" />
+                        <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="180" />
+                        <DataGridTextColumn Header="原因" Binding="{Binding Reason}" Width="*" />
+                        <DataGridTextColumn Header="运行配置版本" Binding="{Binding RuntimeConfiguration.Version}" Width="140" />
+                        <DataGridTextColumn Header="整定版本" Binding="{Binding ProductionTuning.Version}" Width="120" />
+                        <DataGridTextColumn Header="创建人" Binding="{Binding CreatedBy}" Width="140" />
+                        <DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>
