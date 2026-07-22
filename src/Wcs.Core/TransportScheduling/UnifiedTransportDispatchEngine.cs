@@ -16,7 +16,7 @@ public interface IUnifiedTransportDispatchEngine
 /// <summary>
 /// EMS/RGV 统一派单引擎。
 /// 第二阶段采用滚动窗口预留；第四阶段在路段预留之前注册交通优先级和车辆信息；
-/// 第五阶段加入最低派单电量和指定车辆过滤。
+/// 第五阶段加入最低派单电量和指定车辆过滤；第九阶段增加可组合的生产门禁策略。
 /// </summary>
 public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEngine
 {
@@ -25,6 +25,7 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
     private readonly ITransportRouteCenter _routeCenter;
     private readonly IRouteReservationManager _reservationManager;
     private readonly ITransportTrafficCoordinator? _trafficCoordinator;
+    private readonly IReadOnlyList<ITransportDispatchAdmissionPolicy> _admissionPolicies;
     private readonly ConcurrentDictionary<string, TransportDispatchAssignment> _assignments = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _dispatchGate = new(1, 1);
 
@@ -33,13 +34,15 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
         ITransportVehicleSelector vehicleSelector,
         ITransportRouteCenter routeCenter,
         IRouteReservationManager reservationManager,
-        ITransportTrafficCoordinator? trafficCoordinator = null)
+        ITransportTrafficCoordinator? trafficCoordinator = null,
+        IEnumerable<ITransportDispatchAdmissionPolicy>? admissionPolicies = null)
     {
         _vehicleRegistry = vehicleRegistry ?? throw new ArgumentNullException(nameof(vehicleRegistry));
         _vehicleSelector = vehicleSelector ?? throw new ArgumentNullException(nameof(vehicleSelector));
         _routeCenter = routeCenter ?? throw new ArgumentNullException(nameof(routeCenter));
         _reservationManager = reservationManager ?? throw new ArgumentNullException(nameof(reservationManager));
         _trafficCoordinator = trafficCoordinator;
+        _admissionPolicies = admissionPolicies?.ToArray() ?? Array.Empty<ITransportDispatchAdmissionPolicy>();
     }
 
     public async Task<TransportDispatchResult> DispatchAsync(
@@ -69,6 +72,7 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
             if (candidates.Count == 0)
                 return TransportDispatchResult.Failed("可用车辆均无法到达取货点");
 
+            string? lastAdmissionReason = null;
             foreach (var candidate in candidates)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -86,6 +90,22 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
 
                 if (!loadedRoute.Found)
                     continue;
+
+                var admissionContext = new TransportDispatchAdmissionContext
+                {
+                    Request = request,
+                    Vehicle = candidate.Vehicle,
+                    PickupRoute = candidate.PickupRoute,
+                    LoadedRoute = loadedRoute
+                };
+                var denied = _admissionPolicies
+                    .Select(policy => policy.Evaluate(admissionContext))
+                    .FirstOrDefault(result => !result.Allowed);
+                if (denied is not null)
+                {
+                    lastAdmissionReason = denied.Reason;
+                    continue;
+                }
 
                 var fullEdgePath = candidate.PickupRoute.EdgePath
                     .Concat(loadedRoute.EdgePath)
@@ -137,7 +157,11 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
                 };
 
                 if (_assignments.TryAdd(request.RequestId, assignment))
+                {
+                    foreach (var policy in _admissionPolicies)
+                        policy.OnAssigned(assignment);
                     return TransportDispatchResult.Succeeded(assignment);
+                }
 
                 _vehicleRegistry.TryMarkIdle(candidate.Vehicle.VehicleId);
                 _reservationManager.Release(reservation.ReservationId);
@@ -147,6 +171,7 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
             }
 
             return TransportDispatchResult.Failed(
+                lastAdmissionReason ??
                 "无车辆能够同时完成路径规划、交通门禁和初始滚动窗口预留");
         }
         finally
@@ -176,6 +201,8 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
 
         _reservationManager.Release(assignment.ReservationId);
         _vehicleRegistry.TryMarkIdle(assignment.VehicleId);
+        foreach (var policy in _admissionPolicies)
+            policy.OnCompleted(assignment);
         return true;
     }
 
