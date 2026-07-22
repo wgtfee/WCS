@@ -141,7 +141,7 @@ public sealed class TransportOperationGovernanceService : ITransportOperationGov
             var next = current with
             {
                 Approvals = approvals,
-                State = approvals.Count >= current.RequiredIndependentApprovals
+                State = approvals.Length >= current.RequiredIndependentApprovals
                     ? TransportGovernedOperationState.Approved
                     : TransportGovernedOperationState.PendingApproval,
                 UpdatedAtUtc = DateTime.UtcNow
