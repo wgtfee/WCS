@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<TransportAdministrationViewModel>();
         services.AddTransient<TransportDriverDiagnosticsViewModel>();
         services.AddTransient<TransportCommissioningViewModel>();
+        services.AddTransient<TransportProductionViewModel>();
         return services;
     }
 }
