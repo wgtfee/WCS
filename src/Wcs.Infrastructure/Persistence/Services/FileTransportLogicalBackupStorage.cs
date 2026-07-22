@@ -30,13 +30,17 @@ public sealed class FileTransportLogicalBackupStorage : ITransportLogicalBackupS
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(payload);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        string? payloadPath = null;
+        string? manifestPath = null;
         string? payloadTemp = null;
         string? manifestTemp = null;
+        var payloadCommitted = false;
+        var manifestCommitted = false;
         try
         {
             Directory.CreateDirectory(_directory);
-            var payloadPath = ResolvePayloadPath(manifest.FileName);
-            var manifestPath = ResolveManifestPath(manifest.BackupId);
+            payloadPath = ResolvePayloadPath(manifest.FileName);
+            manifestPath = ResolveManifestPath(manifest.BackupId);
             if (File.Exists(payloadPath) || File.Exists(manifestPath))
                 throw new InvalidOperationException($"备份 {manifest.BackupId} 已存在，逻辑备份不可覆盖");
 
@@ -49,8 +53,10 @@ public sealed class FileTransportLogicalBackupStorage : ITransportLogicalBackupS
                 cancellationToken).ConfigureAwait(false);
             File.Move(payloadTemp, payloadPath);
             payloadTemp = null;
+            payloadCommitted = true;
             File.Move(manifestTemp, manifestPath);
             manifestTemp = null;
+            manifestCommitted = true;
         }
         finally
         {
@@ -58,6 +64,10 @@ public sealed class FileTransportLogicalBackupStorage : ITransportLogicalBackupS
                 TryDelete(payloadTemp);
             if (manifestTemp is not null)
                 TryDelete(manifestTemp);
+            if (payloadCommitted && !manifestCommitted && payloadPath is not null)
+                TryDelete(payloadPath);
+            if (!payloadCommitted && manifestCommitted && manifestPath is not null)
+                TryDelete(manifestPath);
             _gate.Release();
         }
     }
