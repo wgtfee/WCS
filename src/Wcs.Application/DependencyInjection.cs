@@ -37,9 +37,11 @@ public static class DependencyInjection
         services.AddHostedService<TransportConfigurationHostedService>();
         services.AddHostedService<TransportPlcSignalMapHostedService>();
         services.AddHostedService<TransportDriverReconciliationHostedService>();
+        services.AddHostedService<TransportRecoveryConflictHostedService>();
         services.AddHostedService<TransportDriverPollingHostedService>();
         services.AddHostedService<TransportOptimizationHostedService>();
         services.AddHostedService<TransportJournalHostedService>();
+        services.AddHostedService<TransportFaultAlarmHostedService>();
 
         services.AddSingleton<IEventStore, FileEventStore>();
         services.AddSingleton<EventReplayService>();
