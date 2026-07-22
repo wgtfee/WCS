@@ -89,9 +89,10 @@ public sealed class TransportFaultAlarmHostedService : BackgroundService
                 ?? $"{map.VehicleId} PLC 故障码 {diagnostic.FaultCode}";
             var level = definition?.Level ?? AlarmLevelEnum.Error;
 
-            if (_activeAlarmCodes.TryGetValue(map.VehicleId, out var previousCode) &&
-                !string.Equals(previousCode, alarmCode, StringComparison.Ordinal))
+            if (_activeAlarmCodes.TryGetValue(map.VehicleId, out var previousCode))
             {
+                if (string.Equals(previousCode, alarmCode, StringComparison.Ordinal))
+                    continue;
                 await _alarms.RecoverAlarmAsync(previousCode, cancellationToken).ConfigureAwait(false);
                 _activeAlarmCodes.TryRemove(map.VehicleId, out _);
             }
