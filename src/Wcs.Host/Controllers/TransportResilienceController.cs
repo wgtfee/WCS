@@ -16,8 +16,22 @@ public sealed class TransportResilienceController : ControllerBase
     }
 
     [HttpGet("summary")]
-    public ActionResult<TransportResilienceSnapshot> GetSummary() =>
-        Ok(_service.GetSnapshot());
+    public async Task<ActionResult<TransportResilienceSnapshot>> GetSummary(
+        CancellationToken cancellationToken)
+    {
+        var backups = await _service.GetBackupsAsync(100, cancellationToken).ConfigureAwait(false);
+        var baselines = _service.GetBaselines(100);
+        var drills = _service.GetDrills(100);
+        return Ok(new TransportResilienceSnapshot
+        {
+            LastReadiness = _service.GetLastReadiness(),
+            LastBaseline = baselines.FirstOrDefault(),
+            LastBackup = backups.FirstOrDefault(),
+            LastDrill = drills.FirstOrDefault(),
+            BackupCount = backups.Count,
+            DrillCount = drills.Count
+        });
+    }
 
     [HttpGet("readiness")]
     public ActionResult<TransportReadinessReport?> GetReadiness() =>
@@ -129,13 +143,24 @@ public sealed class TransportResilienceController : ControllerBase
         var identity = TransportOperatorIdentityFactory.Create(User);
         if (!identity.IsAuthenticated)
             return Unauthorized();
+        var backups = await _service.GetBackupsAsync(100, cancellationToken).ConfigureAwait(false);
+        var baselines = _service.GetBaselines(100);
+        var drills = _service.GetDrills(100);
         var report = new
         {
             GeneratedAtUtc = DateTime.UtcNow,
-            Summary = _service.GetSnapshot(),
-            Baselines = _service.GetBaselines(100),
-            Backups = await _service.GetBackupsAsync(100, cancellationToken).ConfigureAwait(false),
-            Drills = _service.GetDrills(100)
+            Summary = new TransportResilienceSnapshot
+            {
+                LastReadiness = _service.GetLastReadiness(),
+                LastBaseline = baselines.FirstOrDefault(),
+                LastBackup = backups.FirstOrDefault(),
+                LastDrill = drills.FirstOrDefault(),
+                BackupCount = backups.Count,
+                DrillCount = drills.Count
+            },
+            Baselines = baselines,
+            Backups = backups,
+            Drills = drills
         };
         var payload = JsonSerializer.SerializeToUtf8Bytes(
             report,
