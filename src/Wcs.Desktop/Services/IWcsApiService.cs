@@ -29,6 +29,12 @@ public interface IWcsApiService
     Task<TransportTrafficSnapshot?> GetTransportTrafficAsync(CancellationToken ct = default);
     Task<List<TransportDeadlockCycle>> GetTransportDeadlocksAsync(CancellationToken ct = default);
 
+    Task<List<TransportChargingStationSnapshot>> GetTransportChargingStationsAsync(CancellationToken ct = default);
+    Task<List<TransportChargingPlan>> GetTransportChargingPlansAsync(CancellationToken ct = default);
+    Task<List<TransportTaskReassignmentRecord>> GetTransportReassignmentsAsync(CancellationToken ct = default);
+    Task<TransportPerformanceSnapshot?> GetTransportPerformanceAsync(CancellationToken ct = default);
+    Task<List<TransportChargingEvaluation>> EvaluateTransportChargingAsync(CancellationToken ct = default);
+
     Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default);
     Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null,
         string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default);

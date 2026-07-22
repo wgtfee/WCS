@@ -9,7 +9,8 @@ using Wcs.Core.RouteCenter;
 public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
-    /// 注册 EMS/RGV 统一调度、执行、持久化恢复、交通控制与设备驱动组件。
+    /// 注册 EMS/RGV 统一调度、执行、持久化恢复、交通控制、充电调度、
+    /// 故障换车、效率统计与设备驱动组件。
     /// 生产环境应在 Infrastructure 中覆盖 ITransportStateStore 和 ITransportVehicleDriver。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
@@ -28,7 +29,12 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<InMemoryRouteReservationManager>();
         services.TryAddSingleton<IRouteReservationManager, TrafficAwareRouteReservationManager>();
         services.TryAddSingleton<IUnifiedTransportDispatchEngine, UnifiedTransportDispatchEngine>();
-        services.TryAddSingleton<ITransportExecutionEngine, InMemoryTransportExecutionEngine>();
+        services.TryAddSingleton<InMemoryTransportExecutionEngine>();
+        services.TryAddSingleton<CoordinatedTransportExecutionEngine>();
+        services.TryAddSingleton<ITransportExecutionEngine>(sp =>
+            sp.GetRequiredService<CoordinatedTransportExecutionEngine>());
+        services.TryAddSingleton<ITransportReassignmentExecutionControl>(sp =>
+            sp.GetRequiredService<CoordinatedTransportExecutionEngine>());
         services.TryAddSingleton<ITransportDeadlockService, TransportDeadlockService>();
 
         services.TryAddSingleton<ITransportStateStore, InMemoryTransportStateStore>();
@@ -37,6 +43,10 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportDriverResolver, TransportDriverResolver>();
         services.TryAddSingleton<ITransportCommandDispatcher, TransportCommandDispatcher>();
         services.TryAddSingleton<ITransportRecoveryCoordinator, TransportRecoveryCoordinator>();
+
+        services.TryAddSingleton<ITransportChargingCoordinator, TransportChargingCoordinator>();
+        services.TryAddSingleton<ITransportTaskReassignmentService, TransportTaskReassignmentService>();
+        services.TryAddSingleton<ITransportPerformanceService, TransportPerformanceService>();
 
         return services;
     }

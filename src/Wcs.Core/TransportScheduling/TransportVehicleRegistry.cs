@@ -10,10 +10,16 @@ public interface ITransportVehicleRegistry
     IReadOnlyList<TransportVehicleSnapshot> GetAvailable(TransportDispatchRequest request);
     bool TryMarkAssigned(string vehicleId);
     bool TryMarkIdle(string vehicleId);
+    bool TryMarkChargingRequested(string vehicleId, bool waitingForStation);
+    bool TryMarkCharging(string vehicleId, string stationNodeId);
+    bool TryFinishCharging(string vehicleId, int batteryPercent, int minimumDispatchBatteryPercent);
+    bool TryMarkFaulted(string vehicleId);
+    bool TryReleaseFaultedTask(string vehicleId);
 }
 
 /// <summary>
 /// 统一车辆状态注册表。拒绝旧版本覆盖新状态，并通过 CAS 更新避免并发丢失。
+/// 第五阶段增加最低电量保护、充电状态原子迁移和指定车辆过滤。
 /// </summary>
 public sealed class InMemoryTransportVehicleRegistry : ITransportVehicleRegistry
 {
@@ -60,30 +66,94 @@ public sealed class InMemoryTransportVehicleRegistry : ITransportVehicleRegistry
 
         return _vehicles.Values
             .Where(v => v.CanAcceptTask)
+            .Where(v => string.IsNullOrWhiteSpace(request.RequiredVehicleId) ||
+                        string.Equals(v.VehicleId, request.RequiredVehicleId, StringComparison.Ordinal))
             .Where(v => request.AllowedVehicleKinds is null || request.AllowedVehicleKinds.Contains(v.Kind))
             .Where(v => (v.Capabilities & request.RequiredCapability) == request.RequiredCapability)
+            .Where(v => request.AllowLowBatteryOverride || v.BatteryPercent >= request.MinimumBatteryPercent)
             .OrderBy(v => v.VehicleId, StringComparer.Ordinal)
             .ToList();
     }
 
     public bool TryMarkAssigned(string vehicleId) =>
-        TryTransition(vehicleId, TransportVehicleOperatingState.Idle, TransportVehicleOperatingState.Executing, 1);
+        TryTransition(
+            vehicleId,
+            new[] { TransportVehicleOperatingState.Idle },
+            TransportVehicleOperatingState.Executing,
+            taskDelta: 1);
 
-    public bool TryMarkIdle(string vehicleId)
+    public bool TryMarkChargingRequested(string vehicleId, bool waitingForStation) =>
+        TryTransition(
+            vehicleId,
+            new[]
+            {
+                TransportVehicleOperatingState.Idle,
+                TransportVehicleOperatingState.WaitingForCharge
+            },
+            waitingForStation
+                ? TransportVehicleOperatingState.WaitingForCharge
+                : TransportVehicleOperatingState.ChargingRequested);
+
+    public bool TryMarkCharging(string vehicleId, string stationNodeId)
+    {
+        if (string.IsNullOrWhiteSpace(stationNodeId))
+            return false;
+
+        return TryTransition(
+            vehicleId,
+            new[] { TransportVehicleOperatingState.ChargingRequested },
+            TransportVehicleOperatingState.Charging,
+            currentNodeId: stationNodeId);
+    }
+
+    public bool TryFinishCharging(
+        string vehicleId,
+        int batteryPercent,
+        int minimumDispatchBatteryPercent)
+    {
+        if (batteryPercent is < 0 or > 100)
+            return false;
+        if (minimumDispatchBatteryPercent is < 0 or > 100)
+            return false;
+
+        return TryTransition(
+            vehicleId,
+            new[] { TransportVehicleOperatingState.Charging },
+            batteryPercent >= minimumDispatchBatteryPercent
+                ? TransportVehicleOperatingState.Idle
+                : TransportVehicleOperatingState.WaitingForCharge,
+            batteryPercent: batteryPercent);
+    }
+
+    public bool TryMarkFaulted(string vehicleId) =>
+        TryTransition(
+            vehicleId,
+            new[]
+            {
+                TransportVehicleOperatingState.Offline,
+                TransportVehicleOperatingState.Idle,
+                TransportVehicleOperatingState.Executing,
+                TransportVehicleOperatingState.ChargingRequested,
+                TransportVehicleOperatingState.WaitingForCharge,
+                TransportVehicleOperatingState.Charging,
+                TransportVehicleOperatingState.Maintenance
+            },
+            TransportVehicleOperatingState.Faulted,
+            allowAlreadyTarget: true,
+            requireOnline: false);
+
+    public bool TryReleaseFaultedTask(string vehicleId)
     {
         while (true)
         {
-            if (!_vehicles.TryGetValue(vehicleId, out var current))
+            if (!_vehicles.TryGetValue(vehicleId, out var current) ||
+                current.State != TransportVehicleOperatingState.Faulted)
+            {
                 return false;
-
-            if (current.State == TransportVehicleOperatingState.Idle)
-                return true;
-            if (current.State != TransportVehicleOperatingState.Executing)
-                return false;
+            }
 
             var next = current with
             {
-                State = TransportVehicleOperatingState.Idle,
                 ActiveTaskCount = Math.Max(0, current.ActiveTaskCount - 1),
                 Version = current.Version + 1,
                 UpdatedAtUtc = DateTime.UtcNow
@@ -94,24 +164,53 @@ public sealed class InMemoryTransportVehicleRegistry : ITransportVehicleRegistry
         }
     }
 
+    public bool TryMarkIdle(string vehicleId) =>
+        TryTransition(
+            vehicleId,
+            new[]
+            {
+                TransportVehicleOperatingState.Executing,
+                TransportVehicleOperatingState.Charging,
+                TransportVehicleOperatingState.ChargingRequested,
+                TransportVehicleOperatingState.WaitingForCharge
+            },
+            TransportVehicleOperatingState.Idle,
+            decrementTaskWhenExecuting: true,
+            allowAlreadyTarget: true);
+
     private bool TryTransition(
         string vehicleId,
-        TransportVehicleOperatingState expected,
+        IReadOnlyCollection<TransportVehicleOperatingState> expectedStates,
         TransportVehicleOperatingState target,
-        int taskDelta)
+        int taskDelta = 0,
+        string? currentNodeId = null,
+        int? batteryPercent = null,
+        bool decrementTaskWhenExecuting = false,
+        bool allowAlreadyTarget = false,
+        bool requireOnline = true)
     {
         while (true)
         {
             if (!_vehicles.TryGetValue(vehicleId, out var current))
                 return false;
 
-            if (!current.IsOnline || current.State != expected)
+            if (allowAlreadyTarget && current.State == target)
+                return true;
+
+            if ((requireOnline && !current.IsOnline) || !expectedStates.Contains(current.State))
                 return false;
+
+            var effectiveTaskDelta = decrementTaskWhenExecuting &&
+                                     current.State == TransportVehicleOperatingState.Executing
+                ? -1
+                : taskDelta;
 
             var next = current with
             {
                 State = target,
-                ActiveTaskCount = Math.Max(0, current.ActiveTaskCount + taskDelta),
+                ActiveTaskCount = Math.Max(0, current.ActiveTaskCount + effectiveTaskDelta),
+                CurrentNodeId = currentNodeId ?? current.CurrentNodeId,
+                BatteryPercent = batteryPercent ?? current.BatteryPercent,
                 Version = current.Version + 1,
                 UpdatedAtUtc = DateTime.UtcNow
             };

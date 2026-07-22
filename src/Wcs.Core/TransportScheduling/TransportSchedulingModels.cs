@@ -22,7 +22,9 @@ public enum TransportVehicleOperatingState
     Executing = 2,
     Charging = 3,
     Faulted = 4,
-    Maintenance = 5
+    Maintenance = 5,
+    ChargingRequested = 6,
+    WaitingForCharge = 7
 }
 
 /// <summary>
@@ -80,6 +82,21 @@ public sealed record TransportDispatchRequest
     /// 第二阶段滚动预留窗口。派单时只预留车辆前方若干条边，位置推进后动态释放和补充。
     /// </summary>
     public int ReservationWindowEdges { get; init; } = 2;
+
+    /// <summary>
+    /// 第五阶段最低派单电量。低于该值的空闲车辆退出普通派单候选集。
+    /// </summary>
+    public int MinimumBatteryPercent { get; init; } = 20;
+
+    /// <summary>
+    /// 紧急任务可显式绕过最低电量保护。默认禁止。
+    /// </summary>
+    public bool AllowLowBatteryOverride { get; init; }
+
+    /// <summary>
+    /// 指定唯一车辆，用于恢复、测试或受控的专车任务。
+    /// </summary>
+    public string? RequiredVehicleId { get; init; }
 }
 
 /// <summary>
@@ -121,6 +138,12 @@ public sealed record TransportDispatchAssignment
     public string ReservationId { get; init; } = string.Empty;
     public TimeSpan ReservationLease { get; init; } = TimeSpan.FromSeconds(30);
     public int ReservationWindowEdges { get; init; } = 2;
+    public int Priority { get; init; }
+    public TransportVehicleCapability RequiredCapability { get; init; } = TransportVehicleCapability.Carry;
+    public EdgeCapability? RequiredEdgeCapability { get; init; }
+    public TransportRouteStrategy RouteStrategy { get; init; } = TransportRouteStrategy.Balanced;
+    public int MinimumBatteryPercent { get; init; } = 20;
+    public bool AllowLowBatteryOverride { get; init; }
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
 
     public IReadOnlyList<string> FullNodePath =>

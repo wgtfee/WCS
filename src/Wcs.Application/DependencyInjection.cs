@@ -33,8 +33,9 @@ public static class DependencyInjection
         services.AddSingleton<ITaskScheduler, TaskScheduler>();
         services.AddSingleton<IResourceLockManager, ResourceLockManager>();
 
-        // EMS / RGV unified scheduling phase 1
+        // EMS / RGV unified scheduling
         services.AddUnifiedTransportScheduling();
+        services.AddHostedService<TransportOptimizationHostedService>();
 
         // EventStore
         services.AddSingleton<IEventStore, FileEventStore>();
@@ -78,6 +79,44 @@ public static class DependencyInjection
         services.AddHostedService<EventBusSubscriberHostedService>();
 
         return services;
+    }
+}
+
+internal sealed class TransportOptimizationHostedService : Microsoft.Extensions.Hosting.BackgroundService
+{
+    private readonly ITransportChargingCoordinator _charging;
+    private readonly TimeSpan _interval = TimeSpan.FromSeconds(10);
+
+    public TransportOptimizationHostedService(ITransportChargingCoordinator charging)
+    {
+        _charging = charging;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(_interval);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                _charging.EvaluateFleet();
+            }
+            catch
+            {
+                // 单次调度评估失败不应终止整个 WCS Host。
+            }
+
+            try
+            {
+                if (!await timer.WaitForNextTickAsync(stoppingToken))
+                    break;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+        }
     }
 }
 

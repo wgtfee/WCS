@@ -1,0 +1,114 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:vm="using:Wcs.Desktop.ViewModels"
+              x:Class="Wcs.Desktop.Views.TransportOptimizationView"
+              x:DataType="vm:TransportOptimizationViewModel"
+              Background="{DynamicResource BgPrimary}">
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+            <StackPanel>
+                <TextBlock Text="EMS / RGV 充电与运行优化"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <TextBlock Text="低电量保护、充电位容量、故障任务转移和车辆效率统计"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+                <TextBlock Text="{Binding StatusText}"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Content="评估充电"
+                    Command="{Binding EvaluateChargingCommand}"
+                    Padding="18,8" />
+            <Button Grid.Column="2"
+                    Content="刷新"
+                    Command="{Binding RefreshCommand}"
+                    Padding="20,8" />
+        </Grid>
+
+        <UniformGrid Grid.Row="1" Columns="6" Rows="1">
+            <Border Margin="0,0,6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="在线车辆" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding OnlineVehicleCount}" FontSize="24" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="充电车辆" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ChargingVehicleCount}" FontSize="24" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="低电量车辆" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding LowBatteryVehicleCount}" FontSize="24" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="等待任务" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding WaitingTaskCount}" FontSize="24" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="车队利用率 %" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding FleetUtilizationPercent}" FontSize="24" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="6,0,0,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="任务完成率 %" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding CompletionRatePercent}" FontSize="24" FontWeight="Bold" /></StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="充电站">
+                <DataGrid ItemsSource="{Binding Stations}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="充电站" Binding="{Binding StationId}" Width="*" />
+                        <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="*" />
+                        <DataGridTextColumn Header="节点" Binding="{Binding NodeId}" Width="130" />
+                        <DataGridTextColumn Header="容量" Binding="{Binding Capacity}" Width="80" />
+                        <DataGridTextColumn Header="已预留" Binding="{Binding ReservedCount}" Width="90" />
+                        <DataGridTextColumn Header="充电中" Binding="{Binding ChargingCount}" Width="90" />
+                        <DataGridTextColumn Header="排队" Binding="{Binding QueueLength}" Width="80" />
+                        <DataGridCheckBoxColumn Header="在线" Binding="{Binding IsOnline}" Width="80" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="充电计划">
+                <DataGrid ItemsSource="{Binding ChargingPlans}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="计划号" Binding="{Binding PlanId}" Width="*" />
+                        <DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="130" />
+                        <DataGridTextColumn Header="充电站" Binding="{Binding StationId}" Width="130" />
+                        <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="150" />
+                        <DataGridTextColumn Header="起始电量" Binding="{Binding StartBatteryPercent}" Width="100" />
+                        <DataGridTextColumn Header="结束电量" Binding="{Binding EndBatteryPercent}" Width="100" />
+                        <DataGridCheckBoxColumn Header="临界" Binding="{Binding IsCritical}" Width="80" />
+                        <DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="2*" />
+                        <DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="故障任务转移">
+                <DataGrid ItemsSource="{Binding Reassignments}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="原任务" Binding="{Binding OriginalRequestId}" Width="*" />
+                        <DataGridTextColumn Header="接替任务" Binding="{Binding ReplacementRequestId}" Width="*" />
+                        <DataGridTextColumn Header="原车辆" Binding="{Binding OriginalVehicleId}" Width="120" />
+                        <DataGridTextColumn Header="接替车辆" Binding="{Binding ReplacementVehicleId}" Width="120" />
+                        <DataGridTextColumn Header="结果" Binding="{Binding Decision}" Width="170" />
+                        <DataGridTextColumn Header="原因" Binding="{Binding Reason}" Width="2*" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding OccurredAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="车辆效率">
+                <DataGrid ItemsSource="{Binding VehicleMetrics}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="*" />
+                        <DataGridTextColumn Header="类型" Binding="{Binding Kind}" Width="100" />
+                        <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="150" />
+                        <DataGridTextColumn Header="电量" Binding="{Binding BatteryPercent}" Width="90" />
+                        <DataGridTextColumn Header="完成任务" Binding="{Binding CompletedTaskCount}" Width="100" />
+                        <DataGridTextColumn Header="故障任务" Binding="{Binding FaultedTaskCount}" Width="100" />
+                        <DataGridTextColumn Header="等待任务" Binding="{Binding WaitingTaskCount}" Width="100" />
+                        <DataGridTextColumn Header="平均耗时秒" Binding="{Binding AverageCompletedDurationSeconds}" Width="130" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

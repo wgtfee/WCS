@@ -63,6 +63,7 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
             new() { Id = id++, ParentId = 0, Name = "Tasks", Url = "/Tasks" },
             new() { Id = id++, ParentId = 0, Name = "EMS / RGV 调度", Url = "/TransportScheduling" },
             new() { Id = id++, ParentId = 0, Name = "交通控制与死锁", Url = "/TransportTraffic" },
+            new() { Id = id++, ParentId = 0, Name = "充电与运行优化", Url = "/TransportOptimization" },
             new() { Id = id++, ParentId = 0, Name = "Alarms", Url = "/Alarms" },
             new() { Id = id++, ParentId = 0, Name = "Objects", Url = "/Objects" },
             new() { Id = id++, ParentId = 0, Name = "Event Log", Url = "/EventLog" },

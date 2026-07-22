@@ -15,7 +15,8 @@ public interface IUnifiedTransportDispatchEngine
 
 /// <summary>
 /// EMS/RGV 统一派单引擎。
-/// 第二阶段采用滚动窗口预留；第四阶段在路段预留之前注册交通优先级和车辆信息。
+/// 第二阶段采用滚动窗口预留；第四阶段在路段预留之前注册交通优先级和车辆信息；
+/// 第五阶段加入最低派单电量和指定车辆过滤。
 /// </summary>
 public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEngine
 {
@@ -59,7 +60,10 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
 
             var availableVehicles = _vehicleRegistry.GetAvailable(request);
             if (availableVehicles.Count == 0)
-                return TransportDispatchResult.Failed("没有满足类型、状态和能力要求的可用 EMS/RGV");
+            {
+                return TransportDispatchResult.Failed(
+                    "没有满足类型、状态、能力和最低电量要求的可用 EMS/RGV");
+            }
 
             var candidates = _vehicleSelector.RankCandidates(request, availableVehicles);
             if (candidates.Count == 0)
@@ -123,7 +127,13 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
                     LoadedEdgePath = loadedRoute.EdgePath,
                     ReservationId = reservation.ReservationId,
                     ReservationLease = request.ReservationLease,
-                    ReservationWindowEdges = request.ReservationWindowEdges
+                    ReservationWindowEdges = request.ReservationWindowEdges,
+                    Priority = request.Priority,
+                    RequiredCapability = request.RequiredCapability,
+                    RequiredEdgeCapability = request.RequiredEdgeCapability,
+                    RouteStrategy = request.RouteStrategy,
+                    MinimumBatteryPercent = request.MinimumBatteryPercent,
+                    AllowLowBatteryOverride = request.AllowLowBatteryOverride
                 };
 
                 if (_assignments.TryAdd(request.RequestId, assignment))
@@ -136,7 +146,8 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
                     return TransportDispatchResult.Succeeded(existing);
             }
 
-            return TransportDispatchResult.Failed("无车辆能够同时完成路径规划、交通门禁和初始滚动窗口预留");
+            return TransportDispatchResult.Failed(
+                "无车辆能够同时完成路径规划、交通门禁和初始滚动窗口预留");
         }
         finally
         {
@@ -180,5 +191,7 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
             throw new ArgumentOutOfRangeException(nameof(request), "ReservationLease 必须大于 0");
         if (request.ReservationWindowEdges <= 0)
             throw new ArgumentOutOfRangeException(nameof(request), "ReservationWindowEdges 必须大于 0");
+        if (request.MinimumBatteryPercent is < 0 or > 100)
+            throw new ArgumentOutOfRangeException(nameof(request), "MinimumBatteryPercent 必须在 0 到 100 之间");
     }
 }

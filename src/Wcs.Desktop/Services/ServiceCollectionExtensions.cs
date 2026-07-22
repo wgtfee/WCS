@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<SysLogViewModel>();
         services.AddTransient<TransportSchedulingViewModel>();
         services.AddTransient<TransportTrafficViewModel>();
+        services.AddTransient<TransportOptimizationViewModel>();
         return services;
     }
 }

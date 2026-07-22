@@ -56,6 +56,26 @@ public class WcsApiService : IWcsApiService
     public async Task<List<RouteReservation>> GetTransportReservationsAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<RouteReservation>>("/api/transport/reservations", ct) ?? [];
     public async Task<TransportTrafficSnapshot?> GetTransportTrafficAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<TransportTrafficSnapshot>("/api/transport/traffic", ct);
     public async Task<List<TransportDeadlockCycle>> GetTransportDeadlocksAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TransportDeadlockCycle>>("/api/transport/traffic/deadlocks", ct) ?? [];
+
+    public async Task<List<TransportChargingStationSnapshot>> GetTransportChargingStationsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportChargingStationSnapshot>>("/api/transport/optimization/charging/stations", ct) ?? [];
+
+    public async Task<List<TransportChargingPlan>> GetTransportChargingPlansAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportChargingPlan>>("/api/transport/optimization/charging/plans", ct) ?? [];
+
+    public async Task<List<TransportTaskReassignmentRecord>> GetTransportReassignmentsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportTaskReassignmentRecord>>("/api/transport/optimization/reassignments", ct) ?? [];
+
+    public async Task<TransportPerformanceSnapshot?> GetTransportPerformanceAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportPerformanceSnapshot>("/api/transport/optimization/metrics", ct);
+
+    public async Task<List<TransportChargingEvaluation>> EvaluateTransportChargingAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/optimization/charging/evaluate", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<TransportChargingEvaluation>>(ct) ?? [];
+    }
+
     public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
 
     public async Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null, string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default)
