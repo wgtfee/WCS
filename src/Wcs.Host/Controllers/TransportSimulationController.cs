@@ -22,18 +22,28 @@ public sealed class TransportSimulationController : ControllerBase
     [HttpPost("scenarios/current")]
     public async Task<ActionResult<TransportSimulationScenario>> BuildCurrentScenario(
         [FromBody] BuildCurrentTransportScenarioRequest request,
-        CancellationToken cancellationToken) =>
-        Ok(await _service.BuildCurrentScenarioAsync(
+        CancellationToken cancellationToken)
+    {
+        var identity = TransportOperatorIdentityFactory.Create(User);
+        if (!identity.IsAuthenticated)
+            return Unauthorized("当前生产场景包含任务与节点数据，必须经过认证后生成");
+        return Ok(await _service.BuildCurrentScenarioAsync(
             request.Name,
             request.HorizonSeconds,
             request.MaximumTasks,
             cancellationToken).ConfigureAwait(false));
+    }
 
     [HttpPost("scenarios/history")]
     public async Task<ActionResult<TransportSimulationScenario>> BuildHistoricalScenario(
         [FromBody] TransportHistoricalReplayRequest request,
-        CancellationToken cancellationToken) =>
-        Ok(await _service.BuildHistoricalScenarioAsync(request, cancellationToken).ConfigureAwait(false));
+        CancellationToken cancellationToken)
+    {
+        var identity = TransportOperatorIdentityFactory.Create(User);
+        if (!identity.IsAuthenticated)
+            return Unauthorized("历史回放场景包含生产任务数据，必须经过认证后生成");
+        return Ok(await _service.BuildHistoricalScenarioAsync(request, cancellationToken).ConfigureAwait(false));
+    }
 
     [HttpPost("runs")]
     public async Task<ActionResult<TransportSimulationRun>> Run(
