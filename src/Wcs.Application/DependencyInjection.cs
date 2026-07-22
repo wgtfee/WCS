@@ -42,6 +42,10 @@ public static class DependencyInjection
         services.AddHostedService<TransportOptimizationHostedService>();
         services.AddHostedService<TransportJournalHostedService>();
         services.AddHostedService<TransportFaultAlarmHostedService>();
+        services.AddHostedService<TransportProductionConfigurationHostedService>();
+        services.AddHostedService<TransportProductionDispatchHostedService>();
+        services.AddHostedService<TransportProductionTrendHostedService>();
+        services.AddHostedService<TransportFaultTakeoverHostedService>();
 
         services.AddSingleton<IEventStore, FileEventStore>();
         services.AddSingleton<EventReplayService>();
