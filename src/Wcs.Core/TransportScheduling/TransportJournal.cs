@@ -14,7 +14,10 @@ public enum TransportJournalCategory
     SingleTrackSection = 7,
     ProductionTrend = 8,
     DispatchDecision = 9,
-    ProductionQueue = 10
+    ProductionQueue = 10,
+    ConsistencyReport = 11,
+    ConfigurationSnapshot = 12,
+    ObservabilityHealth = 13
 }
 
 public sealed record TransportJournalRecord
