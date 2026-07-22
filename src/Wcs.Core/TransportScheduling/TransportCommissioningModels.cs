@@ -2,7 +2,7 @@ namespace Wcs.Core.TransportScheduling;
 
 using System.Collections.Concurrent;
 using System.Text.Json;
-using Wcs.Core.AlarmCenter.Models;
+using Wcs.Core.StateCenter.Models;
 
 public enum TransportCommunicationOperation
 {
