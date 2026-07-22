@@ -181,7 +181,11 @@ public sealed class ObservableTransportProductionDispatchService : ITransportPro
         return result;
     }
 
-    public IReadOnlyList<TransportProductionQueueItem> GetQueue() => _inner.GetQueue();
+    /// <summary>
+    /// 运行时读取使用纯快照，避免 Desktop、诊断和离线仿真因读取队列而刷新优先级或清理终态任务。
+    /// 真实派单周期仍由 ReliableTransportProductionDispatchService.DispatchCycleAsync 执行刷新和清理。
+    /// </summary>
+    public IReadOnlyList<TransportProductionQueueItem> GetQueue() => _inner.PeekQueue();
 
     public TransportProductionDryRunReport DryRun(DateTime? nowUtc = null) => _inner.DryRun(nowUtc);
 
