@@ -18,6 +18,8 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("WcsDb")
             ?? throw new InvalidOperationException(
                 "连接字符串 'WcsDb' 未配置。请在 appsettings.json 中设置 ConnectionStrings:WcsDb。");
+        var backupDirectory = configuration["TransportResilience:BackupDirectory"]
+            ?? "data/transport-backups";
 
         services.AddSingleton<IDatabaseInitializer>(sp =>
             new DatabaseInitializer(
@@ -40,6 +42,8 @@ public static class DependencyInjection
             _ => new SqlSugarTransportStateStore(connectionString)));
         services.Replace(ServiceDescriptor.Singleton<ITransportCommissioningStore>(
             _ => new SqlSugarTransportCommissioningStore(connectionString)));
+        services.Replace(ServiceDescriptor.Singleton<ITransportLogicalBackupStorage>(
+            _ => new FileTransportLogicalBackupStorage(backupDirectory)));
 
         return services;
     }
