@@ -1,0 +1,145 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:Class="Wcs.Desktop.Views.TransportSimulationView"
+             x:DataType="vm:TransportSimulationViewModel"
+             Background="{DynamicResource BgPrimary}">
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel>
+                <TextBlock Text="EMS / RGV 调度仿真与最终验收"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <TextBlock Text="历史回放、批量优化、策略 A/B、拥堵预测、容量压力和最终投产门槛"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+                <TextBlock Text="本页面只展示离线结果；任何推荐参数都不会自动应用到生产调度"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+                <TextBlock Text="{Binding StatusText}"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Content="刷新"
+                    Command="{Binding RefreshCommand}"
+                    Padding="20,8" />
+        </Grid>
+
+        <UniformGrid Grid.Row="1" Columns="10" Rows="1">
+            <Border Margin="0,0,4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="最近策略" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding LatestPolicy}" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" /></StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="吞吐 /h" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding LatestThroughput}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="P95 等待(s)" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding LatestP95Waiting}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="交期违约(%)" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding LatestDeadlineMissRate}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="车队利用率(%)" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding LatestFleetUtilization}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="可持续任务率" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding MaximumSustainableRate}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="建议车辆数" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding RecommendedVehicleCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="验收状态" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding AcceptanceState}" FontSize="17" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="仿真次数" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding RunCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="4,0,0,0" Padding="10" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="策略对比" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ComparisonCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="仿真运行">
+                <DataGrid ItemsSource="{Binding Runs}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="运行号" Binding="{Binding RunId}" Width="230" />
+                        <DataGridTextColumn Header="场景" Binding="{Binding ScenarioName}" Width="180" />
+                        <DataGridTextColumn Header="策略" Binding="{Binding PolicyName}" Width="180" />
+                        <DataGridTextColumn Header="任务" Binding="{Binding Metrics.TotalTaskCount}" Width="80" />
+                        <DataGridTextColumn Header="完成" Binding="{Binding Metrics.CompletedTaskCount}" Width="80" />
+                        <DataGridTextColumn Header="吞吐/h" Binding="{Binding Metrics.ThroughputPerHour}" Width="100" />
+                        <DataGridTextColumn Header="P95等待" Binding="{Binding Metrics.P95WaitingSeconds}" Width="100" />
+                        <DataGridTextColumn Header="违约率" Binding="{Binding Metrics.DeadlineMissRatePercent}" Width="100" />
+                        <DataGridTextColumn Header="目标得分" Binding="{Binding Metrics.ObjectiveScore}" Width="100" />
+                        <DataGridTextColumn Header="执行人" Binding="{Binding InitiatedBy}" Width="120" />
+                        <DataGridTextColumn Header="完成时间" Binding="{Binding CompletedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="策略 A/B">
+                <DataGrid ItemsSource="{Binding Comparisons}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="对比号" Binding="{Binding ComparisonId}" Width="230" />
+                        <DataGridTextColumn Header="场景" Binding="{Binding ScenarioName}" Width="180" />
+                        <DataGridTextColumn Header="推荐策略" Binding="{Binding RecommendedPolicyId}" Width="230" />
+                        <DataGridTextColumn Header="结论" Binding="{Binding Recommendation}" Width="*" />
+                        <DataGridTextColumn Header="执行人" Binding="{Binding InitiatedBy}" Width="120" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding CompletedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="批量优化">
+                <DataGrid ItemsSource="{Binding Optimizations}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="优化号" Binding="{Binding OptimizationId}" Width="230" />
+                        <DataGridTextColumn Header="场景号" Binding="{Binding ScenarioId}" Width="230" />
+                        <DataGridTextColumn Header="推荐策略" Binding="{Binding RecommendedPolicy.Name}" Width="180" />
+                        <DataGridTextColumn Header="策略类型" Binding="{Binding RecommendedPolicy.Strategy}" Width="160" />
+                        <DataGridTextColumn Header="目标得分" Binding="{Binding ObjectiveScore}" Width="100" />
+                        <DataGridTextColumn Header="说明" Binding="{Binding Explanation}" Width="*" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding GeneratedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="容量基线">
+                <DataGrid ItemsSource="{Binding Benchmarks}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="基线号" Binding="{Binding BenchmarkId}" Width="230" />
+                        <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="180" />
+                        <DataGridTextColumn Header="最大可持续任务率" Binding="{Binding MaximumSustainableTaskRatePerHour}" Width="150" />
+                        <DataGridTextColumn Header="建议车辆数" Binding="{Binding RecommendedVehicleCount}" Width="120" />
+                        <DataGridTextColumn Header="结论" Binding="{Binding Conclusion}" Width="*" />
+                        <DataGridTextColumn Header="执行人" Binding="{Binding InitiatedBy}" Width="120" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding CompletedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="拥堵预测">
+                <DataGrid ItemsSource="{Binding Forecast}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="偏移秒" Binding="{Binding OffsetSeconds}" Width="100" />
+                        <DataGridTextColumn Header="队列长度" Binding="{Binding QueueLength}" Width="110" />
+                        <DataGridTextColumn Header="活动任务" Binding="{Binding ActiveTaskCount}" Width="110" />
+                        <DataGridTextColumn Header="车队利用率" Binding="{Binding FleetUtilizationPercent}" Width="130" />
+                        <DataGridTextColumn Header="拥堵等级" Binding="{Binding CongestionLevel}" Width="130" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="最终验收">
+                <DataGrid ItemsSource="{Binding AcceptanceReports}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="报告号" Binding="{Binding ReportId}" Width="230" />
+                        <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="180" />
+                        <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="110" />
+                        <DataGridTextColumn Header="仿真运行" Binding="{Binding SimulationRunId}" Width="230" />
+                        <DataGridTextColumn Header="结论" Binding="{Binding Conclusion}" Width="*" />
+                        <DataGridTextColumn Header="执行人" Binding="{Binding InitiatedBy}" Width="120" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding GeneratedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>
