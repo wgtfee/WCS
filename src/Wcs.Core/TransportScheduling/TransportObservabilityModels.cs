@@ -14,7 +14,11 @@ public enum TransportTraceOperationKind
     ConsistencyInspection = 2,
     HealthEvaluation = 3,
     ConfigurationSnapshot = 4,
-    ConfigurationRollback = 5
+    ConfigurationRollback = 5,
+    ResiliencePreflight = 6,
+    LogicalBackup = 7,
+    RecoveryDrill = 8,
+    RestorePreparation = 9
 }
 
 public sealed record TransportTraceRecord
