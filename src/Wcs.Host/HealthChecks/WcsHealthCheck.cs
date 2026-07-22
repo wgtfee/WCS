@@ -50,22 +50,28 @@ public class WcsReadinessCheck : IHealthCheck
         data["PlcPolling"] = pollingEnabled ? "enabled" : "disabled";
 
         HealthCheckResult result;
-        if (readiness is { CriticalCount: > 0 } || transport.State == TransportHealthState.Unhealthy)
+        if (readiness is null)
         {
             result = HealthCheckResult.Unhealthy(
-                $"WCS production readiness is unhealthy (transport={transport.Score}, critical={readiness?.CriticalCount ?? 0})",
+                "WCS production readiness has not been evaluated",
                 data: data);
         }
-        else if (readiness is { ErrorCount: > 0 })
+        else if (readiness.CriticalCount > 0 || transport.State == TransportHealthState.Unhealthy)
+        {
+            result = HealthCheckResult.Unhealthy(
+                $"WCS production readiness is unhealthy (transport={transport.Score}, critical={readiness.CriticalCount})",
+                data: data);
+        }
+        else if (readiness.ErrorCount > 0)
         {
             result = HealthCheckResult.Unhealthy(
                 $"WCS production readiness has errors ({readiness.ErrorCount})",
                 data: data);
         }
-        else if (readiness is { WarningCount: > 0 } || transport.State == TransportHealthState.Degraded)
+        else if (readiness.WarningCount > 0 || transport.State == TransportHealthState.Degraded)
         {
             result = HealthCheckResult.Degraded(
-                $"WCS production readiness is degraded (transport={transport.Score}, warning={readiness?.WarningCount ?? 0})",
+                $"WCS production readiness is degraded (transport={transport.Score}, warning={readiness.WarningCount})",
                 data: data);
         }
         else
