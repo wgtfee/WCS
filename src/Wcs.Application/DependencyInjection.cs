@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddHostedService<TransportFaultAlarmHostedService>();
         services.AddHostedService<TransportProductionConfigurationHostedService>();
         services.AddHostedService<TransportDispatchDecisionRestoreHostedService>();
+        services.AddHostedService<TransportProductionQueuePersistenceHostedService>();
         services.AddHostedService<TransportProductionDispatchHostedService>();
         services.AddHostedService<TransportProductionTrendHostedService>();
         services.AddHostedService<TransportFaultTakeoverHostedService>();
