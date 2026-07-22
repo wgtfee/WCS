@@ -152,8 +152,9 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
         if (!_queue.TryGetValue(requestId, out var current) ||
             current.State != TransportProductionQueueState.Assigned)
             return false;
-
-        if (!_dispatch.Complete(requestId))
+        if (!_execution.TryGet(requestId, out var execution) ||
+            execution is null ||
+            !execution.IsTerminal)
             return false;
 
         _queue.TryRemove(requestId, out _);
@@ -167,6 +168,7 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
         await _cycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            CleanupTerminalAssignments();
             var now = DateTime.UtcNow;
             RefreshPriorities(now);
             var candidates = _queue.Values
@@ -249,6 +251,7 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
 
     public IReadOnlyList<TransportProductionQueueItem> GetQueue()
     {
+        CleanupTerminalAssignments();
         RefreshPriorities(DateTime.UtcNow);
         return _queue.Values
             .OrderByDescending(x => x.EffectivePriority)
@@ -315,6 +318,7 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
             _execution.Cancel(
                 assignment.RequestId,
                 started.FailureReason ?? "生产派单执行启动失败");
+            _dispatch.Complete(assignment.RequestId);
             return Save(current with
             {
                 State = TransportProductionQueueState.Failed,
@@ -332,6 +336,20 @@ public sealed class ReliableTransportProductionDispatchService : ITransportProdu
             LastReason = null,
             UpdatedAtUtc = DateTime.UtcNow
         });
+    }
+
+    private void CleanupTerminalAssignments()
+    {
+        foreach (var pair in _queue)
+        {
+            if (pair.Value.State != TransportProductionQueueState.Assigned)
+                continue;
+            if (_execution.TryGet(pair.Key, out var execution) &&
+                execution is { IsTerminal: true })
+            {
+                _queue.TryRemove(pair.Key, out _);
+            }
+        }
     }
 
     private TransportProductionQueueItem Save(TransportProductionQueueItem item)
