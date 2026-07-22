@@ -68,7 +68,7 @@ public sealed class TransportExecutionCommandPumpHostedService : BackgroundServi
                     command,
                     vehicle.Kind,
                     maxRetries: 2,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                 if (result.Status is not (
                     TransportCommandStatus.Acknowledged or
                     TransportCommandStatus.Completed))
