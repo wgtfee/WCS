@@ -54,6 +54,8 @@ public class WcsApiService : IWcsApiService
     public async Task<List<TransportVehicleSnapshot>> GetTransportVehiclesAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TransportVehicleSnapshot>>("/api/transport/vehicles", ct) ?? [];
     public async Task<List<TransportExecutionSnapshot>> GetTransportExecutionsAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TransportExecutionSnapshot>>("/api/transport/executions", ct) ?? [];
     public async Task<List<RouteReservation>> GetTransportReservationsAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<RouteReservation>>("/api/transport/reservations", ct) ?? [];
+    public async Task<TransportTrafficSnapshot?> GetTransportTrafficAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<TransportTrafficSnapshot>("/api/transport/traffic", ct);
+    public async Task<List<TransportDeadlockCycle>> GetTransportDeadlocksAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TransportDeadlockCycle>>("/api/transport/traffic/deadlocks", ct) ?? [];
     public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
 
     public async Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null, string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default)

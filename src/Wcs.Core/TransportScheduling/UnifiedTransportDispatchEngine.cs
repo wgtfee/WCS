@@ -15,7 +15,7 @@ public interface IUnifiedTransportDispatchEngine
 
 /// <summary>
 /// EMS/RGV 统一派单引擎。
-/// 第二阶段改为仅预留滚动窗口，完整路径仍保留在 Assignment 中。
+/// 第二阶段采用滚动窗口预留；第四阶段在路段预留之前注册交通优先级和车辆信息。
 /// </summary>
 public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEngine
 {
@@ -23,6 +23,7 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
     private readonly ITransportVehicleSelector _vehicleSelector;
     private readonly ITransportRouteCenter _routeCenter;
     private readonly IRouteReservationManager _reservationManager;
+    private readonly ITransportTrafficCoordinator? _trafficCoordinator;
     private readonly ConcurrentDictionary<string, TransportDispatchAssignment> _assignments = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _dispatchGate = new(1, 1);
 
@@ -30,12 +31,14 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
         ITransportVehicleRegistry vehicleRegistry,
         ITransportVehicleSelector vehicleSelector,
         ITransportRouteCenter routeCenter,
-        IRouteReservationManager reservationManager)
+        IRouteReservationManager reservationManager,
+        ITransportTrafficCoordinator? trafficCoordinator = null)
     {
         _vehicleRegistry = vehicleRegistry ?? throw new ArgumentNullException(nameof(vehicleRegistry));
         _vehicleSelector = vehicleSelector ?? throw new ArgumentNullException(nameof(vehicleSelector));
         _routeCenter = routeCenter ?? throw new ArgumentNullException(nameof(routeCenter));
         _reservationManager = reservationManager ?? throw new ArgumentNullException(nameof(reservationManager));
+        _trafficCoordinator = trafficCoordinator;
     }
 
     public async Task<TransportDispatchResult> DispatchAsync(
@@ -88,6 +91,11 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
                     .Take(request.ReservationWindowEdges)
                     .ToArray();
 
+                _trafficCoordinator?.RegisterRequest(
+                    request.RequestId,
+                    candidate.Vehicle.VehicleId,
+                    request.Priority);
+
                 if (!_reservationManager.TryReserve(
                         request.RequestId,
                         initialWindow,
@@ -128,7 +136,7 @@ public sealed class UnifiedTransportDispatchEngine : IUnifiedTransportDispatchEn
                     return TransportDispatchResult.Succeeded(existing);
             }
 
-            return TransportDispatchResult.Failed("无车辆能够同时完成路径规划和初始滚动窗口预留");
+            return TransportDispatchResult.Failed("无车辆能够同时完成路径规划、交通门禁和初始滚动窗口预留");
         }
         finally
         {
