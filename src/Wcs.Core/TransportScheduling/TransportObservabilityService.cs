@@ -15,6 +15,7 @@ public interface ITransportObservabilityService
 public sealed class TransportObservabilityService : ITransportObservabilityService
 {
     private const string HealthAlarmCode = "TRANSPORT_HEALTH";
+    private const string ConsistencyAlarmCode = "TRANSPORT_CONSISTENCY";
     private readonly ITransportTelemetryService _telemetry;
     private readonly ITransportConsistencyInspectionService _consistency;
     private readonly ITransportVehicleRegistry _vehicles;
@@ -215,7 +216,10 @@ public sealed class TransportObservabilityService : ITransportObservabilityServi
 
     private TransportHealthComponent EvaluateAlarms()
     {
-        var alarms = _alarms.GetActiveAlarms().ToArray();
+        var alarms = _alarms.GetActiveAlarms()
+            .Where(x => !string.Equals(x.AlarmCode, HealthAlarmCode, StringComparison.Ordinal))
+            .Where(x => !string.Equals(x.AlarmCode, ConsistencyAlarmCode, StringComparison.Ordinal))
+            .ToArray();
         var critical = alarms.Count(x => x.Level == AlarmLevelEnum.Critical);
         var error = alarms.Count(x => x.Level == AlarmLevelEnum.Error);
         var warning = alarms.Count(x => x.Level == AlarmLevelEnum.Warning);
