@@ -21,7 +21,9 @@ public interface ITransportTrafficCoordinator
         TimeSpan lease,
         DateTime? nowUtc = null);
     IReadOnlyList<string> ReleaseOwner(string ownerId, bool includeOccupied = true);
-    IReadOnlyList<string> ReleaseUnoccupiedResources(string ownerId);
+    IReadOnlyList<string> ReleaseUnoccupiedResources(
+        string ownerId,
+        IReadOnlyCollection<string>? protectedResourceIds = null);
     bool CancelWait(string ownerId);
     bool MarkOccupancy(string ownerId, string resourceId, bool occupied);
     IReadOnlyList<string> GetResourceIdsForEdges(IEnumerable<string> edgeIds);
@@ -250,8 +252,35 @@ public sealed class TransportTrafficCoordinator : ITransportTrafficCoordinator, 
         }
     }
 
-    public IReadOnlyList<string> ReleaseUnoccupiedResources(string ownerId) =>
-        ReleaseOwner(ownerId, includeOccupied: false);
+    public IReadOnlyList<string> ReleaseUnoccupiedResources(
+        string ownerId,
+        IReadOnlyCollection<string>? protectedResourceIds = null)
+    {
+        if (string.IsNullOrWhiteSpace(ownerId))
+            return Array.Empty<string>();
+
+        lock (_sync)
+        {
+            var protectedSet = (protectedResourceIds ?? Array.Empty<string>())
+                .ToHashSet(StringComparer.Ordinal);
+            var released = new List<string>();
+            foreach (var (resourceId, holds) in _holdsByResource)
+            {
+                if (protectedSet.Contains(resourceId) ||
+                    !holds.TryGetValue(ownerId, out var hold) ||
+                    hold.OccupancyConfirmed)
+                {
+                    continue;
+                }
+
+                holds.Remove(ownerId);
+                released.Add(resourceId);
+            }
+
+            RefreshWaitBlockersUnsafe(DateTime.UtcNow);
+            return released;
+        }
+    }
 
     public bool CancelWait(string ownerId)
     {

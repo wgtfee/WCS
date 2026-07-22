@@ -65,6 +65,7 @@ public sealed class TransportDeadlockService : ITransportDeadlockService
             .ThenByDescending(x => x.OwnerId, StringComparer.Ordinal)
             .First();
 
+        var protectedResources = Array.Empty<string>();
         TransportExecutionSnapshot? executionSnapshot = null;
         if (_execution is not null && _execution.TryGet(victim.OwnerId, out executionSnapshot) && executionSnapshot is not null)
         {
@@ -77,6 +78,13 @@ public sealed class TransportDeadlockService : ITransportDeadlockService
                 var preserveFirst = executionSnapshot.State is
                     TransportExecutionState.MovingToPickup or
                     TransportExecutionState.MovingToDestination;
+                if (preserveFirst)
+                {
+                    protectedResources = _traffic
+                        .GetResourceIdsForEdges(executionSnapshot.ActiveReservedEdges.Take(1))
+                        .ToArray();
+                }
+
                 var releasableEdges = executionSnapshot.ActiveReservedEdges
                     .Skip(preserveFirst ? 1 : 0)
                     .ToArray();
@@ -86,9 +94,10 @@ public sealed class TransportDeadlockService : ITransportDeadlockService
         }
 
         _traffic.CancelWait(victim.OwnerId);
-        var released = _traffic.ReleaseUnoccupiedResources(victim.OwnerId);
+        var released = _traffic.ReleaseUnoccupiedResources(victim.OwnerId, protectedResources);
         var retained = _traffic.GetHolds()
-            .Where(x => string.Equals(x.OwnerId, victim.OwnerId, StringComparison.Ordinal) && x.OccupancyConfirmed)
+            .Where(x => string.Equals(x.OwnerId, victim.OwnerId, StringComparison.Ordinal) &&
+                        (x.OccupancyConfirmed || protectedResources.Contains(x.ResourceId, StringComparer.Ordinal)))
             .Select(x => x.ResourceId)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(x => x, StringComparer.Ordinal)
@@ -106,7 +115,7 @@ public sealed class TransportDeadlockService : ITransportDeadlockService
         var message = status switch
         {
             TransportDeadlockResolutionStatus.Resolved => "已暂停受害任务并释放未来交通资源，死锁环已解除",
-            TransportDeadlockResolutionStatus.CycleBrokenAwaitingClearance => "死锁环已打断，但车辆仍占用物理资源，等待其安全退出",
+            TransportDeadlockResolutionStatus.CycleBrokenAwaitingClearance => "死锁环已打断，但车辆仍占用物理资源或安全缓冲区，等待其安全退出",
             _ => "自动处置后仍存在循环等待，需要人工介入"
         };
 
