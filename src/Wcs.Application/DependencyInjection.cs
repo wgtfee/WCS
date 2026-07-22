@@ -50,6 +50,9 @@ public static class DependencyInjection
         services.AddHostedService<TransportSingleTrackPermitCleanupHostedService>();
         services.AddHostedService<TransportProductionTrendHostedService>();
         services.AddHostedService<TransportFaultTakeoverHostedService>();
+        services.AddHostedService<TransportObservabilityInitializationHostedService>();
+        services.AddHostedService<TransportConsistencyInspectionHostedService>();
+        services.AddHostedService<TransportHealthEvaluationHostedService>();
 
         services.AddSingleton<IEventStore, FileEventStore>();
         services.AddSingleton<EventReplayService>();
