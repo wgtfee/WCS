@@ -13,7 +13,8 @@ public enum TransportJournalCategory
     ProductionStation = 6,
     SingleTrackSection = 7,
     ProductionTrend = 8,
-    DispatchDecision = 9
+    DispatchDecision = 9,
+    ProductionQueue = 10
 }
 
 public sealed record TransportJournalRecord
