@@ -71,13 +71,6 @@ public interface IWcsApiService
     Task<List<TransportTraceRecord>> GetTransportTracesAsync(int maxCount = 500, CancellationToken ct = default);
     Task<List<TransportConfigurationSnapshot>> GetTransportConfigurationSnapshotsAsync(int maxCount = 100, CancellationToken ct = default);
 
-    Task<TransportResilienceSnapshot?> GetTransportResilienceAsync(CancellationToken ct = default);
-    Task<TransportReadinessReport?> RunTransportReadinessAsync(CancellationToken ct = default);
-    Task<List<TransportOperationalBaseline>> GetTransportBaselinesAsync(int maxCount = 100, CancellationToken ct = default);
-    Task<List<TransportLogicalBackupManifest>> GetTransportBackupsAsync(int maxCount = 100, CancellationToken ct = default);
-    Task<TransportBackupValidationReport?> ValidateTransportBackupAsync(string backupId, CancellationToken ct = default);
-    Task<List<TransportRecoveryDrillReport>> GetTransportRecoveryDrillsAsync(int maxCount = 100, CancellationToken ct = default);
-
     Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default);
     Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null,
         string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default);
