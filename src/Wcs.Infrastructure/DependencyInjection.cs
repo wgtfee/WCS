@@ -38,6 +38,8 @@ public static class DependencyInjection
             _ => new SqlSugarTransportPlcSignalMapStore(connectionString)));
         services.Replace(ServiceDescriptor.Singleton<ITransportStateStore>(
             _ => new SqlSugarTransportStateStore(connectionString)));
+        services.Replace(ServiceDescriptor.Singleton<ITransportCommissioningStore>(
+            _ => new SqlSugarTransportCommissioningStore(connectionString)));
 
         return services;
     }
