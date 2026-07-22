@@ -33,7 +33,7 @@ public static class DependencyInjection
             BackupDirectory = backupDirectory
         };
 
-        services.Replace(ServiceDescriptor.Singleton(resilienceOptions));
+        services.Replace(ServiceDescriptor.Singleton<TransportResilienceOptions>(resilienceOptions));
         services.AddSingleton<IDatabaseInitializer>(sp =>
             new DatabaseInitializer(
                 connectionString,
