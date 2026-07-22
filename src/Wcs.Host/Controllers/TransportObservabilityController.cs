@@ -1,5 +1,6 @@
 namespace Wcs.Host.Controllers;
 
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Wcs.Core.TransportScheduling;
 
@@ -132,6 +133,29 @@ public sealed class TransportObservabilityController : ControllerBase
                 cancellationToken);
             throw;
         }
+    }
+
+    [HttpGet("report/export")]
+    public async Task<IActionResult> ExportReport(CancellationToken cancellationToken)
+    {
+        var report = new
+        {
+            GeneratedAtUtc = DateTime.UtcNow,
+            Summary = _observability.GetSnapshot(),
+            Metrics = _telemetry.GetMetricsSnapshot(),
+            ConsistencyReports = _consistency.GetRecentReports(100),
+            Traces = _telemetry.GetRecentTraces(1000),
+            ConfigurationSnapshots = await _snapshots.GetAsync(100, cancellationToken)
+        };
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true
+        };
+        var payload = JsonSerializer.SerializeToUtf8Bytes(report, options);
+        return File(
+            payload,
+            "application/json",
+            $"transport-observability-{DateTime.UtcNow:yyyyMMddHHmmss}.json");
     }
 }
 
