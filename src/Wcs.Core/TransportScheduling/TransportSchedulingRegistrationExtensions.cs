@@ -35,13 +35,17 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportStationCongestionService, TransportStationCongestionService>();
         services.TryAddSingleton<ITransportSingleTrackCoordinator, TransportSingleTrackCoordinator>();
         services.AddSingleton<ITransportDispatchAdmissionPolicy, TransportSingleTrackDispatchAdmissionPolicy>();
-        services.TryAddSingleton<ITransportDispatchDecisionStore, InMemoryTransportDispatchDecisionStore>();
+        services.TryAddSingleton<JournalTransportDispatchDecisionStore>();
+        services.TryAddSingleton<ITransportDispatchDecisionStore>(sp =>
+            sp.GetRequiredService<JournalTransportDispatchDecisionStore>());
         services.TryAddSingleton<ITransportDynamicPriorityService, TransportDynamicPriorityService>();
 
         services.TryAddSingleton<InMemoryRouteReservationManager>();
         services.TryAddSingleton<IRouteReservationManager, TrafficAwareRouteReservationManager>();
         services.TryAddSingleton<IUnifiedTransportDispatchEngine, UnifiedTransportDispatchEngine>();
-        services.TryAddSingleton<ITransportProductionDispatchService, TransportProductionDispatchService>();
+        services.TryAddSingleton<ReliableTransportProductionDispatchService>();
+        services.TryAddSingleton<ITransportProductionDispatchService>(sp =>
+            sp.GetRequiredService<ReliableTransportProductionDispatchService>());
         services.TryAddSingleton<InMemoryTransportExecutionEngine>();
         services.TryAddSingleton<CoordinatedTransportExecutionEngine>();
         services.TryAddSingleton<ITransportExecutionEngine>(sp =>
