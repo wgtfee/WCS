@@ -13,6 +13,7 @@
 - [ ] `CongestionForecast_ReportsHeavyLevelForOverloadedFleet`
 - [ ] `CapacityGuard_RejectsDangerousTaskRate`
 - [ ] `SimulationHistory_RestoresFromJournalAfterRestart`
+- [ ] `QueueSnapshotRead_DoesNotRefreshPriorityAfterTuningChange`
 - [ ] 第一至第十一步全部既有测试继续通过
 
 ## Core Static Checks
@@ -29,6 +30,8 @@
 - [ ] 容量估算任务总量不超过 2,000,000
 - [ ] 同一时刻仅允许一个容量压力任务
 - [ ] 相同任务/故障/Seed 使用相同故障样本
+- [ ] 运行时 `GetQueue()` 使用纯快照，不刷新优先级或清理终态任务
+- [ ] 真实 `DispatchCycleAsync()` 继续执行优先级刷新和终态清理
 - [ ] 仿真不调用 `ITransportCommandDispatcher`
 - [ ] 仿真不调用 `ITransportPlcAccessor`
 - [ ] 仿真不调用 `ITransportExecutionEngine.Create/Start`
@@ -61,7 +64,7 @@
 - [ ] 仿真前后生产车辆状态不变
 - [ ] 仿真前后站点业务状态不变
 - [ ] 仿真前后生产整定参数不变
-- [ ] 仿真不改变等待队列顺序
+- [ ] 仿真不改变等待队列优先级、状态和更新时间
 - [ ] 仿真不改变活动任务和路权
 - [ ] 故障注入不触发真实 PLC 写入
 - [ ] 验收 Passed 仍保留现场人工检查清单
