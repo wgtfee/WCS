@@ -28,7 +28,7 @@ public interface ITransportTelemetryService
 
 public sealed class TransportTelemetryService : ITransportTelemetryService, IDisposable
 {
-    private const int Capacity = 5000;
+    private readonly int _capacity;
     private readonly ActivitySource _activitySource = new(TransportTelemetryNames.ActivitySourceName);
     private readonly Meter _meter = new(TransportTelemetryNames.MeterName);
     private readonly Counter<long> _operationCounter;
@@ -38,14 +38,16 @@ public sealed class TransportTelemetryService : ITransportTelemetryService, IDis
     private readonly Histogram<double> _plcResponseHistogram;
     private readonly Counter<long> _consistencyIssueCounter;
     private readonly ConcurrentQueue<TransportTraceRecord> _traces = new();
+    private readonly ConcurrentDictionary<string, ActivityContext> _requestContexts = new(StringComparer.Ordinal);
     private readonly object _metricsSync = new();
     private readonly Dictionary<TransportTraceOperationKind, MutableOperationMetric> _metrics = new();
     private long _consistencyIssueCount;
     private double _lastQueueWaitMilliseconds;
     private double _lastPlcResponseMilliseconds;
 
-    public TransportTelemetryService()
+    public TransportTelemetryService(TransportObservabilityOptions? options = null)
     {
+        _capacity = Math.Clamp(options?.TraceRetentionCount ?? 5000, 100, 100000);
         _operationCounter = _meter.CreateCounter<long>(
             "wcs.transport.operations",
             unit: "operations",
@@ -82,7 +84,21 @@ public sealed class TransportTelemetryService : ITransportTelemetryService, IDis
         if (string.IsNullOrWhiteSpace(operationName))
             throw new ArgumentException("OperationName 不能为空", nameof(operationName));
 
-        var activity = _activitySource.StartActivity(operationName, ActivityKind.Internal);
+        Activity? activity;
+        if (Activity.Current is null &&
+            !string.IsNullOrWhiteSpace(requestId) &&
+            _requestContexts.TryGetValue(requestId, out var correlatedContext))
+        {
+            activity = _activitySource.StartActivity(
+                operationName,
+                ActivityKind.Internal,
+                correlatedContext);
+        }
+        else
+        {
+            activity = _activitySource.StartActivity(operationName, ActivityKind.Internal);
+        }
+
         activity?.SetTag("wcs.transport.operation.kind", kind.ToString());
         activity?.SetTag("wcs.transport.request.id", requestId);
         activity?.SetTag("wcs.transport.vehicle.id", vehicleId);
@@ -90,6 +106,13 @@ public sealed class TransportTelemetryService : ITransportTelemetryService, IDis
         {
             foreach (var pair in tags)
                 activity?.SetTag(pair.Key, pair.Value);
+        }
+
+        var currentContext = activity?.Context ?? Activity.Current?.Context;
+        if (!string.IsNullOrWhiteSpace(requestId) && currentContext.HasValue)
+        {
+            _requestContexts[requestId] = currentContext.Value;
+            TrimContexts();
         }
 
         return new TransportTelemetryOperation(
@@ -134,7 +157,7 @@ public sealed class TransportTelemetryService : ITransportTelemetryService, IDis
     public IReadOnlyList<TransportTraceRecord> GetRecentTraces(int maxCount = 500) =>
         _traces
             .OrderByDescending(x => x.CompletedAtUtc)
-            .Take(Math.Clamp(maxCount, 1, Capacity))
+            .Take(Math.Clamp(maxCount, 1, _capacity))
             .ToArray();
 
     public TransportTelemetryMetricsSnapshot GetMetricsSnapshot()
@@ -229,9 +252,16 @@ public sealed class TransportTelemetryService : ITransportTelemetryService, IDis
         }
 
         var current = activity ?? Activity.Current;
+        var context = current?.Context;
+        if (!context.HasValue &&
+            !string.IsNullOrWhiteSpace(requestId) &&
+            _requestContexts.TryGetValue(requestId, out var correlatedContext))
+        {
+            context = correlatedContext;
+        }
         _traces.Enqueue(new TransportTraceRecord
         {
-            TraceId = current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"),
+            TraceId = context?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"),
             SpanId = current?.SpanId.ToString() ?? Guid.NewGuid().ToString("N")[..16],
             ParentSpanId = current?.ParentSpanId.ToString(),
             Kind = kind,
@@ -245,7 +275,7 @@ public sealed class TransportTelemetryService : ITransportTelemetryService, IDis
             StartedAtUtc = startedAtUtc,
             CompletedAtUtc = DateTime.UtcNow
         });
-        while (_traces.Count > Capacity && _traces.TryDequeue(out _))
+        while (_traces.Count > _capacity && _traces.TryDequeue(out _))
         {
         }
 
@@ -256,6 +286,16 @@ public sealed class TransportTelemetryService : ITransportTelemetryService, IDis
     {
         _activitySource.Dispose();
         _meter.Dispose();
+    }
+
+    private void TrimContexts()
+    {
+        while (_requestContexts.Count > _capacity * 2)
+        {
+            var key = _requestContexts.Keys.FirstOrDefault();
+            if (key is null || !_requestContexts.TryRemove(key, out _))
+                break;
+        }
     }
 
     private sealed class MutableOperationMetric
