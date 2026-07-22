@@ -102,6 +102,9 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.VehicleCounts);
+        ArgumentNullException.ThrowIfNull(request.TaskRatesPerHour);
+        ArgumentNullException.ThrowIfNull(request.Policy);
         var vehicles = request.VehicleCounts
             .Distinct()
             .Where(x => x > 0)
@@ -132,17 +135,9 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
 
         if (!await _capacityGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("已有容量压力仿真正在运行，请等待该任务完成");
-        using var operation = _telemetry.StartOperation(
-            TransportTraceOperationKind.CapacityBenchmark,
-            "transport.simulation.capacity.guard",
-            tags: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["capacity.grid.points"] = gridPoints.ToString(),
-                ["capacity.estimated.tasks"] = estimatedTasks.ToString()
-            });
         try
         {
-            var result = await _inner.RunCapacityBenchmarkAsync(
+            return await _inner.RunCapacityBenchmarkAsync(
                 request with
                 {
                     VehicleCounts = vehicles,
@@ -152,13 +147,6 @@ public sealed class SafeTransportSimulationService : ITransportSimulationService
                 },
                 initiatedBy,
                 cancellationToken).ConfigureAwait(false);
-            operation.Complete(true, result.Conclusion);
-            return result;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            operation.Complete(false, ex.Message);
-            throw;
         }
         finally
         {
