@@ -23,6 +23,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
     private readonly ITransportTelemetryService _telemetry;
     private readonly ITransportJournalStore _journal;
     private readonly IAlarmCenter _alarms;
+    private readonly TransportObservabilityOptions _options;
     private readonly object _sync = new();
     private readonly List<TransportConsistencyReport> _reports = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -35,7 +36,8 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         ITransportDriverDiagnosticsService diagnostics,
         ITransportTelemetryService telemetry,
         ITransportJournalStore journal,
-        IAlarmCenter alarms)
+        IAlarmCenter alarms,
+        TransportObservabilityOptions options)
     {
         _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
         _vehicles = vehicles ?? throw new ArgumentNullException(nameof(vehicles));
@@ -45,6 +47,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
         _journal = journal ?? throw new ArgumentNullException(nameof(journal));
         _alarms = alarms ?? throw new ArgumentNullException(nameof(alarms));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
@@ -79,15 +82,11 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         {
             var persisted = await _stateStore.LoadAsync(cancellationToken).ConfigureAwait(false);
             var runtimeVehicles = _vehicles.GetAll();
-            var runtimeExecutions = _executions.GetAll();
-            var runtimeReservations = _reservations.GetActiveReservations();
-            var diagnostics = _diagnostics.GetAll();
             var issues = new List<TransportConsistencyIssue>();
-
             CompareVehicles(runtimeVehicles, persisted.Vehicles, issues);
-            CompareExecutions(runtimeExecutions, persisted.Executions, issues);
-            CompareReservations(runtimeReservations, persisted.Reservations, issues);
-            ComparePlc(runtimeVehicles, persisted.Commands, diagnostics, issues);
+            CompareExecutions(_executions.GetAll(), persisted.Executions, issues);
+            CompareReservations(_reservations.GetActiveReservations(), persisted.Reservations, issues);
+            ComparePlc(runtimeVehicles, persisted.Commands, _diagnostics.GetAll(), issues);
 
             var report = new TransportConsistencyReport
             {
@@ -95,25 +94,11 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
                 StartedAtUtc = started,
                 CompletedAtUtc = DateTime.UtcNow
             };
-            await SaveAsync(report, cancellationToken).ConfigureAwait(false);
-            await UpdateAlarmAsync(report, cancellationToken).ConfigureAwait(false);
-
-            if (issues.Count > 0)
-            {
-                _telemetry.RecordConsistencyIssues(
-                    issues.Count,
-                    issues.Max(x => x.Severity));
-            }
+            await FinalizeAsync(report, cancellationToken).ConfigureAwait(false);
             operation.Complete(
                 report.IsConsistent,
                 report.IsConsistent ? "三方状态一致" : $"发现 {issues.Count} 项状态差异",
-                new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    ["issues.total"] = issues.Count.ToString(),
-                    ["issues.critical"] = report.CriticalCount.ToString(),
-                    ["issues.error"] = report.ErrorCount.ToString(),
-                    ["issues.warning"] = report.WarningCount.ToString()
-                });
+                IssueTags(report));
             return report;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -126,7 +111,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
                 CompletedAtUtc = DateTime.UtcNow,
                 Issues = new[]
                 {
-                    Issue(
+                    CreateIssue(
                         TransportConsistencyIssueType.InspectionFailure,
                         TransportConsistencySeverity.Critical,
                         "Inspection",
@@ -137,10 +122,8 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
                         $"一致性巡检失败：{ex.Message}")
                 }
             };
-            await SaveAsync(report, cancellationToken).ConfigureAwait(false);
-            await UpdateAlarmAsync(report, cancellationToken).ConfigureAwait(false);
-            _telemetry.RecordConsistencyIssues(1, TransportConsistencySeverity.Critical);
-            operation.Complete(false, ex.Message);
+            await FinalizeAsync(report, cancellationToken).ConfigureAwait(false);
+            operation.Complete(false, ex.Message, IssueTags(report));
             return report;
         }
         finally
@@ -166,6 +149,33 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         }
     }
 
+    private async Task FinalizeAsync(
+        TransportConsistencyReport report,
+        CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            _reports.Add(report);
+            TrimUnsafe();
+        }
+        await _journal.UpsertAsync(new TransportJournalRecord
+        {
+            Category = TransportJournalCategory.ConsistencyReport,
+            RecordId = report.ReportId,
+            PayloadJson = JsonSerializer.Serialize(report),
+            OccurredAtUtc = report.CompletedAtUtc
+        }, cancellationToken).ConfigureAwait(false);
+
+        if (report.Issues.Count > 0)
+        {
+            _telemetry.RecordConsistencyIssues(
+                report.Issues.Count,
+                report.Issues.Max(x => x.Severity));
+        }
+        if (_options.RaiseConsistencyAlarms)
+            await UpdateAlarmAsync(report, cancellationToken).ConfigureAwait(false);
+    }
+
     private static void CompareVehicles(
         IReadOnlyList<TransportVehicleSnapshot> runtime,
         IReadOnlyList<TransportVehicleSnapshot> persisted,
@@ -177,7 +187,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         {
             if (!persistedById.TryGetValue(vehicle.VehicleId, out var saved))
             {
-                issues.Add(Issue(
+                issues.Add(CreateIssue(
                     TransportConsistencyIssueType.PersistedVehicleMissing,
                     TransportConsistencySeverity.Error,
                     "Vehicle",
@@ -190,7 +200,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
             }
             if (!string.Equals(vehicle.CurrentNodeId, saved.CurrentNodeId, StringComparison.Ordinal))
             {
-                issues.Add(Issue(
+                issues.Add(CreateIssue(
                     TransportConsistencyIssueType.VehiclePositionMismatch,
                     TransportConsistencySeverity.Error,
                     "Vehicle",
@@ -202,7 +212,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
             }
             if (vehicle.IsOnline != saved.IsOnline)
             {
-                issues.Add(Issue(
+                issues.Add(CreateIssue(
                     TransportConsistencyIssueType.VehicleOnlineStateMismatch,
                     TransportConsistencySeverity.Warning,
                     "Vehicle",
@@ -215,7 +225,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         }
         foreach (var saved in persisted.Where(x => !runtimeById.ContainsKey(x.VehicleId)))
         {
-            issues.Add(Issue(
+            issues.Add(CreateIssue(
                 TransportConsistencyIssueType.RuntimeVehicleMissing,
                 TransportConsistencySeverity.Error,
                 "Vehicle",
@@ -238,7 +248,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         {
             if (!persistedActive.TryGetValue(execution.RequestId, out var saved))
             {
-                issues.Add(Issue(
+                issues.Add(CreateIssue(
                     TransportConsistencyIssueType.PersistedExecutionMissing,
                     TransportConsistencySeverity.Critical,
                     "Execution",
@@ -252,7 +262,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
             if (execution.State != saved.State ||
                 !string.Equals(execution.VehicleId, saved.VehicleId, StringComparison.Ordinal))
             {
-                issues.Add(Issue(
+                issues.Add(CreateIssue(
                     TransportConsistencyIssueType.ExecutionStateMismatch,
                     TransportConsistencySeverity.Critical,
                     "Execution",
@@ -265,7 +275,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         }
         foreach (var saved in persistedActive.Values.Where(x => !runtimeActive.ContainsKey(x.RequestId)))
         {
-            issues.Add(Issue(
+            issues.Add(CreateIssue(
                 TransportConsistencyIssueType.RuntimeExecutionMissing,
                 TransportConsistencySeverity.Critical,
                 "Execution",
@@ -286,7 +296,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         var persistedIds = persisted.Select(x => x.ReservationId).ToHashSet(StringComparer.Ordinal);
         foreach (var reservation in runtime.Where(x => !persistedIds.Contains(x.ReservationId)))
         {
-            issues.Add(Issue(
+            issues.Add(CreateIssue(
                 TransportConsistencyIssueType.PersistedReservationMissing,
                 TransportConsistencySeverity.Critical,
                 "Reservation",
@@ -298,7 +308,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         }
         foreach (var reservation in persisted.Where(x => !runtimeIds.Contains(x.ReservationId)))
         {
-            issues.Add(Issue(
+            issues.Add(CreateIssue(
                 TransportConsistencyIssueType.RuntimeReservationMissing,
                 TransportConsistencySeverity.Error,
                 "Reservation",
@@ -321,7 +331,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         {
             if (!diagnostic.AccessorConnected || !diagnostic.DeviceOnline)
             {
-                issues.Add(Issue(
+                issues.Add(CreateIssue(
                     TransportConsistencyIssueType.PlcDeviceOffline,
                     TransportConsistencySeverity.Error,
                     "Vehicle",
@@ -337,7 +347,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
                 !string.IsNullOrWhiteSpace(diagnostic.CurrentNodeId) &&
                 !string.Equals(vehicle.CurrentNodeId, diagnostic.CurrentNodeId, StringComparison.Ordinal))
             {
-                issues.Add(Issue(
+                issues.Add(CreateIssue(
                     TransportConsistencyIssueType.PlcPositionMismatch,
                     TransportConsistencySeverity.Critical,
                     "Vehicle",
@@ -358,7 +368,7 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
                 !string.IsNullOrWhiteSpace(plcCommandId) &&
                 !string.Equals(activeCommand.CommandId, plcCommandId, StringComparison.Ordinal))
             {
-                issues.Add(Issue(
+                issues.Add(CreateIssue(
                     TransportConsistencyIssueType.PlcCommandMismatch,
                     TransportConsistencySeverity.Critical,
                     "Command",
@@ -371,24 +381,6 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
         }
     }
 
-    private async Task SaveAsync(
-        TransportConsistencyReport report,
-        CancellationToken cancellationToken)
-    {
-        lock (_sync)
-        {
-            _reports.Add(report);
-            TrimUnsafe();
-        }
-        await _journal.UpsertAsync(new TransportJournalRecord
-        {
-            Category = TransportJournalCategory.ConsistencyReport,
-            RecordId = report.ReportId,
-            PayloadJson = JsonSerializer.Serialize(report),
-            OccurredAtUtc = report.CompletedAtUtc
-        }, cancellationToken).ConfigureAwait(false);
-    }
-
     private async Task UpdateAlarmAsync(
         TransportConsistencyReport report,
         CancellationToken cancellationToken)
@@ -398,7 +390,6 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
             await _alarms.RecoverAlarmAsync(AlarmCode, cancellationToken).ConfigureAwait(false);
             return;
         }
-
         var level = report.CriticalCount > 0
             ? AlarmLevelEnum.Critical
             : report.ErrorCount > 0
@@ -423,10 +414,19 @@ public sealed class TransportConsistencyInspectionService : ITransportConsistenc
             _reports.RemoveRange(0, excess);
     }
 
+    private static IReadOnlyDictionary<string, string> IssueTags(TransportConsistencyReport report) =>
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["issues.total"] = report.Issues.Count.ToString(),
+            ["issues.critical"] = report.CriticalCount.ToString(),
+            ["issues.error"] = report.ErrorCount.ToString(),
+            ["issues.warning"] = report.WarningCount.ToString()
+        };
+
     private static string Describe(TransportVehicleSnapshot vehicle) =>
         $"{vehicle.State}@{vehicle.CurrentNodeId},online={vehicle.IsOnline},v={vehicle.Version}";
 
-    private static TransportConsistencyIssue Issue(
+    private static TransportConsistencyIssue CreateIssue(
         TransportConsistencyIssueType type,
         TransportConsistencySeverity severity,
         string entityType,
