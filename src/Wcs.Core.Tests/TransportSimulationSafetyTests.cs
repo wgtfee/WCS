@@ -52,6 +52,40 @@ public class TransportSimulationSafetyTests
         Assert.Equal(1, restoredService.GetSummary().RunCount);
     }
 
+    [Fact]
+    public async Task QueueSnapshotRead_DoesNotRefreshPriorityAfterTuningChange()
+    {
+        using var provider = CreateProvider();
+        var production = provider.GetRequiredService<ITransportProductionDispatchService>();
+        var tuning = provider.GetRequiredService<ITransportProductionTuningService>();
+        var enqueued = production.Enqueue(new TransportProductionDispatchRequest
+        {
+            Request = new TransportDispatchRequest
+            {
+                RequestId = "SNAPSHOT-01",
+                SourceNodeId = "N1",
+                DestinationNodeId = "N2",
+                Priority = 10
+            },
+            EnqueuedAtUtc = DateTime.UtcNow.AddMinutes(-10)
+        });
+        var saved = await tuning.SaveAsync(
+            tuning.Current with
+            {
+                AgingPointsPerMinute = tuning.Current.AgingPointsPerMinute + 20
+            },
+            tuning.Current.Version,
+            "tester");
+        Assert.True(saved.Success, saved.Error);
+
+        var snapshot = Assert.Single(production.GetQueue());
+
+        Assert.Equal(enqueued.EffectivePriority, snapshot.EffectivePriority);
+        Assert.Equal(enqueued.UpdatedAtUtc, snapshot.UpdatedAtUtc);
+        Assert.Equal(enqueued.State, snapshot.State);
+        Assert.Equal(enqueued.AttemptCount, snapshot.AttemptCount);
+    }
+
     private static TransportSimulationScenario CreateScenario() => new()
     {
         Name = "restart-history",
