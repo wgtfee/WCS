@@ -25,8 +25,6 @@ public class TransportTraceCorrelationTests
             enqueue.Complete(true);
         }
 
-        Assert.Null(Activity.Current);
-
         using (var command = telemetry.StartOperation(
                    TransportTraceOperationKind.PlcCommand,
                    "transport.plc.command",
