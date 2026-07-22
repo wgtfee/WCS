@@ -69,7 +69,12 @@ public class TransportResilienceTests
         using var provider = CreateProvider();
         var service = provider.GetRequiredService<ITransportResilienceService>();
         var configuration = provider.GetRequiredService<ITransportConfigurationService>();
-        var before = await configuration.GetAsync();
+        var saved = await configuration.SaveAndApplyAsync(
+            new TransportRuntimeConfiguration(),
+            0,
+            "fixture");
+        Assert.True(saved.Success, saved.Error);
+        var before = Assert.IsType<TransportRuntimeConfiguration>(saved.Configuration);
         var manifest = await service.CreateBackupAsync("baseline", "test", "tester");
 
         var result = await service.PrepareRestoreAsync(manifest.BackupId, "operator");
@@ -78,6 +83,7 @@ public class TransportResilienceTests
         Assert.True(result.Success, result.Error);
         Assert.NotNull(result.ImportedSnapshot);
         AssertConfigurationUnchanged(before, after);
+        AssertConfigurationUnchanged(before, result.ImportedSnapshot.RuntimeConfiguration);
         Assert.Contains(result.ManualRecoveryActions, x => x.Contains("活动任务", StringComparison.Ordinal));
         Assert.Contains(result.ManualRecoveryActions, x => x.Contains("PLC 点位映射", StringComparison.Ordinal));
     }
