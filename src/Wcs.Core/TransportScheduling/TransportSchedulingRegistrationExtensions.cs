@@ -10,7 +10,7 @@ public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
     /// 注册 EMS/RGV 统一调度、执行、恢复、交通控制、充电、治理、PLC 驱动、
-    /// 现场联调、生产调度、可观测性，以及第十一步生产就绪、逻辑备份和隔离恢复演练组件。
+    /// 现场联调、生产调度、可观测性、生产韧性，以及第十二阶段离线仿真、优化和最终验收组件。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
     {
@@ -18,6 +18,7 @@ public static class TransportSchedulingRegistrationExtensions
 
         services.TryAddSingleton(new TransportObservabilityOptions());
         services.TryAddSingleton(new TransportResilienceOptions());
+        services.TryAddSingleton(new TransportSimulationOptions());
         services.TryAddSingleton<TransportTelemetryService>();
         services.TryAddSingleton<ITransportTelemetryService>(sp =>
             sp.GetRequiredService<TransportTelemetryService>());
@@ -119,6 +120,7 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportConsistencyInspectionService, TransportConsistencyInspectionService>();
         services.TryAddSingleton<ITransportObservabilityService, TransportObservabilityService>();
         services.TryAddSingleton<ITransportResilienceService, TransportResilienceService>();
+        services.TryAddSingleton<ITransportSimulationService, TransportSimulationService>();
 
         return services;
     }
