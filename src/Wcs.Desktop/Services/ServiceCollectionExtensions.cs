@@ -15,6 +15,7 @@ public static class ServiceCollectionExtensions
         services.Configure<WcsDesktopOptions>(config.GetSection("WcsDesktop"));
         services.AddHttpClient<IWcsApiService, WcsApiService>();
         services.AddHttpClient<ITransportResilienceApiService, TransportResilienceApiService>();
+        services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>();
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
         services.AddSingleton<IDataProvider, ApiDataProvider>();
         services.AddTransient<LoginViewModel>();
@@ -37,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<TransportProductionViewModel>();
         services.AddTransient<TransportObservabilityViewModel>();
         services.AddTransient<TransportResilienceViewModel>();
+        services.AddTransient<TransportSimulationViewModel>();
         return services;
     }
 }
