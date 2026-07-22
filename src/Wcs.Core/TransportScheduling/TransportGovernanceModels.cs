@@ -10,6 +10,9 @@ public static class TransportPermissions
     public const string ForceReleaseTraffic = "transport.traffic.force-release";
     public const string OverrideLowBattery = "transport.battery.override";
     public const string SendManualDriverCommand = "transport.driver.manual-command";
+    public const string WritePlcSignal = "transport.driver.signal-write";
+    public const string ResolveRecoveryConflict = "transport.recovery.resolve";
+    public const string RetryCommandCompensation = "transport.command.compensate";
     public const string ApproveCriticalOperation = "transport.operation.approve";
 }
 
@@ -19,7 +22,10 @@ public enum TransportGovernedOperationType
     ReassignTask = 1,
     ForceReleaseTraffic = 2,
     OverrideLowBattery = 3,
-    SendManualDriverCommand = 4
+    SendManualDriverCommand = 4,
+    WritePlcSignal = 5,
+    ResolveRecoveryConflict = 6,
+    RetryCommandCompensation = 7
 }
 
 public enum TransportGovernedOperationState
