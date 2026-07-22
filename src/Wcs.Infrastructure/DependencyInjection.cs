@@ -34,15 +34,42 @@ public static class DependencyInjection
         };
         var simulationOptions = new TransportSimulationOptions
         {
-            MaximumScenarioTasks = GetInt(configuration, "TransportSimulation:MaximumScenarioTasks", 10000),
-            MaximumStoredRuns = GetInt(configuration, "TransportSimulation:MaximumStoredRuns", 200),
-            MaximumStoredComparisons = GetInt(configuration, "TransportSimulation:MaximumStoredComparisons", 100),
-            ForecastBucketSeconds = GetInt(configuration, "TransportSimulation:ForecastBucketSeconds", 60),
-            DefaultTravelSeconds = GetInt(configuration, "TransportSimulation:DefaultTravelSeconds", 30),
-            DefaultServiceSeconds = GetInt(configuration, "TransportSimulation:DefaultServiceSeconds", 10),
-            SustainableP95WaitingSeconds = GetDouble(configuration, "TransportSimulation:SustainableP95WaitingSeconds", 120),
-            SustainableDeadlineMissRatePercent = GetDouble(configuration, "TransportSimulation:SustainableDeadlineMissRatePercent", 5),
-            HistoricalJournalLimit = GetInt(configuration, "TransportSimulation:HistoricalJournalLimit", 20000)
+            MaximumScenarioTasks = Math.Clamp(
+                GetInt(configuration, "TransportSimulation:MaximumScenarioTasks", 10000),
+                1,
+                100000),
+            MaximumStoredRuns = Math.Clamp(
+                GetInt(configuration, "TransportSimulation:MaximumStoredRuns", 200),
+                10,
+                5000),
+            MaximumStoredComparisons = Math.Clamp(
+                GetInt(configuration, "TransportSimulation:MaximumStoredComparisons", 100),
+                10,
+                1000),
+            ForecastBucketSeconds = Math.Clamp(
+                GetInt(configuration, "TransportSimulation:ForecastBucketSeconds", 60),
+                10,
+                3600),
+            DefaultTravelSeconds = Math.Clamp(
+                GetInt(configuration, "TransportSimulation:DefaultTravelSeconds", 30),
+                1,
+                3600),
+            DefaultServiceSeconds = Math.Clamp(
+                GetInt(configuration, "TransportSimulation:DefaultServiceSeconds", 10),
+                0,
+                3600),
+            SustainableP95WaitingSeconds = Math.Clamp(
+                GetDouble(configuration, "TransportSimulation:SustainableP95WaitingSeconds", 120),
+                0,
+                86400),
+            SustainableDeadlineMissRatePercent = Math.Clamp(
+                GetDouble(configuration, "TransportSimulation:SustainableDeadlineMissRatePercent", 5),
+                0,
+                100),
+            HistoricalJournalLimit = Math.Clamp(
+                GetInt(configuration, "TransportSimulation:HistoricalJournalLimit", 20000),
+                100,
+                50000)
         };
 
         services.Replace(ServiceDescriptor.Singleton<TransportResilienceOptions>(resilienceOptions));
