@@ -10,11 +10,16 @@ public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
     /// 注册 EMS/RGV 统一调度、执行、恢复、交通控制、充电、治理、PLC 驱动、
-    /// 现场联调，以及第九阶段生产竞争队列、站点拥堵、单轨会车、趋势和故障接管组件。
+    /// 现场联调、生产调度，以及第十阶段链路追踪、指标、三方一致性、健康评分和配置回滚组件。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton(new TransportObservabilityOptions());
+        services.TryAddSingleton<TransportTelemetryService>();
+        services.TryAddSingleton<ITransportTelemetryService>(sp =>
+            sp.GetRequiredService<TransportTelemetryService>());
 
         services.TryAddSingleton<TopologyGraph>();
         services.TryAddSingleton<ITransportRouteCenter, TransportRouteCenter>();
@@ -42,10 +47,14 @@ public static class TransportSchedulingRegistrationExtensions
 
         services.TryAddSingleton<InMemoryRouteReservationManager>();
         services.TryAddSingleton<IRouteReservationManager, TrafficAwareRouteReservationManager>();
-        services.TryAddSingleton<IUnifiedTransportDispatchEngine, UnifiedTransportDispatchEngine>();
+        services.TryAddSingleton<UnifiedTransportDispatchEngine>();
+        services.TryAddSingleton<ObservableUnifiedTransportDispatchEngine>();
+        services.TryAddSingleton<IUnifiedTransportDispatchEngine>(sp =>
+            sp.GetRequiredService<ObservableUnifiedTransportDispatchEngine>());
         services.TryAddSingleton<ReliableTransportProductionDispatchService>();
+        services.TryAddSingleton<ObservableTransportProductionDispatchService>();
         services.TryAddSingleton<ITransportProductionDispatchService>(sp =>
-            sp.GetRequiredService<ReliableTransportProductionDispatchService>());
+            sp.GetRequiredService<ObservableTransportProductionDispatchService>());
         services.TryAddSingleton<InMemoryTransportExecutionEngine>();
         services.TryAddSingleton<CoordinatedTransportExecutionEngine>();
         services.TryAddSingleton<ITransportExecutionEngine>(sp =>
@@ -78,7 +87,10 @@ public static class TransportSchedulingRegistrationExtensions
                 sp.GetRequiredService<ITransportPlcSignalMapRegistry>(),
                 sp.GetRequiredService<ITransportDriverChannel>()));
         services.TryAddSingleton<ITransportDriverResolver, TransportDriverResolver>();
-        services.TryAddSingleton<ITransportCommandDispatcher, TransportCommandDispatcher>();
+        services.TryAddSingleton<TransportCommandDispatcher>();
+        services.TryAddSingleton<ObservableTransportCommandDispatcher>();
+        services.TryAddSingleton<ITransportCommandDispatcher>(sp =>
+            sp.GetRequiredService<ObservableTransportCommandDispatcher>());
         services.TryAddSingleton<ITransportRecoveryCoordinator, TransportRecoveryCoordinator>();
         services.TryAddSingleton<ITransportDriverSynchronizationService, TransportDriverSynchronizationService>();
 
@@ -93,6 +105,7 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportConfigurationService, TransportConfigurationService>();
         services.TryAddSingleton<ITransportOperationGovernanceService, TransportOperationGovernanceService>();
         services.TryAddSingleton<ITransportPlcSignalMapService, TransportPlcSignalMapService>();
+        services.TryAddSingleton<ITransportConfigurationSnapshotService, TransportConfigurationSnapshotService>();
 
         services.TryAddSingleton<ITransportPointTableImporter, TransportPointTableImporter>();
         services.TryAddSingleton<ITransportSignalTemplateService, TransportSignalTemplateService>();
@@ -100,6 +113,9 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportFaultCatalogService, TransportFaultCatalogService>();
         services.TryAddSingleton<ITransportRecoveryConflictService, TransportRecoveryConflictService>();
         services.TryAddSingleton<ITransportCommandCompensationService, TransportCommandCompensationService>();
+
+        services.TryAddSingleton<ITransportConsistencyInspectionService, TransportConsistencyInspectionService>();
+        services.TryAddSingleton<ITransportObservabilityService, TransportObservabilityService>();
 
         return services;
     }
