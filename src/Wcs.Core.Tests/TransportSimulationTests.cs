@@ -45,7 +45,7 @@ public class TransportSimulationTests
             BatteryPercent = 90,
             Version = 1
         });
-        stations.UpsertDefinition(new TransportStationDefinition
+        await stations.SaveDefinitionAsync(new TransportStationDefinition
         {
             StationId = "S1",
             Name = "S1",
@@ -149,7 +149,7 @@ public class TransportSimulationTests
 
         Assert.All(run.Tasks, x => Assert.False(x.Completed));
         Assert.All(run.Tasks, x => Assert.True(x.DispatchOffsetSeconds >= 100));
-        Assert.All(run.Tasks, x => Assert.Contains("故障", x.FailureReason, StringComparison.Ordinal));
+        Assert.All(run.Tasks, x => Assert.Contains("故障", x.FailureReason ?? string.Empty, StringComparison.Ordinal));
     }
 
     [Fact]
