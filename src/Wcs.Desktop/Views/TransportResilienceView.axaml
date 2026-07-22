@@ -1,0 +1,138 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:Class="Wcs.Desktop.Views.TransportResilienceView"
+             x:DataType="vm:TransportResilienceViewModel"
+             Background="{DynamicResource BgPrimary}">
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+            <StackPanel>
+                <TextBlock Text="EMS / RGV 生产韧性与恢复演练"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <TextBlock Text="生产就绪检查、运行基线、逻辑备份、完整性校验和隔离恢复演练"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+                <TextBlock Text="恢复准备只生成待审批配置快照，不自动恢复活动任务、路权或 PLC 命令"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+                <TextBlock Text="{Binding StatusText}"
+                           Margin="0,4,0,0"
+                           Foreground="{DynamicResource TextSecondary}" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Content="生产就绪检查"
+                    Command="{Binding RunReadinessCommand}"
+                    Padding="18,8" />
+            <Button Grid.Column="2"
+                    Content="刷新"
+                    Command="{Binding RefreshCommand}"
+                    Padding="20,8" />
+        </Grid>
+
+        <UniformGrid Grid.Row="1" Columns="8" Rows="1">
+            <Border Margin="0,0,5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="就绪状态" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ReadinessState}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="Critical" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding CriticalCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="Error" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ErrorCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="Warning" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding WarningCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="备份数量" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding BackupCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="演练数量" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding DrillCount}" FontSize="20" FontWeight="Bold" /></StackPanel>
+            </Border>
+            <Border Margin="5,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="最近备份" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding LastBackupText}" FontSize="13" FontWeight="Bold" TextWrapping="Wrap" /></StackPanel>
+            </Border>
+            <Border Margin="5,0,0,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel><TextBlock Text="最近演练" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding LastDrillText}" FontSize="13" FontWeight="Bold" TextWrapping="Wrap" /></StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="生产就绪检查">
+                <DataGrid ItemsSource="{Binding ReadinessChecks}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="通过" Binding="{Binding Passed}" Width="80" />
+                        <DataGridTextColumn Header="检查项" Binding="{Binding CheckType}" Width="220" />
+                        <DataGridTextColumn Header="级别" Binding="{Binding Severity}" Width="110" />
+                        <DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="运行基线">
+                <DataGrid ItemsSource="{Binding Baselines}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="基线号" Binding="{Binding BaselineId}" Width="240" />
+                        <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="160" />
+                        <DataGridTextColumn Header="配置版本" Binding="{Binding RuntimeConfigurationVersion}" Width="110" />
+                        <DataGridTextColumn Header="整定版本" Binding="{Binding ProductionTuningVersion}" Width="110" />
+                        <DataGridTextColumn Header="车辆" Binding="{Binding VehicleCount}" Width="80" />
+                        <DataGridTextColumn Header="在线" Binding="{Binding OnlineVehicleCount}" Width="80" />
+                        <DataGridTextColumn Header="活动任务" Binding="{Binding ActiveExecutionCount}" Width="100" />
+                        <DataGridTextColumn Header="路权" Binding="{Binding ActiveReservationCount}" Width="80" />
+                        <DataGridTextColumn Header="创建人" Binding="{Binding CapturedBy}" Width="120" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding CapturedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="逻辑备份">
+                <Grid RowDefinitions="Auto,*,Auto,*" RowSpacing="8">
+                    <Button Grid.Row="0"
+                            HorizontalAlignment="Left"
+                            Content="校验选中备份"
+                            Command="{Binding ValidateSelectedBackupCommand}"
+                            Padding="18,8" />
+                    <DataGrid Grid.Row="1"
+                              ItemsSource="{Binding Backups}"
+                              SelectedItem="{Binding SelectedBackup}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="备份号" Binding="{Binding BackupId}" Width="240" />
+                            <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="150" />
+                            <DataGridTextColumn Header="SHA-256" Binding="{Binding Sha256}" Width="280" />
+                            <DataGridTextColumn Header="大小" Binding="{Binding SizeBytes}" Width="100" />
+                            <DataGridCheckBoxColumn Header="就绪" Binding="{Binding PreflightReady}" Width="80" />
+                            <DataGridTextColumn Header="车辆" Binding="{Binding VehicleCount}" Width="80" />
+                            <DataGridTextColumn Header="活动任务" Binding="{Binding ActiveExecutionCount}" Width="100" />
+                            <DataGridTextColumn Header="创建人" Binding="{Binding CreatedBy}" Width="120" />
+                            <DataGridTextColumn Header="时间" Binding="{Binding CreatedAtUtc}" Width="190" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <TextBlock Grid.Row="2" Text="备份校验结果" FontWeight="Bold" Margin="0,4,0,0" />
+                    <DataGrid Grid.Row="3" ItemsSource="{Binding ValidationIssues}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="类型" Binding="{Binding IssueType}" Width="230" />
+                            <DataGridTextColumn Header="级别" Binding="{Binding Severity}" Width="110" />
+                            <DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+            <TabItem Header="恢复演练">
+                <DataGrid ItemsSource="{Binding Drills}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="演练号" Binding="{Binding DrillId}" Width="240" />
+                        <DataGridTextColumn Header="场景" Binding="{Binding Scenario}" Width="200" />
+                        <DataGridTextColumn Header="车辆" Binding="{Binding TargetVehicleId}" Width="120" />
+                        <DataGridCheckBoxColumn Header="隔离" Binding="{Binding IsIsolatedSimulation}" Width="80" />
+                        <DataGridCheckBoxColumn Header="通过" Binding="{Binding Passed}" Width="80" />
+                        <DataGridTextColumn Header="原因" Binding="{Binding Reason}" Width="*" />
+                        <DataGridTextColumn Header="执行人" Binding="{Binding ExecutedBy}" Width="120" />
+                        <DataGridTextColumn Header="时间" Binding="{Binding CompletedAtUtc}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>
