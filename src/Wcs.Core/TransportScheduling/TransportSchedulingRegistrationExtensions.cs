@@ -9,9 +9,8 @@ using Wcs.Core.RouteCenter;
 public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
-    /// 注册 EMS/RGV 统一调度、执行、恢复、交通控制、充电、配置治理、审计、
-    /// PLC 点位驱动、状态同步和设备诊断组件。
-    /// 生产 Host 可用 PlcClientTransportPlcAccessor 替换默认内存 PLC 访问器。
+    /// 注册 EMS/RGV 统一调度、执行、恢复、交通控制、充电、治理、PLC 驱动、
+    /// 点位导入、通信跟踪、故障字典、冲突处置和安全命令补偿组件。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
     {
@@ -38,13 +37,14 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportDeadlockService, TransportDeadlockService>();
 
         services.TryAddSingleton<ITransportStateStore, InMemoryTransportStateStore>();
-
         services.TryAddSingleton<ITransportPlcSignalMapRegistry, InMemoryTransportPlcSignalMapRegistry>();
         services.TryAddSingleton<ITransportDriverDiagnosticsService, TransportDriverDiagnosticsService>();
+        services.TryAddSingleton<ITransportCommunicationTraceStore, InMemoryTransportCommunicationTraceStore>();
         services.TryAddSingleton<InMemoryTransportPlcAccessor>();
         services.TryAddSingleton<HybridTransportPlcAccessor>();
+        services.TryAddSingleton<TransportObservedPlcAccessor>();
         services.TryAddSingleton<ITransportPlcAccessor>(sp =>
-            sp.GetRequiredService<HybridTransportPlcAccessor>());
+            sp.GetRequiredService<TransportObservedPlcAccessor>());
         services.TryAddSingleton<TransportPlcDriverChannel>();
         services.TryAddSingleton<ITransportDriverChannel>(sp =>
             sp.GetRequiredService<TransportPlcDriverChannel>());
@@ -72,9 +72,17 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportJournalStore, InMemoryTransportJournalStore>();
         services.TryAddSingleton<ITransportGovernanceStore, InMemoryTransportGovernanceStore>();
         services.TryAddSingleton<ITransportPlcSignalMapStore, InMemoryTransportPlcSignalMapStore>();
+        services.TryAddSingleton<ITransportCommissioningStore, InMemoryTransportCommissioningStore>();
         services.TryAddSingleton<ITransportConfigurationService, TransportConfigurationService>();
         services.TryAddSingleton<ITransportOperationGovernanceService, TransportOperationGovernanceService>();
         services.TryAddSingleton<ITransportPlcSignalMapService, TransportPlcSignalMapService>();
+
+        services.TryAddSingleton<ITransportPointTableImporter, TransportPointTableImporter>();
+        services.TryAddSingleton<ITransportSignalTemplateService, TransportSignalTemplateService>();
+        services.TryAddSingleton<ITransportCommissioningService, TransportCommissioningService>();
+        services.TryAddSingleton<ITransportFaultCatalogService, TransportFaultCatalogService>();
+        services.TryAddSingleton<ITransportRecoveryConflictService, TransportRecoveryConflictService>();
+        services.TryAddSingleton<ITransportCommandCompensationService, TransportCommandCompensationService>();
 
         return services;
     }
