@@ -76,6 +76,25 @@ public class WcsApiService : IWcsApiService
         return await response.Content.ReadFromJsonAsync<List<TransportChargingEvaluation>>(ct) ?? [];
     }
 
+    public async Task<TransportRuntimeConfiguration?> GetTransportConfigurationAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportRuntimeConfiguration>("/api/transport/administration/configuration", ct);
+
+    public async Task<List<TransportGovernedOperation>> GetTransportGovernedOperationsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportGovernedOperation>>("/api/transport/administration/operations", ct) ?? [];
+
+    public async Task<List<TransportAuditRecord>> GetTransportAuditsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportAuditRecord>>("/api/transport/administration/audits", ct) ?? [];
+
+    public async Task<List<TransportJournalRecord>> GetTransportJournalAsync(
+        TransportJournalCategory? category = null,
+        CancellationToken ct = default)
+    {
+        var path = category.HasValue
+            ? $"/api/transport/administration/journal?category={Uri.EscapeDataString(category.Value.ToString())}"
+            : "/api/transport/administration/journal";
+        return await _http.GetFromJsonAsync<List<TransportJournalRecord>>(path, ct) ?? [];
+    }
+
     public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
 
     public async Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null, string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default)

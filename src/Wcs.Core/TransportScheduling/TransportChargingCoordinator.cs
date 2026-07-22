@@ -79,6 +79,7 @@ public sealed record TransportChargingEvaluation
 public interface ITransportChargingCoordinator
 {
     TransportChargingPolicy Policy { get; }
+    void UpdatePolicy(TransportChargingPolicy policy);
     void RegisterStation(TransportChargingStationDefinition station);
     bool RemoveStation(string stationId);
     IReadOnlyList<TransportChargingStationSnapshot> GetStations();
@@ -94,6 +95,7 @@ public interface ITransportChargingCoordinator
 /// 第五阶段充电调度器。
 /// 只对空闲车辆自动建立充电计划；执行中车辆低电量只返回告警，不改变当前运输任务。
 /// 充电位按 Capacity 预留，超出容量的车辆进入站点等待队列。
+/// 第六阶段增加版本化策略热更新，更新不会中断已有充电计划。
 /// </summary>
 public sealed partial class TransportChargingCoordinator : ITransportChargingCoordinator
 {
@@ -102,6 +104,7 @@ public sealed partial class TransportChargingCoordinator : ITransportChargingCoo
     private readonly ITransportRouteCenter _routeCenter;
     private readonly Dictionary<string, TransportChargingStationDefinition> _stations = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TransportChargingPlan> _plans = new(StringComparer.Ordinal);
+    private TransportChargingPolicy _policy;
 
     public TransportChargingCoordinator(
         ITransportVehicleRegistry vehicles,
@@ -117,11 +120,26 @@ public sealed partial class TransportChargingCoordinator : ITransportChargingCoo
     {
         _vehicles = vehicles ?? throw new ArgumentNullException(nameof(vehicles));
         _routeCenter = routeCenter ?? throw new ArgumentNullException(nameof(routeCenter));
-        Policy = policy ?? throw new ArgumentNullException(nameof(policy));
-        ValidatePolicy(Policy);
+        _policy = policy ?? throw new ArgumentNullException(nameof(policy));
+        ValidatePolicy(_policy);
     }
 
-    public TransportChargingPolicy Policy { get; }
+    public TransportChargingPolicy Policy
+    {
+        get
+        {
+            lock (_sync)
+                return _policy;
+        }
+    }
+
+    public void UpdatePolicy(TransportChargingPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        ValidatePolicy(policy);
+        lock (_sync)
+            _policy = policy;
+    }
 
     public void RegisterStation(TransportChargingStationDefinition station)
     {
@@ -178,8 +196,9 @@ public sealed partial class TransportChargingCoordinator : ITransportChargingCoo
             return Evaluation(vehicleId, false, false, false, "车辆不存在");
         }
 
-        var critical = vehicle.BatteryPercent <= Policy.CriticalThresholdPercent;
-        if (vehicle.BatteryPercent > Policy.ChargeThresholdPercent)
+        var policy = Policy;
+        var critical = vehicle.BatteryPercent <= policy.CriticalThresholdPercent;
+        if (vehicle.BatteryPercent > policy.ChargeThresholdPercent)
         {
             return Evaluation(vehicleId, false, false, false, "电量高于充电阈值");
         }
@@ -281,13 +300,16 @@ public sealed partial class TransportChargingCoordinator : ITransportChargingCoo
         }
     }
 
-    public IReadOnlyList<TransportChargingEvaluation> EvaluateFleet() =>
-        _vehicles.GetAll()
-            .Where(x => x.BatteryPercent <= Policy.ChargeThresholdPercent)
+    public IReadOnlyList<TransportChargingEvaluation> EvaluateFleet()
+    {
+        var policy = Policy;
+        return _vehicles.GetAll()
+            .Where(x => x.BatteryPercent <= policy.ChargeThresholdPercent)
             .OrderBy(x => x.BatteryPercent)
             .ThenBy(x => x.VehicleId, StringComparer.Ordinal)
             .Select(x => EvaluateVehicle(x.VehicleId))
             .ToArray();
+    }
 
     private TransportChargingPlan? FindActivePlan(string vehicleId) =>
         _plans.Values.FirstOrDefault(x =>

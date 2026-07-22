@@ -9,10 +9,6 @@ public interface IDatabaseInitializer
     Task<bool> EnsureDatabaseAsync(CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// 数据库初始化器 — 使用 SqlSugar CodeFirst 自动建库建表
-/// 替代 EF Core 实现
-/// </summary>
 public class DatabaseInitializer : IDatabaseInitializer
 {
     private readonly string _connectionString;
@@ -30,6 +26,7 @@ public class DatabaseInitializer : IDatabaseInitializer
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             using var db = new SqlSugarClient(new ConnectionConfig
             {
                 ConnectionString = _connectionString,
@@ -37,7 +34,6 @@ public class DatabaseInitializer : IDatabaseInitializer
                 IsAutoCloseConnection = true
             });
 
-            // CodeFirst: 不存在则创建所有表
             db.CodeFirst.InitTables(
                 typeof(TaskRunEntity),
                 typeof(TransportHistoryEntity),
@@ -49,10 +45,15 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(AlarmRuntimeEntity),
                 typeof(TaskHistoryEntity),
                 typeof(AlarmHistoryEntity),
-                typeof(TaskEventEntity)
+                typeof(TaskEventEntity),
+                typeof(TransportConfigurationEntity),
+                typeof(TransportJournalEntity),
+                typeof(TransportGovernedOperationEntity),
+                typeof(TransportAuditEntity)
             );
 
-            _logger.LogInformation("数据库和所有表已就绪 (11 张)");
+            _logger.LogInformation("数据库和所有表已就绪 (15 张)");
+            await Task.CompletedTask;
             return true;
         }
         catch (Exception ex)

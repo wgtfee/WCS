@@ -10,8 +10,8 @@ public static class TransportSchedulingRegistrationExtensions
 {
     /// <summary>
     /// 注册 EMS/RGV 统一调度、执行、持久化恢复、交通控制、充电调度、
-    /// 故障换车、效率统计与设备驱动组件。
-    /// 生产环境应在 Infrastructure 中覆盖 ITransportStateStore 和 ITransportVehicleDriver。
+    /// 故障换车、效率统计、配置治理、审计与设备驱动组件。
+    /// 生产环境应在 Infrastructure 中覆盖内存存储，并按现场协议替换模拟车辆驱动。
     /// </summary>
     public static IServiceCollection AddUnifiedTransportScheduling(this IServiceCollection services)
     {
@@ -47,6 +47,13 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportChargingCoordinator, TransportChargingCoordinator>();
         services.TryAddSingleton<ITransportTaskReassignmentService, TransportTaskReassignmentService>();
         services.TryAddSingleton<ITransportPerformanceService, TransportPerformanceService>();
+
+        // 第六阶段默认内存实现；Infrastructure 在生产 Host 中替换为 SqlSugar/SQL Server。
+        services.TryAddSingleton<ITransportConfigurationStore, InMemoryTransportConfigurationStore>();
+        services.TryAddSingleton<ITransportJournalStore, InMemoryTransportJournalStore>();
+        services.TryAddSingleton<ITransportGovernanceStore, InMemoryTransportGovernanceStore>();
+        services.TryAddSingleton<ITransportConfigurationService, TransportConfigurationService>();
+        services.TryAddSingleton<ITransportOperationGovernanceService, TransportOperationGovernanceService>();
 
         return services;
     }

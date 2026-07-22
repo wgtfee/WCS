@@ -1,5 +1,6 @@
 namespace Wcs.Application;
 
+using Wcs.Application.HostedServices;
 using Wcs.Application.Services;
 using Wcs.Core.AlarmCenter;
 using Wcs.Core.CommandCenter;
@@ -35,7 +36,9 @@ public static class DependencyInjection
 
         // EMS / RGV unified scheduling
         services.AddUnifiedTransportScheduling();
+        services.AddHostedService<TransportConfigurationHostedService>();
         services.AddHostedService<TransportOptimizationHostedService>();
+        services.AddHostedService<TransportJournalHostedService>();
 
         // EventStore
         services.AddSingleton<IEventStore, FileEventStore>();
