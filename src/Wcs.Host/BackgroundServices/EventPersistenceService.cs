@@ -39,9 +39,12 @@ public class EventPersistenceService : BackgroundService
     {
         _eventBus.Subscribe<RawSignalEvent>(async (evt, ct) =>
         {
-            if (!await _throttle.WaitAsync(1000, ct)) return;
+            var entered = false;
             try
             {
+                entered = await _throttle.WaitAsync(1000, ct);
+                if (!entered) return;
+
                 using var db = CreateDb();
                 await db.Insertable(new DeviceStateLogEntity
                 {
@@ -58,18 +61,32 @@ public class EventPersistenceService : BackgroundService
                     DomainEventType = evt.DomainEventType ?? ""
                 }).ExecuteCommandAsync(ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Normal publisher/Host shutdown.
+            }
+            catch (Exception) when (ct.IsCancellationRequested)
+            {
+                // SqlClient can translate cancellation into SqlException on shutdown.
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "写入 DeviceStateLog 失败");
             }
-            finally { _throttle.Release(); }
+            finally
+            {
+                if (entered) _throttle.Release();
+            }
         });
 
         _eventBus.Subscribe<PalletArrivedEvent>(async (evt, ct) =>
         {
-            if (!await _throttle.WaitAsync(1000, ct)) return;
+            var entered = false;
             try
             {
+                entered = await _throttle.WaitAsync(1000, ct);
+                if (!entered) return;
+
                 using var db = CreateDb();
                 await db.Insertable(new DeviceStateLogEntity
                 {
@@ -82,13 +99,23 @@ public class EventPersistenceService : BackgroundService
                     DomainEventType = nameof(PalletArrivedEvent),
                 }).ExecuteCommandAsync(ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Normal publisher/Host shutdown.
+            }
+            catch (Exception) when (ct.IsCancellationRequested)
+            {
+                // SqlClient can translate cancellation into SqlException on shutdown.
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "写入 PalletArrivedEvent 失败");
             }
-            finally { _throttle.Release(); }
+            finally
+            {
+                if (entered) _throttle.Release();
+            }
         });
-
 
         _logger.LogInformation("EventPersistenceService 已启动");
         return Task.CompletedTask;
