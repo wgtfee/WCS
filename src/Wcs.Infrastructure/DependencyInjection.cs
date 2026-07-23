@@ -79,9 +79,12 @@ public static class DependencyInjection
                 connectionString,
                 sp.GetRequiredService<ILogger<DatabaseInitializer>>()));
 
-        services.AddSingleton<IAlarmQueryService, AlarmQueryService>();
-        services.AddSingleton<ITaskQueryService, TaskQueryService>();
-        services.AddSingleton<IDeviceQueryService, DeviceQueryService>();
+        services.AddSingleton<IAlarmQueryService>(
+            _ => new AlarmQueryService(connectionString));
+        services.AddSingleton<ITaskQueryService>(
+            _ => new TaskQueryService(connectionString));
+        services.AddSingleton<IDeviceQueryService>(
+            _ => new DeviceQueryService(connectionString));
 
         services.Replace(ServiceDescriptor.Singleton<ITransportConfigurationStore>(
             _ => new SqlSugarTransportConfigurationStore(connectionString)));

@@ -151,12 +151,21 @@ jobs:
             "${load_timeout_seconds}s" \
             node tests/load/wcs-e2e-load.mjs
 
-      - name: Validate persistence log
+      - name: Validate database concurrency log
+        if: always()
         shell: bash
         run: |
-          if grep -Fq "PK_Wcs_DeviceStateLog_Id" artifacts/host.log; then
-            echo "Detected a duplicate Wcs_DeviceStateLog primary key"
-            grep -F -C 5 "PK_Wcs_DeviceStateLog_Id" artifacts/host.log
+          if [[ ! -f artifacts/host.log ]]; then
+            echo "Host log was not created"
+            exit 1
+          fi
+          if grep -Eq \
+            "PK_Wcs_DeviceStateLog_Id|The connection is broken|The connection is closed|current state is connecting" \
+            artifacts/host.log; then
+            echo "Detected a database concurrency failure"
+            grep -En -C 5 \
+              "PK_Wcs_DeviceStateLog_Id|The connection is broken|The connection is closed|current state is connecting" \
+              artifacts/host.log
             exit 1
           fi
 
