@@ -92,7 +92,7 @@ public class EventDetector
             if (!rejected)
             {
                 rawSignal.ValidatorPassed = true;
-                var domainEvent = CreateDomainEvent(meta, newVal,oldVal, edge);
+                var domainEvent = CreateDomainEvent(meta, newVal, oldVal, edge);
                 if (domainEvent != null)
                 {
                     rawSignal.DomainEventType = domainEvent.GetType().Name;
@@ -121,7 +121,7 @@ public class EventDetector
         }
     }
 
-    private IEvent? CreateDomainEvent(FieldMetadata meta, object? newVal,object? oldVal, EdgeType edge)
+    private IEvent? CreateDomainEvent(FieldMetadata meta, object? newVal, object? oldVal, EdgeType edge)
     {
         foreach (var rule in _extraRules)
         {
@@ -130,13 +130,20 @@ public class EventDetector
             return CreateEventFromRule(rule, meta);
         }
         if (!EnableNamingConvention) return null;
-        //if (newVal is not bool boolVal || edge != EdgeType.Rising || !boolVal) return null;
-        if (newVal is not bool newBool || oldVal is not bool oldBool)  return null;
+        if (newVal is not bool newBool || oldVal is not bool oldBool) return null;
         if (meta.DeviceId == null) return null;
 
         var suffix = meta.Suffix;
+
+        // 到货/出库请求只在 0→1 上升沿创建一次业务任务。
+        // 原实现下降沿也发布 PalletArrivedEvent，使一个脉冲被重复计成两次任务。
         if (suffix is "_ARRIVED" or "_REQUESTOUT")
-            return new PalletArrivedEvent { DeviceId = meta.DeviceId };
+        {
+            if (edge == EdgeType.Rising && newBool)
+                return new PalletArrivedEvent { DeviceId = meta.DeviceId };
+            return null;
+        }
+
         if (suffix is "_FAULT" or "_ARALM")
         {
             // 上升沿：报警
@@ -148,7 +155,7 @@ public class EventDetector
                     FaultCode = meta.FieldName
                 };
             }
-        
+
             // 下降沿：恢复
             if (oldBool && !newBool)
             {
@@ -161,14 +168,14 @@ public class EventDetector
         }
 
         if (suffix == "_READY")
-            return new ConveyorReadyChangedEvent { DeviceId = meta.DeviceId, Ready = true };
+            return new ConveyorReadyChangedEvent { DeviceId = meta.DeviceId, Ready = newBool };
         return null;
     }
 
     private IEvent? CreateEventFromRule(EventDetectionRule rule, FieldMetadata meta)
     {
         if (string.IsNullOrEmpty(rule.TargetEventType))
-            return CreateDomainEvent(meta, true,null, EdgeType.Rising);
+            return CreateDomainEvent(meta, true, null, EdgeType.Rising);
         var eventType = Type.GetType(rule.TargetEventType);
         if (eventType == null || !typeof(IEvent).IsAssignableFrom(eventType)) return null;
         try
