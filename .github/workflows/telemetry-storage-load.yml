@@ -1,0 +1,311 @@
+name: WCS PLC Telemetry Storage Load
+
+on:
+  pull_request:
+    branches: [ "develop" ]
+    paths:
+      - ".github/workflows/telemetry-storage-load.yml"
+      - "src/Wcs.Core/Telemetry/**"
+      - "src/Wcs.Infrastructure/Telemetry/**"
+      - "src/Wcs.Infrastructure/DependencyInjection.cs"
+      - "src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs"
+      - "src/Wcs.Host/BackgroundServices/PlcTelemetryEventBridgeService.cs"
+      - "src/Wcs.Host/Controllers/PlcTelemetryController.cs"
+      - "src/Wcs.Host/Program.cs"
+      - "src/Wcs.Host/appsettings.LoadTest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-plc-telemetry-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  telemetry-load:
+    name: ${{ matrix.provider }} exact-count and replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [ SqlServer, InfluxDb ]
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_LoadTest!2026"
+        ports:
+          - 1433:1433
+      influxdb:
+        image: influxdb:2.7
+        env:
+          DOCKER_INFLUXDB_INIT_MODE: setup
+          DOCKER_INFLUXDB_INIT_USERNAME: wcsadmin
+          DOCKER_INFLUXDB_INIT_PASSWORD: "Wcs_Influx!2026"
+          DOCKER_INFLUXDB_INIT_ORG: wcs
+          DOCKER_INFLUXDB_INIT_BUCKET: wcs_plc
+          DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: wcs-load-test-token
+        ports:
+          - 8086:8086
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: "LoadTest"
+      DOTNET_ENVIRONMENT: "LoadTest"
+      ASPNETCORE_URLS: "http://127.0.0.1:5080"
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_TelemetryLoad;User Id=sa;Password=Wcs_LoadTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0"
+      Storage__Telemetry__Provider: ${{ matrix.provider }}
+      Storage__Telemetry__ChannelCapacity: "100000"
+      Storage__Telemetry__BatchSize: "1000"
+      Storage__Telemetry__FlushIntervalMs: "250"
+      Storage__Telemetry__RetryDelayMs: "500"
+      Storage__Telemetry__SpoolDirectory: "artifacts/plc-telemetry-spool-${{ matrix.provider }}"
+      Storage__Telemetry__InfluxDb__ApiVersion: "V2"
+      Storage__Telemetry__InfluxDb__Url: "http://127.0.0.1:8086"
+      Storage__Telemetry__InfluxDb__Token: "wcs-load-test-token"
+      Storage__Telemetry__InfluxDb__Organization: "wcs"
+      Storage__Telemetry__InfluxDb__Bucket: "wcs_plc"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build Host
+        run: |
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Wait for databases and create SQL database
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_TelemetryLoad]"
+          '
+
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:8086/health >/dev/null; then break; fi
+            if [[ "$attempt" -eq 90 ]]; then docker logs "${{ job.services.influxdb.id }}"; exit 1; fi
+            sleep 2
+          done
+
+      - name: Start isolated Host
+        shell: bash
+        run: |
+          rm -rf "artifacts/plc-telemetry-spool-${{ matrix.provider }}"
+          pushd src/Wcs.Host/bin/Release/net8.0
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/telemetry-${{ matrix.provider }}-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/telemetry-${{ matrix.provider }}-host.pid"
+          popd
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then exit 0; fi
+            if ! kill -0 "$(cat artifacts/telemetry-${{ matrix.provider }}-host.pid)" 2>/dev/null; then
+              cat "artifacts/telemetry-${{ matrix.provider }}-host.log"
+              exit 1
+            fi
+            sleep 2
+          done
+          cat "artifacts/telemetry-${{ matrix.provider }}-host.log"
+          exit 1
+
+      - name: Wait for initial telemetry drain
+        shell: bash
+        run: |
+          for attempt in {1..120}; do
+            status="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
+            queued="$(jq -r '.queueDepth' <<<"$status")"
+            spooled="$(jq -r '.spoolPending' <<<"$status")"
+            inflight="$(jq -r '.inFlight' <<<"$status")"
+            if [[ "$queued" == "0" && "$spooled" == "0" && "$inflight" == "0" ]]; then
+              echo "$status" > "artifacts/${{ matrix.provider }}-baseline-status.json"
+              exit 0
+            fi
+            sleep 1
+          done
+          curl --silent "$ASPNETCORE_URLS/api/telemetry/status"
+          exit 1
+
+      - name: Capture provider baseline count
+        shell: bash
+        run: |
+          if [[ "${{ matrix.provider }}" == "SqlServer" ]]; then
+            sql_container="${{ job.services.sqlserver.id }}"
+            docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_TelemetryLoad -h -1 -W -Q "SELECT COUNT_BIG(*) FROM Wcs_PlcTelemetry"
+            ' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1 > artifacts/provider-baseline-count.txt
+          else
+            influx_container="${{ job.services.influxdb.id }}"
+            docker exec "$influx_container" influx query \
+              --host http://localhost:8086 --org wcs --token wcs-load-test-token --raw \
+              'from(bucket:"wcs_plc") |> range(start: 0) |> filter(fn:(r) => r._measurement == "plc_signal" and r._field == "sequence") |> group() |> count(column:"_value")' \
+              | awk -F, 'NR>1 && $NF ~ /^[0-9]+$/ {v=$NF} END {print v+0}' > artifacts/provider-baseline-count.txt
+          fi
+          cat artifacts/provider-baseline-count.txt
+
+      - name: Generate 200k telemetry events
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/telemetry/load" \
+            --header 'content-type: application/json' \
+            --data '{"count":200000,"concurrency":32}' \
+            --max-time 600 | tee "artifacts/${{ matrix.provider }}-load-response.json"
+          [[ "$(jq -r '.generated' artifacts/${{ matrix.provider }}-load-response.json)" == "200000" ]]
+          [[ "$(jq -r '.acceptedDelta' artifacts/${{ matrix.provider }}-load-response.json)" == "200000" ]]
+          [[ "$(jq -r '.droppedDelta' artifacts/${{ matrix.provider }}-load-response.json)" == "0" ]]
+
+      - name: Wait for exact drain
+        shell: bash
+        run: |
+          for attempt in {1..600}; do
+            status="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
+            baseline_accepted="$(jq -r '.accepted' artifacts/${{ matrix.provider }}-baseline-status.json)"
+            baseline_persisted="$(jq -r '.persisted' artifacts/${{ matrix.provider }}-baseline-status.json)"
+            accepted="$(jq -r '.accepted' <<<"$status")"
+            persisted="$(jq -r '.persisted' <<<"$status")"
+            queued="$(jq -r '.queueDepth' <<<"$status")"
+            spooled="$(jq -r '.spoolPending' <<<"$status")"
+            inflight="$(jq -r '.inFlight' <<<"$status")"
+            dropped="$(jq -r '.dropped' <<<"$status")"
+            delta="$(jq -r '.conservationDelta' <<<"$status")"
+            if (( accepted - baseline_accepted == 200000 && persisted - baseline_persisted == 200000 )) && \
+               [[ "$queued" == "0" && "$spooled" == "0" && "$inflight" == "0" && "$dropped" == "0" && "$delta" == "0" ]]; then
+              echo "$status" > "artifacts/${{ matrix.provider }}-drained-status.json"
+              exit 0
+            fi
+            sleep 1
+          done
+          curl --silent "$ASPNETCORE_URLS/api/telemetry/status"
+          exit 1
+
+      - name: Verify physical provider count
+        shell: bash
+        run: |
+          baseline="$(cat artifacts/provider-baseline-count.txt)"
+          if [[ "${{ matrix.provider }}" == "SqlServer" ]]; then
+            sql_container="${{ job.services.sqlserver.id }}"
+            final="$(docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_TelemetryLoad -h -1 -W -Q "SELECT COUNT_BIG(*) FROM Wcs_PlcTelemetry"
+            ' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1)"
+          else
+            influx_container="${{ job.services.influxdb.id }}"
+            final="$(docker exec "$influx_container" influx query \
+              --host http://localhost:8086 --org wcs --token wcs-load-test-token --raw \
+              'from(bucket:"wcs_plc") |> range(start: 0) |> filter(fn:(r) => r._measurement == "plc_signal" and r._field == "sequence") |> group() |> count(column:"_value")' \
+              | awk -F, 'NR>1 && $NF ~ /^[0-9]+$/ {v=$NF} END {print v+0}')"
+          fi
+          printf 'baseline=%s\nfinal=%s\ndelta=%s\n' "$baseline" "$final" "$((final-baseline))" | tee "artifacts/${{ matrix.provider }}-physical-count.txt"
+          (( final - baseline == 200000 ))
+
+      - name: Verify Influx outage spool and replay
+        if: matrix.provider == 'InfluxDb'
+        shell: bash
+        run: |
+          influx_container="${{ job.services.influxdb.id }}"
+          docker stop "$influx_container"
+
+          before="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
+          before_accepted="$(jq -r '.accepted' <<<"$before")"
+          before_persisted="$(jq -r '.persisted' <<<"$before")"
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/telemetry/load" \
+            --header 'content-type: application/json' \
+            --data '{"count":20000,"concurrency":16}' \
+            --max-time 300 > artifacts/InfluxDb-outage-load-response.json
+
+          for attempt in {1..180}; do
+            status="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
+            if (( $(jq -r '.spoolPending' <<<"$status") > 0 )); then
+              echo "$status" > artifacts/InfluxDb-outage-spooled-status.json
+              break
+            fi
+            if [[ "$attempt" -eq 180 ]]; then echo "$status"; exit 1; fi
+            sleep 1
+          done
+
+          docker start "$influx_container"
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:8086/health >/dev/null; then break; fi
+            if [[ "$attempt" -eq 90 ]]; then docker logs "$influx_container"; exit 1; fi
+            sleep 2
+          done
+
+          for attempt in {1..600}; do
+            status="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
+            accepted="$(jq -r '.accepted' <<<"$status")"
+            persisted="$(jq -r '.persisted' <<<"$status")"
+            queued="$(jq -r '.queueDepth' <<<"$status")"
+            spooled="$(jq -r '.spoolPending' <<<"$status")"
+            inflight="$(jq -r '.inFlight' <<<"$status")"
+            dropped="$(jq -r '.dropped' <<<"$status")"
+            delta="$(jq -r '.conservationDelta' <<<"$status")"
+            if (( accepted - before_accepted == 20000 && persisted - before_persisted == 20000 )) && \
+               [[ "$queued" == "0" && "$spooled" == "0" && "$inflight" == "0" && "$dropped" == "0" && "$delta" == "0" ]]; then
+              echo "$status" > artifacts/InfluxDb-replayed-status.json
+              exit 0
+            fi
+            sleep 1
+          done
+          curl --silent "$ASPNETCORE_URLS/api/telemetry/status"
+          exit 1
+
+      - name: Validate logs
+        if: always()
+        shell: bash
+        run: |
+          log="artifacts/telemetry-${{ matrix.provider }}-host.log"
+          test -s "$log"
+          if grep -Eqi 'OutOfMemory|Unhandled exception|PK_Wcs_PlcTelemetry|current state is connecting|PLC telemetry batch could not be persisted or spooled' "$log"; then
+            grep -Eni -C 5 'OutOfMemory|Unhandled exception|PK_Wcs_PlcTelemetry|current state is connecting|PLC telemetry batch could not be persisted or spooled' "$log"
+            exit 1
+          fi
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          pid_file="artifacts/telemetry-${{ matrix.provider }}-host.pid"
+          if [[ -f "$pid_file" ]]; then
+            pid="$(cat "$pid_file")"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..20}; do
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload telemetry evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-telemetry-${{ matrix.provider }}-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 14
