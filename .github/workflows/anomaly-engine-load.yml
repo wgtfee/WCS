@@ -153,8 +153,8 @@ jobs:
             recovered="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Status = 1')"
             active="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Status = 0')"
             duplicates="$(query_sql 'SELECT COUNT_BIG(*) FROM (SELECT AnomalyKey FROM Wcs_PlcAnomaly GROUP BY AnomalyKey HAVING COUNT_BIG(*) > 1) d')"
-            threshold="$(query_sql \"SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE RuleId = 'ANOMALY-LOAD-HIGH-CURRENT'\")"
-            consistency="$(query_sql \"SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE RuleId = 'ANOMALY-LOAD-RUNNING-WITHOUT-SPEED'\")"
+            threshold="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 0')"
+            consistency="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 4')"
             if (( final - baseline == 3000 && recovered == 3000 && active == 0 && duplicates == 0 && threshold == 2000 && consistency == 1000 )); then
               printf 'baseline=%s\nfinal=%s\ndelta=%s\nrecovered=%s\nactive=%s\nduplicates=%s\nthreshold=%s\nconsistency=%s\n' \
                 "$baseline" "$final" "$((final-baseline))" "$recovered" "$active" "$duplicates" "$threshold" "$consistency" \
