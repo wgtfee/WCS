@@ -3,6 +3,7 @@ namespace Wcs.Infrastructure.Persistence;
 using SqlSugar;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.PlcSubsystem.Examples;
+using Wcs.Core.Telemetry;
 
 public interface IDatabaseInitializer
 {
@@ -46,6 +47,7 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(TaskHistoryEntity),
                 typeof(AlarmHistoryEntity),
                 typeof(TaskEventEntity),
+                typeof(PlcTelemetryEntity),
                 typeof(TransportConfigurationEntity),
                 typeof(TransportJournalEntity),
                 typeof(TransportGovernedOperationEntity),
@@ -55,7 +57,13 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(TransportCommissioningEntity)
             );
 
-            _logger.LogInformation("数据库和所有表已就绪 (18 张)");
+            db.Ado.ExecuteCommand(@"
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcTelemetry_Time' AND object_id = OBJECT_ID('Wcs_PlcTelemetry'))
+    CREATE INDEX IX_Wcs_PlcTelemetry_Time ON Wcs_PlcTelemetry(TimestampUtc);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcTelemetry_Signal' AND object_id = OBJECT_ID('Wcs_PlcTelemetry'))
+    CREATE INDEX IX_Wcs_PlcTelemetry_Signal ON Wcs_PlcTelemetry(PlcName, DeviceId, SignalName, TimestampUtc);");
+
+            _logger.LogInformation("数据库和所有表已就绪 (19 张)");
             await Task.CompletedTask;
             return true;
         }
