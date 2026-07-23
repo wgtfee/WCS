@@ -1,0 +1,273 @@
+name: WCS PLC Anomaly Engine Soak
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/anomaly-engine-soak.yml"
+      - "src/Wcs.Core/AnomalyDetection/**"
+      - "src/Wcs.Core/EventBus/Events/PlcAnomalyEvents.cs"
+      - "src/Wcs.Core.Tests/PlcAnomaly*.cs"
+      - "src/Wcs.Infrastructure/DependencyInjection.cs"
+      - "src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs"
+      - "src/Wcs.Host/BackgroundServices/PlcAnomaly*.cs"
+      - "src/Wcs.Host/Controllers/PlcAnomaly*.cs"
+      - "src/Wcs.Host/Program.cs"
+      - "src/Wcs.Host/appsettings.LoadTest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-plc-anomaly-soak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  anomaly-soak:
+    name: 10m lifecycle, false-positive, and memory soak
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_LoadTest!2026"
+        ports:
+          - 1433:1433
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: "LoadTest"
+      DOTNET_ENVIRONMENT: "LoadTest"
+      ASPNETCORE_URLS: "http://127.0.0.1:5080"
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_AnomalySoak;User Id=sa;Password=Wcs_LoadTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0"
+      Storage__Telemetry__Provider: "Disabled"
+      AnomalyDetection__Enabled: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build Host
+        run: |
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_AnomalySoak]"
+          '
+
+      - name: Start isolated Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/anomaly-soak-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/anomaly-soak-host.pid"
+          popd
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/status" | tee artifacts/anomaly-soak-baseline-status.json
+              ps -o rss= -p "$(cat artifacts/anomaly-soak-host.pid)" | tr -d ' ' > artifacts/anomaly-soak-initial-rss-kb.txt
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/anomaly-soak-host.pid)" 2>/dev/null; then
+              cat artifacts/anomaly-soak-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/anomaly-soak-host.log
+          exit 1
+
+      - name: Capture SQL baseline
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_AnomalySoak -h -1 -W -Q "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly"
+          ' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1 > artifacts/anomaly-soak-baseline-count.txt
+
+      - name: Run ten-minute mixed anomaly soak
+        shell: bash
+        run: |
+          pid="$(cat artifacts/anomaly-soak-host.pid)"
+          start_epoch="$(date +%s)"
+          total_events=0
+          total_raised=0
+          total_recovered=0
+          total_failures=0
+          total_suppressed=0
+          : > artifacts/anomaly-soak-responses.jsonl
+          printf 'iteration,elapsed_seconds,rss_kb,processed,raised,recovered,active,failures,suppressed\n' > artifacts/anomaly-soak-timeline.csv
+
+          for iteration in $(seq 0 119); do
+            target_epoch="$((start_epoch + iteration * 5))"
+            now_epoch="$(date +%s)"
+            if (( target_epoch > now_epoch )); then sleep "$((target_epoch-now_epoch))"; fi
+
+            response="$(curl --fail --silent --show-error \
+              --request POST "$ASPNETCORE_URLS/api/anomaly/soak" \
+              --header 'content-type: application/json' \
+              --data '{"thresholdCycles":40,"consistencyCycles":20,"normalEvents":5000,"deviceOffset":0,"concurrency":32}' \
+              --max-time 120)"
+            echo "$response" >> artifacts/anomaly-soak-responses.jsonl
+
+            [[ "$(jq -r '.raisedDelta' <<<"$response")" == "60" ]]
+            [[ "$(jq -r '.recoveredDelta' <<<"$response")" == "60" ]]
+            [[ "$(jq -r '.failureDelta' <<<"$response")" == "0" ]]
+            [[ "$(jq -r '.suppressedDelta' <<<"$response")" == "0" ]]
+            [[ "$(jq -r '.activeDelta' <<<"$response")" == "0" ]]
+            [[ "$(jq -r '.processedDelta' <<<"$response")" == "5260" ]]
+
+            total_events="$((total_events + $(jq -r '.totalEvents' <<<"$response")))"
+            total_raised="$((total_raised + $(jq -r '.raisedDelta' <<<"$response")))"
+            total_recovered="$((total_recovered + $(jq -r '.recoveredDelta' <<<"$response")))"
+            total_failures="$((total_failures + $(jq -r '.failureDelta' <<<"$response")))"
+            total_suppressed="$((total_suppressed + $(jq -r '.suppressedDelta' <<<"$response")))"
+
+            status="$(curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/status")"
+            rss_kb="$(ps -o rss= -p "$pid" | tr -d ' ')"
+            elapsed="$(( $(date +%s) - start_epoch ))"
+            printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+              "$iteration" "$elapsed" "$rss_kb" \
+              "$(jq -r '.processedSamples' <<<"$status")" \
+              "$(jq -r '.raised' <<<"$status")" \
+              "$(jq -r '.recovered' <<<"$status")" \
+              "$(jq -r '.activeAnomalies' <<<"$status")" \
+              "$(jq -r '.failures' <<<"$status")" \
+              "$(jq -r '.suppressed' <<<"$status")" \
+              >> artifacts/anomaly-soak-timeline.csv
+          done
+
+          printf 'total_events=%s\ntotal_raised=%s\ntotal_recovered=%s\ntotal_failures=%s\ntotal_suppressed=%s\n' \
+            "$total_events" "$total_raised" "$total_recovered" "$total_failures" "$total_suppressed" \
+            | tee artifacts/anomaly-soak-totals.txt
+
+          [[ "$total_events" == "631200" ]]
+          [[ "$total_raised" == "7200" ]]
+          [[ "$total_recovered" == "7200" ]]
+          [[ "$total_failures" == "0" ]]
+          [[ "$total_suppressed" == "0" ]]
+
+      - name: Verify final SQL and memory trend
+        shell: bash
+        run: |
+          baseline="$(cat artifacts/anomaly-soak-baseline-count.txt)"
+          sql_container="${{ job.services.sqlserver.id }}"
+          query_sql() {
+            docker exec "$sql_container" bash -lc "
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x \"\$sqlcmd\" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              \"\$sqlcmd\" -S localhost -U sa -P \"\$MSSQL_SA_PASSWORD\" -C -d WCS_AnomalySoak -h -1 -W -Q \"$1\"
+            " | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1
+          }
+
+          final="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly')"
+          recovered="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Status = 1')"
+          active="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Status = 0')"
+          threshold="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 0')"
+          consistency="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 4')"
+          printf 'baseline=%s\nfinal=%s\ndelta=%s\nrecovered=%s\nactive=%s\nthreshold=%s\nconsistency=%s\n' \
+            "$baseline" "$final" "$((final-baseline))" "$recovered" "$active" "$threshold" "$consistency" \
+            | tee artifacts/anomaly-soak-physical-count.txt
+          (( final - baseline == 7200 ))
+          [[ "$recovered" == "7200" ]]
+          [[ "$active" == "0" ]]
+          [[ "$threshold" == "4800" ]]
+          [[ "$consistency" == "2400" ]]
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/status" | tee artifacts/anomaly-soak-final-status.json
+          [[ "$(jq -r '.activeAnomalies' artifacts/anomaly-soak-final-status.json)" == "0" ]]
+          [[ "$(jq -r '.failures' artifacts/anomaly-soak-final-status.json)" == "0" ]]
+          [[ "$(jq -r '.suppressed' artifacts/anomaly-soak-final-status.json)" == "0" ]]
+
+          python3 - <<'PY'
+          import csv, json
+          from pathlib import Path
+
+          rows = list(csv.DictReader(Path('artifacts/anomaly-soak-timeline.csv').open()))
+          rss = [int(row['rss_kb']) / 1024 for row in rows]
+          elapsed_minutes = [int(row['elapsed_seconds']) / 60 for row in rows]
+          initial = int(Path('artifacts/anomaly-soak-initial-rss-kb.txt').read_text().strip()) / 1024
+          final = rss[-1]
+          peak = max(rss)
+
+          tail_rss = rss[-24:]
+          tail_x = elapsed_minutes[-24:]
+          x_mean = sum(tail_x) / len(tail_x)
+          y_mean = sum(tail_rss) / len(tail_rss)
+          denominator = sum((x - x_mean) ** 2 for x in tail_x)
+          slope = 0 if denominator == 0 else sum((x - x_mean) * (y - y_mean) for x, y in zip(tail_x, tail_rss)) / denominator
+
+          result = {
+              'samples': len(rows),
+              'initialRssMb': initial,
+              'finalRssMb': final,
+              'peakRssMb': peak,
+              'finalGrowthMb': final - initial,
+              'lastTwoMinuteSlopeMbPerMinute': slope,
+          }
+          Path('artifacts/anomaly-soak-memory.json').write_text(json.dumps(result, indent=2))
+          assert len(rows) == 120
+          assert peak <= 850
+          assert final - initial <= 450
+          assert slope <= 5
+          PY
+
+      - name: Validate Host log
+        if: always()
+        shell: bash
+        run: |
+          test -s artifacts/anomaly-soak-host.log
+          if grep -Eqi 'OutOfMemory|Unhandled exception|PLC anomaly persistence failed after retries|PK_Wcs_PlcAnomaly|duplicate key|Stack overflow' artifacts/anomaly-soak-host.log; then
+            grep -Eni -C 5 'OutOfMemory|Unhandled exception|PLC anomaly persistence failed after retries|PK_Wcs_PlcAnomaly|duplicate key|Stack overflow' artifacts/anomaly-soak-host.log
+            exit 1
+          fi
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/anomaly-soak-host.pid ]]; then
+            pid="$(cat artifacts/anomaly-soak-host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..20}; do
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload anomaly soak evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-anomaly-soak-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 14
