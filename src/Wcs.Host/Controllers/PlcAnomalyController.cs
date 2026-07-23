@@ -34,8 +34,8 @@ public sealed class PlcAnomalyController : ControllerBase
     public ActionResult<IReadOnlyList<PlcAnomalyRecord>> GetActive() => Ok(_engine.GetActiveAnomalies());
 
     /// <summary>
-    /// 仅 LoadTest 环境启用。每个 cycle 连续发送 3 个越界值和 2 个恢复值，
-    /// 另发送大量正常值验证误报数保持为零。
+    /// 仅 LoadTest 环境启用。生成阈值异常、跨信号一致性异常和大量正常值，
+    /// 同时校验生命周期守恒与零误报。
     /// </summary>
     [HttpPost("load")]
     public async Task<ActionResult> GenerateLoad(
@@ -45,6 +45,7 @@ public sealed class PlcAnomalyController : ControllerBase
         if (!_environment.IsEnvironment("LoadTest")) return NotFound();
 
         var cycles = Math.Clamp(request.Cycles, 1, 20_000);
+        var consistencyCycles = Math.Clamp(request.ConsistencyCycles, 0, 20_000);
         var concurrency = Math.Clamp(request.Concurrency, 1, 64);
         var normalEvents = Math.Clamp(request.NormalEvents, 0, 1_000_000);
         var before = _statusProvider.GetStatus();
@@ -68,6 +69,21 @@ public sealed class PlcAnomalyController : ControllerBase
             });
 
         await Parallel.ForEachAsync(
+            Enumerable.Range(0, consistencyCycles),
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = concurrency,
+                CancellationToken = cancellationToken
+            },
+            async (index, ct) =>
+            {
+                var device = $"ANOMCONS{index:D6}";
+                await PublishNumericAsync($"{device}_ANOMALY_LOAD_Speed", 0, ct);
+                await PublishBooleanAsync($"{device}_ANOMALY_LOAD_Running", true, ct);
+                await PublishNumericAsync($"{device}_ANOMALY_LOAD_Speed", 2, ct);
+            });
+
+        await Parallel.ForEachAsync(
             Enumerable.Range(0, normalEvents),
             new ParallelOptions
             {
@@ -82,10 +98,11 @@ public sealed class PlcAnomalyController : ControllerBase
 
         stopwatch.Stop();
         var after = _statusProvider.GetStatus();
-        var totalEvents = cycles * 5L + normalEvents;
+        var totalEvents = cycles * 5L + consistencyCycles * 3L + normalEvents;
         return Ok(new
         {
             cycles,
+            consistencyCycles,
             concurrency,
             normalEvents,
             totalEvents,
@@ -105,13 +122,25 @@ public sealed class PlcAnomalyController : ControllerBase
         string fieldName,
         double value,
         CancellationToken cancellationToken) =>
+        PublishAsync(fieldName, value.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    private Task PublishBooleanAsync(
+        string fieldName,
+        bool value,
+        CancellationToken cancellationToken) =>
+        PublishAsync(fieldName, value.ToString(), cancellationToken);
+
+    private Task PublishAsync(
+        string fieldName,
+        string value,
+        CancellationToken cancellationToken) =>
         _eventBus.PublishAsync(new RawSignalEvent
         {
             PlcName = "ANOMALY-LOAD-PLC",
             DbBlock = 900,
             FieldName = fieldName,
-            OldValue = "5",
-            NewValue = value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            OldValue = null,
+            NewValue = value,
             Edge = "Changed",
             ValidatorPassed = true,
             ValidatorReason = "anomaly-load-test",
@@ -122,6 +151,7 @@ public sealed class PlcAnomalyController : ControllerBase
 public sealed class PlcAnomalyLoadRequest
 {
     public int Cycles { get; set; } = 2_000;
+    public int ConsistencyCycles { get; set; } = 1_000;
     public int Concurrency { get; set; } = 32;
     public int NormalEvents { get; set; } = 100_000;
 }
