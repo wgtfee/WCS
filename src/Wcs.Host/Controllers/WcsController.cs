@@ -4,15 +4,19 @@ using Microsoft.AspNetCore.Mvc;
 using Wcs.Application.Services;
 using Wcs.Core.StateCenter.Models;
 using Wcs.Core.TaskEngine.Context;
+using Wcs.Core.TaskEngine.Scheduler;
+
 [ApiController]
 [Route("api")]
 public class WcsController : ControllerBase
 {
     private readonly WcsApplicationService _wcs;
+    private readonly ITaskScheduler _taskScheduler;
 
-    public WcsController(WcsApplicationService wcs)
+    public WcsController(WcsApplicationService wcs, ITaskScheduler taskScheduler)
     {
         _wcs = wcs;
+        _taskScheduler = taskScheduler;
     }
 
     [HttpGet("overview")]
@@ -31,6 +35,19 @@ public class WcsController : ControllerBase
 
     [HttpGet("tasks")]
     public ActionResult<IEnumerable<TaskContext>> GetTasks() => Ok(_wcs.GetActiveTasks());
+
+    [HttpGet("tasks/queue")]
+    public ActionResult GetTaskQueue()
+    {
+        var queued = _taskScheduler.GetQueueCount();
+        var running = _wcs.GetActiveTasks().Count();
+        return Ok(new
+        {
+            queued,
+            running,
+            total = queued + running
+        });
+    }
 
     [HttpGet("tasks/{taskId}")]
     public ActionResult<TaskStatusEnum?> GetTaskStatus(string taskId)
@@ -142,7 +159,6 @@ public class WcsController : ControllerBase
         var result = await _wcs.RecoverAsync(ct);
         return Ok(result);
     }
-
 }
 
 public record CreateTaskRequest(
