@@ -8,8 +8,9 @@ internal sealed record PlcTelemetrySpoolBatch(
     IReadOnlyList<PlcTelemetryPoint> Points);
 
 /// <summary>
-/// 失败批次和满队列数据的本地持久化缓冲。
-/// 每个批次先写临时文件再原子重命名，Host 异常退出后可继续重放。
+/// PLC telemetry 的本地持久化队列。
+/// Buffered 模式用于数据库故障兜底；WriteAhead 模式用于先落盘再确认接收。
+/// 每个批次先写临时文件、强制刷盘，再原子重命名为可消费文件。
 /// </summary>
 internal sealed class FilePlcTelemetrySpool
 {
@@ -22,6 +23,7 @@ internal sealed class FilePlcTelemetrySpool
     {
         _directory = Path.GetFullPath(options.SpoolDirectory);
         Directory.CreateDirectory(_directory);
+        RecoverCompletedTemporaryFiles();
         _pendingPoints = CountExistingPoints();
     }
 
@@ -50,6 +52,7 @@ internal sealed class FilePlcTelemetrySpool
             {
                 await JsonSerializer.SerializeAsync(stream, points, _jsonOptions, cancellationToken);
                 await stream.FlushAsync(cancellationToken);
+                stream.Flush(flushToDisk: true);
             }
 
             File.Move(tempPath, finalPath);
@@ -67,25 +70,34 @@ internal sealed class FilePlcTelemetrySpool
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var file = Directory
-                .EnumerateFiles(_directory, "*.json", SearchOption.TopDirectoryOnly)
-                .OrderBy(static path => path, StringComparer.Ordinal)
-                .FirstOrDefault();
-            if (file is null) return null;
+            foreach (var file in Directory
+                         .EnumerateFiles(_directory, "*.json", SearchOption.TopDirectoryOnly)
+                         .OrderBy(static path => path, StringComparer.Ordinal))
+            {
+                try
+                {
+                    await using var stream = new FileStream(
+                        file,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.Read,
+                        64 * 1024,
+                        FileOptions.Asynchronous | FileOptions.SequentialScan);
+                    var points = await JsonSerializer.DeserializeAsync<List<PlcTelemetryPoint>>(
+                        stream,
+                        _jsonOptions,
+                        cancellationToken) ?? new List<PlcTelemetryPoint>();
 
-            await using var stream = new FileStream(
-                file,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                64 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var points = await JsonSerializer.DeserializeAsync<List<PlcTelemetryPoint>>(
-                stream,
-                _jsonOptions,
-                cancellationToken) ?? new List<PlcTelemetryPoint>();
+                    return new PlcTelemetrySpoolBatch(file, points);
+                }
+                catch (JsonException)
+                {
+                    Quarantine(file);
+                    Interlocked.Exchange(ref _pendingPoints, CountExistingPoints());
+                }
+            }
 
-            return new PlcTelemetrySpoolBatch(file, points);
+            return null;
         }
         finally
         {
@@ -112,6 +124,31 @@ internal sealed class FilePlcTelemetrySpool
         }
     }
 
+    private void RecoverCompletedTemporaryFiles()
+    {
+        foreach (var tempPath in Directory.EnumerateFiles(_directory, "*.tmp"))
+        {
+            try
+            {
+                using (var stream = File.OpenRead(tempPath))
+                {
+                    _ = JsonSerializer.Deserialize<List<PlcTelemetryPoint>>(stream, _jsonOptions)
+                        ?? throw new JsonException("Empty telemetry WAL batch.");
+                }
+
+                var finalPath = tempPath[..^4];
+                if (File.Exists(finalPath))
+                    File.Delete(tempPath);
+                else
+                    File.Move(tempPath, finalPath);
+            }
+            catch
+            {
+                Quarantine(tempPath);
+            }
+        }
+    }
+
     private long CountExistingPoints()
     {
         long count = 0;
@@ -125,9 +162,16 @@ internal sealed class FilePlcTelemetrySpool
             }
             catch
             {
-                // 损坏文件保留给运维处理，不把它静默删除。
+                // 损坏文件保留给运维处理，不静默删除。
             }
         }
         return count;
+    }
+
+    private static void Quarantine(string file)
+    {
+        if (!File.Exists(file)) return;
+        var quarantine = file + $".{DateTime.UtcNow:yyyyMMddHHmmssfffffff}.corrupt";
+        File.Move(file, quarantine, overwrite: false);
     }
 }
