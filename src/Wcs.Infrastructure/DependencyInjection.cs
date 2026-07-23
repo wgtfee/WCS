@@ -3,6 +3,7 @@ namespace Wcs.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.Persistence;
 using Wcs.Core.Telemetry;
@@ -117,6 +118,8 @@ public static class DependencyInjection
         options.BatchSize = Math.Clamp(options.BatchSize, 1, Math.Min(10_000, options.ChannelCapacity));
         options.FlushIntervalMs = Math.Clamp(options.FlushIntervalMs, 10, 60_000);
         options.RetryDelayMs = Math.Clamp(options.RetryDelayMs, 100, 60_000);
+        options.WalBatchSize = Math.Clamp(options.WalBatchSize, 1, Math.Min(10_000, options.ChannelCapacity));
+        options.WalFlushIntervalMs = Math.Clamp(options.WalFlushIntervalMs, 1, 5_000);
         options.Site = string.IsNullOrWhiteSpace(options.Site) ? "default" : options.Site.Trim();
         options.Measurement = string.IsNullOrWhiteSpace(options.Measurement)
             ? "plc_signal"
@@ -143,6 +146,7 @@ public static class DependencyInjection
         services.AddSingleton<PlcTelemetryBuffer>();
         services.AddSingleton<IPlcTelemetrySink>(sp => sp.GetRequiredService<PlcTelemetryBuffer>());
         services.AddSingleton<IPlcTelemetryStatusProvider>(sp => sp.GetRequiredService<PlcTelemetryBuffer>());
+        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PlcTelemetryBuffer>());
         services.AddHttpClient("WcsInfluxTelemetry", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
