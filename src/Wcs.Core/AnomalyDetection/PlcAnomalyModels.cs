@@ -133,7 +133,9 @@ public sealed record PlcAnomalyRecord
 public sealed record PlcAnomalyStatus
 {
     public bool Enabled { get; init; }
+    public int ConfiguredRules { get; init; }
     public long ProcessedSamples { get; init; }
+    public long MatchedRuleEvaluations { get; init; }
     public long DetectorObservations { get; init; }
     public long Raised { get; init; }
     public long Recovered { get; init; }
