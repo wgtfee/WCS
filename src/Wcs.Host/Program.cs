@@ -200,6 +200,7 @@ try
     builder.Services.AddHostedService<PersistBackgroundService>();
     builder.Services.AddHostedService<AlarmMonitorBackgroundService>();
     builder.Services.AddHostedService<EventPersistenceService>();
+    builder.Services.AddHostedService<PlcTelemetryEventBridgeService>();
     builder.Services.AddHostedService<TaskGeneratorService>();
     builder.Services.AddHostedService<TaskExecutionWorker>();
     builder.Services.AddHostedService<AlarmWiringService>();
