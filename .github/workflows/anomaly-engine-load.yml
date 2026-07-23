@@ -6,7 +6,7 @@ on:
       - ".github/workflows/anomaly-engine-load.yml"
       - "src/Wcs.Core/AnomalyDetection/**"
       - "src/Wcs.Core/EventBus/Events/PlcAnomalyEvents.cs"
-      - "src/Wcs.Core.Tests/PlcAnomalyEngineTests.cs"
+      - "src/Wcs.Core.Tests/PlcAnomaly*.cs"
       - "src/Wcs.Infrastructure/DependencyInjection.cs"
       - "src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs"
       - "src/Wcs.Host/BackgroundServices/PlcAnomaly*.cs"
@@ -58,9 +58,10 @@ jobs:
 
       - name: Build and test anomaly engine
         run: |
+          mkdir -p artifacts/TestResults
           dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
           dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
-          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-build --filter FullyQualifiedName~PlcAnomalyEngineTests --logger "trx;LogFileName=plc-anomaly-tests.trx" --results-directory artifacts/TestResults
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-build --filter FullyQualifiedName~PlcAnomaly --logger "trx;LogFileName=plc-anomaly-tests.trx" --results-directory artifacts/TestResults
           dotnet restore src/Wcs.Host/Wcs.Host.csproj
           dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
 
@@ -131,6 +132,8 @@ jobs:
           [[ "$(jq -r '.suppressedDelta' artifacts/anomaly-load-response.json)" == "0" ]]
           [[ "$(jq -r '.activeDelta' artifacts/anomaly-load-response.json)" == "0" ]]
           (( $(jq -r '.processedDelta' artifacts/anomaly-load-response.json) >= 210000 ))
+          [[ "$(jq -r '.status.configuredRules' artifacts/anomaly-load-response.json)" == "1" ]]
+          (( $(jq -r '.status.matchedRuleEvaluations' artifacts/anomaly-load-response.json) >= 210000 ))
 
       - name: Verify exact anomaly SQL lifecycle count
         shell: bash
