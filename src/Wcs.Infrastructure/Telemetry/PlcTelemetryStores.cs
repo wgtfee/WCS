@@ -72,7 +72,7 @@ internal sealed class SqlServerPlcTelemetryStore : IPlcTelemetryStore
         NewValue = point.NewValue,
         ValueKind = (int)point.ValueKind,
         BoolValue = point.BoolValue,
-        NumericValue = point.NumericValue.HasValue ? Convert.ToDecimal(point.NumericValue.Value, CultureInfo.InvariantCulture) : null,
+        NumericValue = point.NumericValue.HasValue ? (decimal?)point.NumericValue.Value : null,
         TextValue = point.TextValue,
         Quality = point.Quality,
         ValidatorPassed = point.ValidatorPassed,
