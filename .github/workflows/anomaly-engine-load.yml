@@ -1,0 +1,211 @@
+name: WCS PLC Anomaly Engine Load
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/anomaly-engine-load.yml"
+      - "src/Wcs.Core/AnomalyDetection/**"
+      - "src/Wcs.Core/EventBus/Events/PlcAnomalyEvents.cs"
+      - "src/Wcs.Core.Tests/PlcAnomalyEngineTests.cs"
+      - "src/Wcs.Infrastructure/DependencyInjection.cs"
+      - "src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs"
+      - "src/Wcs.Host/BackgroundServices/PlcAnomaly*.cs"
+      - "src/Wcs.Host/Controllers/PlcAnomalyController.cs"
+      - "src/Wcs.Host/Program.cs"
+      - "src/Wcs.Host/appsettings.LoadTest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-plc-anomaly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  anomaly-load:
+    name: exact lifecycle and false-positive load
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_LoadTest!2026"
+        ports:
+          - 1433:1433
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: "LoadTest"
+      DOTNET_ENVIRONMENT: "LoadTest"
+      ASPNETCORE_URLS: "http://127.0.0.1:5080"
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_AnomalyLoad;User Id=sa;Password=Wcs_LoadTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0"
+      Storage__Telemetry__Provider: "Disabled"
+      AnomalyDetection__Enabled: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build and test anomaly engine
+        run: |
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-build --filter FullyQualifiedName~PlcAnomalyEngineTests --logger "trx;LogFileName=plc-anomaly-tests.trx" --results-directory artifacts/TestResults
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_AnomalyLoad]"
+          '
+
+      - name: Start isolated Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/anomaly-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/anomaly-host.pid"
+          popd
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/status" | tee artifacts/anomaly-baseline-status.json
+              ps -o rss= -p "$(cat artifacts/anomaly-host.pid)" | tr -d ' ' > artifacts/anomaly-initial-rss-kb.txt
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/anomaly-host.pid)" 2>/dev/null; then
+              cat artifacts/anomaly-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/anomaly-host.log
+          exit 1
+
+      - name: Capture physical baseline
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_AnomalyLoad -h -1 -W -Q "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly"
+          ' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1 > artifacts/anomaly-baseline-count.txt
+
+      - name: Generate 2k lifecycles and 200k normal samples
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/load" \
+            --header 'content-type: application/json' \
+            --data '{"cycles":2000,"concurrency":32,"normalEvents":200000}' \
+            --max-time 1200 | tee artifacts/anomaly-load-response.json
+
+          [[ "$(jq -r '.raisedDelta' artifacts/anomaly-load-response.json)" == "2000" ]]
+          [[ "$(jq -r '.recoveredDelta' artifacts/anomaly-load-response.json)" == "2000" ]]
+          [[ "$(jq -r '.failureDelta' artifacts/anomaly-load-response.json)" == "0" ]]
+          [[ "$(jq -r '.suppressedDelta' artifacts/anomaly-load-response.json)" == "0" ]]
+          [[ "$(jq -r '.activeDelta' artifacts/anomaly-load-response.json)" == "0" ]]
+          (( $(jq -r '.processedDelta' artifacts/anomaly-load-response.json) >= 210000 ))
+
+      - name: Verify exact anomaly SQL lifecycle count
+        shell: bash
+        run: |
+          baseline="$(cat artifacts/anomaly-baseline-count.txt)"
+          sql_container="${{ job.services.sqlserver.id }}"
+          query_sql() {
+            docker exec "$sql_container" bash -lc "
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x \"\$sqlcmd\" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              \"\$sqlcmd\" -S localhost -U sa -P \"\$MSSQL_SA_PASSWORD\" -C -d WCS_AnomalyLoad -h -1 -W -Q \"$1\"
+            " | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1
+          }
+
+          for attempt in {1..180}; do
+            final="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly')"
+            recovered="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Status = 1')"
+            active="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Status = 0')"
+            duplicates="$(query_sql 'SELECT COUNT_BIG(*) FROM (SELECT AnomalyKey FROM Wcs_PlcAnomaly GROUP BY AnomalyKey HAVING COUNT_BIG(*) > 1) d')"
+            if (( final - baseline == 2000 && recovered == 2000 && active == 0 && duplicates == 0 )); then
+              printf 'baseline=%s\nfinal=%s\ndelta=%s\nrecovered=%s\nactive=%s\nduplicates=%s\n' \
+                "$baseline" "$final" "$((final-baseline))" "$recovered" "$active" "$duplicates" \
+                | tee artifacts/anomaly-physical-count.txt
+              break
+            fi
+            if [[ "$attempt" -eq 180 ]]; then
+              printf 'baseline=%s\nfinal=%s\nrecovered=%s\nactive=%s\nduplicates=%s\n' \
+                "$baseline" "$final" "$recovered" "$active" "$duplicates" \
+                | tee artifacts/anomaly-physical-count.txt
+              exit 1
+            fi
+            sleep 1
+          done
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/status" | tee artifacts/anomaly-final-status.json
+          [[ "$(jq -r '.activeAnomalies' artifacts/anomaly-final-status.json)" == "0" ]]
+          [[ "$(jq -r '.failures' artifacts/anomaly-final-status.json)" == "0" ]]
+          ps -o rss= -p "$(cat artifacts/anomaly-host.pid)" | tr -d ' ' > artifacts/anomaly-final-rss-kb.txt
+
+      - name: Validate memory and logs
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/anomaly-initial-rss-kb.txt && -f artifacts/anomaly-final-rss-kb.txt ]]; then
+            initial="$(cat artifacts/anomaly-initial-rss-kb.txt)"
+            final="$(cat artifacts/anomaly-final-rss-kb.txt)"
+            growth_mb="$(( (final-initial) / 1024 ))"
+            printf 'initial_rss_kb=%s\nfinal_rss_kb=%s\ngrowth_mb=%s\n' "$initial" "$final" "$growth_mb" | tee artifacts/anomaly-memory.txt
+            (( growth_mb <= 350 ))
+          fi
+
+          test -s artifacts/anomaly-host.log
+          if grep -Eqi 'OutOfMemory|Unhandled exception|PLC anomaly persistence failed after retries|PK_Wcs_PlcAnomaly|duplicate key|Stack overflow' artifacts/anomaly-host.log; then
+            grep -Eni -C 5 'OutOfMemory|Unhandled exception|PLC anomaly persistence failed after retries|PK_Wcs_PlcAnomaly|duplicate key|Stack overflow' artifacts/anomaly-host.log
+            exit 1
+          fi
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/anomaly-host.pid ]]; then
+            pid="$(cat artifacts/anomaly-host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..20}; do
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload anomaly evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-anomaly-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 14
