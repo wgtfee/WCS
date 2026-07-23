@@ -1,5 +1,6 @@
 namespace Wcs.Simulator.PlcSimulatorEngine;
 
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.EventDetection;
 using Wcs.Core.PlcSubsystem.S7;
@@ -20,7 +21,7 @@ public class SimulatedPlcPollingService
     private CancellationTokenSource? _pollingCts;
     private bool _running;
 
-    public double ChangeProbability { get; set; } = 0.3;
+    public double ChangeProbability { get; set; }
 
     public SimulatedPlcPollingService(
         PlcStructRegistry registry,
@@ -34,6 +35,16 @@ public class SimulatedPlcPollingService
         _eventDetector = eventDetector;
         _snapshotCenter = snapshotCenter;
         _logger = logger;
+
+        ChangeProbability = ReadChangeProbability();
+    }
+
+    private static double ReadChangeProbability()
+    {
+        var value = Environment.GetEnvironmentVariable("SIMULATOR_CHANGE_PROBABILITY");
+        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var configured)
+            ? Math.Clamp(configured, 0d, 1d)
+            : 0.3d;
     }
 
     /// <summary>注册默认验证器 — AlwaysPass，所有信号放行，方便观察完整链路</summary>
@@ -75,7 +86,9 @@ public class SimulatedPlcPollingService
                 pollingCts.Token));
         }
 
-        _logger?.LogInformation("[SimPLC] ✅ 3 PLC 9 DB 块模拟轮询已启动");
+        _logger?.LogInformation(
+            "[SimPLC] ✅ 3 PLC 9 DB 块模拟轮询已启动，状态变化概率={Probability:P2}",
+            ChangeProbability);
     }
 
     private void SyncStateCenter(Type structType, object current)
@@ -105,6 +118,15 @@ public class SimulatedPlcPollingService
         {
             do
             {
+                // A PLC is polled every interval, but its values do not all change on every read.
+                // Skipping unchanged cycles prevents an artificial event/SQL/SignalR storm while
+                // preserving the real polling cadence and full processing path when a change occurs.
+                if (_previousStructs.ContainsKey(cfg.Key) &&
+                    Random.Shared.NextDouble() > ChangeProbability)
+                {
+                    continue;
+                }
+
                 var data = cfg.Generate();
                 var current = Wcs.Core.PlcSubsystem.SignalMapper.S7.Struct.FromBytes(
                     cfg.StructType, data, cfg.Length, 0);
