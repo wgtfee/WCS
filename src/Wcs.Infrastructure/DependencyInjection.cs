@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Wcs.Core.AnomalyDetection;
 using Wcs.Core.Persistence;
 using Wcs.Core.Telemetry;
 using Wcs.Core.TransportScheduling;
@@ -102,6 +103,7 @@ public static class DependencyInjection
             _ => new FileTransportLogicalBackupStorage(backupDirectory)));
 
         AddPlcTelemetryStorage(services, configuration, connectionString);
+        AddPlcAnomalyDetection(services, configuration);
         return services;
     }
 
@@ -162,6 +164,64 @@ public static class DependencyInjection
             _ => throw new InvalidOperationException($"不支持的 PLC telemetry provider: {options.Provider}")
         });
         services.AddHostedService<PlcTelemetryBatchWriterService>();
+    }
+
+    private static void AddPlcAnomalyDetection(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var options = configuration
+            .GetSection("AnomalyDetection")
+            .Get<PlcAnomalyOptions>() ?? new PlcAnomalyOptions();
+
+        options.WindowSize = Math.Clamp(options.WindowSize, 10, 10_000);
+        options.MinimumSamples = Math.Clamp(options.MinimumSamples, 3, options.WindowSize);
+        options.MaximumTrackedRuleSignals = Math.Clamp(
+            options.MaximumTrackedRuleSignals,
+            100,
+            1_000_000);
+        options.ObserveThreshold = Math.Clamp(options.ObserveThreshold, 0, 1);
+        options.WarningThreshold = Math.Clamp(
+            Math.Max(options.WarningThreshold, options.ObserveThreshold),
+            0,
+            1);
+        options.AlarmThreshold = Math.Clamp(
+            Math.Max(options.AlarmThreshold, options.WarningThreshold),
+            0,
+            1);
+        options.ConsecutiveWarningCount = Math.Clamp(options.ConsecutiveWarningCount, 1, 1_000);
+        options.ConsecutiveAlarmCount = Math.Clamp(
+            Math.Max(options.ConsecutiveAlarmCount, options.ConsecutiveWarningCount),
+            1,
+            1_000);
+        options.RecoveryCount = Math.Clamp(options.RecoveryCount, 1, 10_000);
+        options.DurationSweepIntervalMs = Math.Clamp(options.DurationSweepIntervalMs, 100, 60_000);
+        options.AlarmDelayRaiseMs = Math.Clamp(options.AlarmDelayRaiseMs, 0, 60_000);
+        options.AlarmDelayRecoverMs = Math.Clamp(options.AlarmDelayRecoverMs, 0, 60_000);
+
+        for (var index = 0; index < options.Rules.Count; index++)
+        {
+            var rule = options.Rules[index];
+            rule.RuleId = string.IsNullOrWhiteSpace(rule.RuleId)
+                ? $"ANOMALY-RULE-{index + 1}"
+                : rule.RuleId.Trim();
+            rule.PlcPattern = string.IsNullOrWhiteSpace(rule.PlcPattern) ? "*" : rule.PlcPattern.Trim();
+            rule.DevicePattern = string.IsNullOrWhiteSpace(rule.DevicePattern) ? "*" : rule.DevicePattern.Trim();
+            rule.SignalPattern = rule.SignalPattern?.Trim() ?? string.Empty;
+            rule.MadMultiplier = Math.Clamp(rule.MadMultiplier, 1, 100);
+            rule.MinimumMad = Math.Clamp(rule.MinimumMad, 0.000001, 1_000_000);
+            if (rule.MaximumTrueDurationMs is not null)
+                rule.MaximumTrueDurationMs = Math.Clamp(rule.MaximumTrueDurationMs.Value, 1, 86_400_000);
+            if (rule.ConsecutiveAbnormalCount is not null)
+                rule.ConsecutiveAbnormalCount = Math.Clamp(rule.ConsecutiveAbnormalCount.Value, 1, 1_000);
+            if (rule.ConsecutiveRecoveryCount is not null)
+                rule.ConsecutiveRecoveryCount = Math.Clamp(rule.ConsecutiveRecoveryCount.Value, 1, 10_000);
+        }
+
+        services.Replace(ServiceDescriptor.Singleton(options));
+        services.AddSingleton<PlcAnomalyEngine>();
+        services.AddSingleton<IPlcAnomalyEngine>(sp => sp.GetRequiredService<PlcAnomalyEngine>());
+        services.AddSingleton<IPlcAnomalyStatusProvider>(sp => sp.GetRequiredService<PlcAnomalyEngine>());
     }
 
     private static bool GetBool(IConfiguration configuration, string key, bool defaultValue) =>
