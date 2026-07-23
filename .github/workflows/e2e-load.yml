@@ -107,13 +107,24 @@ jobs:
           popd
           echo "$host_pid" > artifacts/host.pid
 
-          for attempt in {1..90}; do
-            if curl --fail --silent "$ASPNETCORE_URLS/health/live" >/dev/null; then
+          startup_started_at="$SECONDS"
+          for attempt in {1..60}; do
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              --connect-timeout 1 \
+              --max-time 3 \
+              "$ASPNETCORE_URLS/health/live" >/dev/null; then
               exit 0
             fi
             if ! kill -0 "$(cat artifacts/host.pid)" 2>/dev/null; then
               cat artifacts/host.log
               exit 1
+            fi
+            if (( attempt % 15 == 0 )); then
+              echo "Host is still starting after $((SECONDS - startup_started_at)) seconds"
+              tail -n 80 artifacts/host.log || true
             fi
             sleep 2
           done
