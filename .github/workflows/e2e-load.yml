@@ -151,6 +151,24 @@ jobs:
             "${load_timeout_seconds}s" \
             node tests/load/wcs-e2e-load.mjs
 
+      - name: Validate scheduler backlog drains
+        shell: bash
+        env:
+          MAX_ACTIVE_TASKS_AFTER_LOAD: "100"
+        run: |
+          : > artifacts/task-backlog.txt
+          for attempt in {1..30}; do
+            active_tasks="$(curl --fail --silent --show-error --max-time 5 "$ASPNETCORE_URLS/api/tasks" | jq 'length')"
+            printf '%s|%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$active_tasks" | tee -a artifacts/task-backlog.txt
+            if (( active_tasks <= MAX_ACTIVE_TASKS_AFTER_LOAD )); then
+              echo "Scheduler backlog is bounded: $active_tasks active tasks"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Scheduler backlog did not drain below $MAX_ACTIVE_TASKS_AFTER_LOAD active tasks"
+          exit 1
+
       - name: Validate database concurrency log
         if: always()
         shell: bash
@@ -208,6 +226,7 @@ jobs:
           path: |
             artifacts/host.log
             artifacts/e2e-load-results.json
+            artifacts/task-backlog.txt
             artifacts/sql-evidence.txt
           if-no-files-found: warn
           retention-days: 14
