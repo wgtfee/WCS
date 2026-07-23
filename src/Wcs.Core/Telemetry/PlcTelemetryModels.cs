@@ -8,6 +8,16 @@ public enum PlcTelemetryProvider
     InfluxDb = 2
 }
 
+/// <summary>
+/// PLC 时序数据接收耐久模式。
+/// Buffered 优先吞吐，WriteAhead 在返回接收成功前先完成本地持久化。
+/// </summary>
+public enum PlcTelemetryDurabilityMode
+{
+    Buffered = 0,
+    WriteAhead = 1
+}
+
 /// <summary>InfluxDB HTTP API 类型。</summary>
 public enum InfluxDbApiVersion
 {
@@ -24,15 +34,23 @@ public enum PlcTelemetryValueKind
 
 /// <summary>
 /// PLC 时序存储配置。业务数据库仍由 ConnectionStrings:WcsDb 管理，
-/// 本配置仅决定 PLC 高频历史数据保存位置。
+/// 本配置仅决定 PLC 高频历史数据保存位置和接收耐久等级。
 /// </summary>
 public sealed class PlcTelemetryOptions
 {
     public PlcTelemetryProvider Provider { get; set; } = PlcTelemetryProvider.SqlServer;
+    public PlcTelemetryDurabilityMode DurabilityMode { get; set; } = PlcTelemetryDurabilityMode.Buffered;
     public int ChannelCapacity { get; set; } = 100_000;
     public int BatchSize { get; set; } = 1_000;
     public int FlushIntervalMs { get; set; } = 1_000;
     public int RetryDelayMs { get; set; } = 2_000;
+
+    /// <summary>WriteAhead 模式每次合并写入 WAL 的最大点数。</summary>
+    public int WalBatchSize { get; set; } = 256;
+
+    /// <summary>WriteAhead 模式等待更多点加入同一 WAL 批次的最长时间。</summary>
+    public int WalFlushIntervalMs { get; set; } = 10;
+
     public string SpoolDirectory { get; set; } = "data/plc-telemetry-spool";
     public string Site { get; set; } = "default";
     public string Measurement { get; set; } = "plc_signal";
@@ -78,6 +96,7 @@ public sealed record PlcTelemetryPoint
 public sealed record PlcTelemetryStatus
 {
     public required string Provider { get; init; }
+    public required string DurabilityMode { get; init; }
     public long Accepted { get; init; }
     public long Persisted { get; init; }
     public long Replayed { get; init; }
@@ -85,6 +104,7 @@ public sealed record PlcTelemetryStatus
     public long Dropped { get; init; }
     public long FailedBatches { get; init; }
     public long QueueDepth { get; init; }
+    public long WalPending { get; init; }
     public long SpoolPending { get; init; }
     public long InFlight { get; init; }
     public long ConservationDelta { get; init; }
