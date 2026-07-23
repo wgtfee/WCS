@@ -201,6 +201,9 @@ try
     builder.Services.AddHostedService<AlarmMonitorBackgroundService>();
     builder.Services.AddHostedService<EventPersistenceService>();
     builder.Services.AddHostedService<PlcTelemetryEventBridgeService>();
+    builder.Services.AddHostedService<PlcAnomalyDetectionService>();
+    builder.Services.AddHostedService<PlcAnomalyPersistenceService>();
+    builder.Services.AddHostedService<PlcAnomalyAlarmBridgeService>();
     builder.Services.AddHostedService<TaskGeneratorService>();
     builder.Services.AddHostedService<TaskExecutionWorker>();
     builder.Services.AddHostedService<AlarmWiringService>();
@@ -289,11 +292,11 @@ static void RegisterPlcValidators(IServiceProvider services, Microsoft.Extension
         // detector.RegisterValidator(new StationInterlockValidator());
 
         // === 标签验证器 ===
-        //detector.RegisterValidator(new TagStationInterlockValidator());
-        //detector.RegisterValidator(new TagBarcodeDbValidator());
+        // detector.RegisterValidator(new TagStationInterlockValidator());
+        // detector.RegisterValidator(new TagBarcodeDbValidator());
 
         // === Modbus / OPC UA ===
-        //detector.RegisterValidator(new ModbusConveyorValidator());
+        // detector.RegisterValidator(new ModbusConveyorValidator());
 
         logger.LogInformation("PLC 验证器注册完成，共 2 个");
     }
