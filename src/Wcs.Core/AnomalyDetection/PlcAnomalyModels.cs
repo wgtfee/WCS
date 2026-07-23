@@ -27,7 +27,7 @@ public enum PlcAnomalyLifecycleStatus
     Recovered = 1
 }
 
-/// <summary>单条信号的异常检测规则。</summary>
+/// <summary>单条信号或跨信号一致性的异常检测规则。</summary>
 public sealed class PlcAnomalyRule
 {
     public string RuleId { get; set; } = string.Empty;
@@ -44,6 +44,17 @@ public sealed class PlcAnomalyRule
     public bool StatisticalBaselineEnabled { get; set; }
     public double MadMultiplier { get; set; } = 6.0;
     public double MinimumMad { get; set; } = 0.001;
+
+    /// <summary>
+    /// 配置后该规则变为跨信号一致性规则。支持通配符，通常使用
+    /// SignalPattern="*_Running"、RelatedSignalPattern="*_Speed"。
+    /// </summary>
+    public string? RelatedSignalPattern { get; set; }
+    public string? WhenValueEquals { get; set; }
+    public string? RelatedExpectedValue { get; set; }
+    public double? RelatedMinimum { get; set; }
+    public double? RelatedMaximum { get; set; }
+    public int MaximumRelatedAgeMs { get; set; } = 5_000;
 
     public PlcAnomalySeverity Severity { get; set; } = PlcAnomalySeverity.Warning;
     public bool RaiseAlarm { get; set; } = true;
