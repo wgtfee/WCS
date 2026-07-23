@@ -33,8 +33,9 @@ public class TaskGeneratorService : BackgroundService
         // 订阅 PalletArrivedEvent → 生成运输任务
         _eventBus.Subscribe<PalletArrivedEvent>(async (evt, ct) =>
         {
-            var taskId = $"T{++_taskCounter:D5}";
-            var palletId = evt.Barcode ?? $"PALLET_{_taskCounter:D6}";
+            var sequence = Interlocked.Increment(ref _taskCounter);
+            var taskId = $"T{sequence:D12}";
+            var palletId = evt.Barcode ?? $"PALLET_{sequence:D12}";
 
             var task = new TaskContext
             {
@@ -64,7 +65,8 @@ public class TaskGeneratorService : BackgroundService
         // 订阅 DeviceFaultEvent → 生成恢复任务
         _eventBus.Subscribe<DeviceFaultEvent>(async (evt, ct) =>
         {
-            var taskId = $"R{++_taskCounter:D5}";
+            var sequence = Interlocked.Increment(ref _taskCounter);
+            var taskId = $"R{sequence:D12}";
             var task = new TaskContext
             {
                 TaskId = taskId,
