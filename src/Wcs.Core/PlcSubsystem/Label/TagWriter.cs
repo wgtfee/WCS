@@ -73,17 +73,18 @@ public class TagWriter
         try
         {
             var now = DateTime.UtcNow;
-            var id = now.Ticks + Random.Shared.Next(0, 9999);
+            var db = _db.CopyNew();
 
-            await _db.Insertable(new PlcWriteLogEntity
+            await db.Insertable(new PlcWriteLogEntity
             {
-                Id = id, PlcName = "", DbBlock = 0, StartByte = 0,
+                Id = SnowFlakeSingle.Instance.NextId(),
+                PlcName = "", DbBlock = 0, StartByte = 0,
                 CommandType = commandType, DeviceId = deviceId, TaskId = taskId,
                 DataHex = "", DataLength = 0, Success = success,
                 ErrorMessage = error, WriteTime = now
             }).ExecuteCommandAsync();
 
-            await _db.Insertable(new CommandLogEntity
+            await db.Insertable(new CommandLogEntity
             {
                 CommandId = Guid.NewGuid().ToString("N"),
                 CommandType = commandType, DeviceId = deviceId ?? "", TaskId = taskId,

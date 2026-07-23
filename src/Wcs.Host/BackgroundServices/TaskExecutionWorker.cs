@@ -32,6 +32,9 @@ public class TaskExecutionWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Do not let a task already queued by the simulator run synchronously on the
+        // generic host startup path. The worker must never delay Kestrel binding.
+        await Task.Yield();
         _logger.LogInformation("TaskExecutionWorker 启动");
 
         while (!stoppingToken.IsCancellationRequested)
@@ -87,7 +90,10 @@ public class TaskExecutionWorker : BackgroundService
         if (_db == null) return;
         try
         {
-            await _db.Insertable(new TaskEventEntity
+            // Background jobs do not have an HTTP async context. SqlSugarScope
+            // requires an isolated copy for this usage.
+            var db = _db.CopyNew();
+            await db.Insertable(new TaskEventEntity
             {
                 TaskId = taskId,
                 EventType = eventType,
@@ -106,8 +112,11 @@ public class TaskExecutionWorker : BackgroundService
         var now = DateTime.UtcNow;
         try
         {
+            // Keep the whole archive operation on one job-local client.
+            var db = _db.CopyNew();
+
             // Wcs_TaskHistory
-            await _db.Insertable(new TaskHistoryEntity
+            await db.Insertable(new TaskHistoryEntity
             {
                 TaskId = task.TaskId,
                 RouteId = task.RouteId,
@@ -119,7 +128,7 @@ public class TaskExecutionWorker : BackgroundService
             }).ExecuteCommandAsync();
 
             // Wcs_TaskRun
-            await _db.Insertable(new TaskRunEntity
+            await db.Insertable(new TaskRunEntity
             {
                 TaskId = task.TaskId,
                 DeviceId = task.DeviceId, RouteId = task.RouteId, PalletId = palletId,
@@ -130,7 +139,7 @@ public class TaskExecutionWorker : BackgroundService
             }).ExecuteCommandAsync();
 
             // Wcs_TransportHistory
-            await _db.Insertable(new TransportHistoryEntity
+            await db.Insertable(new TransportHistoryEntity
             {
                 TaskId = task.TaskId, PalletId = palletId,
                 SourceNode = fromNode, TargetNode = toNode, Route = task.RouteId,
