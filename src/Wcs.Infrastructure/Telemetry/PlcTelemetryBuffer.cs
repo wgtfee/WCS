@@ -1,7 +1,6 @@
 namespace Wcs.Infrastructure.Telemetry;
 
 using System.Threading.Channels;
-using Microsoft.Extensions.Logging;
 using Wcs.Core.Telemetry;
 
 internal sealed class PlcTelemetryBuffer : IPlcTelemetrySink, IPlcTelemetryStatusProvider
@@ -9,7 +8,6 @@ internal sealed class PlcTelemetryBuffer : IPlcTelemetrySink, IPlcTelemetryStatu
     private readonly Channel<PlcTelemetryPoint> _channel;
     private readonly FilePlcTelemetrySpool _spool;
     private readonly PlcTelemetryOptions _options;
-    private readonly ILogger<PlcTelemetryBuffer> _logger;
 
     private long _accepted;
     private long _persisted;
@@ -24,12 +22,10 @@ internal sealed class PlcTelemetryBuffer : IPlcTelemetrySink, IPlcTelemetryStatu
 
     public PlcTelemetryBuffer(
         PlcTelemetryOptions options,
-        FilePlcTelemetrySpool spool,
-        ILogger<PlcTelemetryBuffer> logger)
+        FilePlcTelemetrySpool spool)
     {
         _options = options;
         _spool = spool;
-        _logger = logger;
 
         var capacity = Math.Max(options.BatchSize, options.ChannelCapacity);
         _channel = Channel.CreateBounded<PlcTelemetryPoint>(new BoundedChannelOptions(capacity)
@@ -54,25 +50,26 @@ internal sealed class PlcTelemetryBuffer : IPlcTelemetrySink, IPlcTelemetryStatu
         if (_options.Provider == PlcTelemetryProvider.Disabled)
             return true;
 
-        if (_channel.Writer.TryWrite(point))
-        {
-            Interlocked.Increment(ref _accepted);
-            Interlocked.Increment(ref _queueDepth);
-            return true;
-        }
-
+        // 先计入守恒式，读线程即使立即取走也不会造成负数窗口。
+        Interlocked.Increment(ref _accepted);
+        Interlocked.Increment(ref _queueDepth);
         try
         {
-            await _spool.AppendAsync(new[] { point }, cancellationToken);
-            Interlocked.Increment(ref _accepted);
-            Interlocked.Increment(ref _spooled);
+            await _channel.Writer.WriteAsync(point, cancellationToken);
             return true;
         }
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            Interlocked.Decrement(ref _accepted);
+            Interlocked.Decrement(ref _queueDepth);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Decrement(ref _accepted);
+            Interlocked.Decrement(ref _queueDepth);
             Interlocked.Increment(ref _dropped);
             Volatile.Write(ref _lastError, ex.Message);
-            _logger.LogError(ex, "PLC telemetry 队列和本地缓冲均写入失败，Sequence={Sequence}", point.Sequence);
             return false;
         }
     }
