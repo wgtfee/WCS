@@ -1,0 +1,194 @@
+name: WCS Realistic Soak Load
+
+on:
+  pull_request:
+    branches: [ "develop" ]
+    paths:
+      - ".github/workflows/e2e-soak.yml"
+      - "src/Wcs.Application/**"
+      - "src/Wcs.Core/**"
+      - "src/Wcs.Host/**"
+      - "src/Wcs.Infrastructure/**"
+      - "src/Wcs.Simulator/**"
+      - "tests/load/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-realistic-soak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak-load:
+    name: 180s Host + SQL + SimPLC + SignalR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_LoadTest!2026"
+        ports:
+          - 1433:1433
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: "LoadTest"
+      DOTNET_ENVIRONMENT: "LoadTest"
+      ASPNETCORE_URLS: "http://127.0.0.1:5080"
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_LoadTest;User Id=sa;Password=Wcs_LoadTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0.03"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build Host
+        run: |
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        run: |
+          mkdir -p artifacts
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_LoadTest]"
+          '
+
+      - name: Start isolated Host
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/host.pid"
+          popd
+          for attempt in {1..60}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then exit 0; fi
+            if ! kill -0 "$(cat artifacts/host.pid)" 2>/dev/null; then cat artifacts/host.log; exit 1; fi
+            sleep 2
+          done
+          cat artifacts/host.log
+          exit 1
+
+      - name: Run 180 second realistic soak
+        env:
+          DURATION_SECONDS: "180"
+          HTTP_CONCURRENCY: "24"
+          SIGNALR_CONNECTIONS: "100"
+          WRITE_INTERVAL_MS: "1000"
+          MAX_ERROR_RATE_PERCENT: "0"
+          MAX_P95_MS: "500"
+          MIN_SIGNALR_MESSAGES: "1"
+          OUTPUT_PATH: "artifacts/e2e-load-results.json"
+        run: |
+          export HOST_PID="$(cat artifacts/host.pid)"
+          samples_file="artifacts/task-queue-samples.txt"
+          stop_file="artifacts/stop-monitor"
+          rm -f "$samples_file" "$stop_file"
+          (
+            while [[ ! -f "$stop_file" ]]; do
+              status="$(curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/api/tasks/queue" || true)"
+              if [[ -n "$status" ]]; then
+                printf '%s|%s|%s|%s\n' \
+                  "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
+                  "$(jq -r '.queued // 0' <<<"$status")" \
+                  "$(jq -r '.running // 0' <<<"$status")" \
+                  "$(jq -r '.total // 0' <<<"$status")" >> "$samples_file"
+              fi
+              sleep 0.5
+            done
+          ) &
+          monitor_pid="$!"
+          timeout --signal=TERM --kill-after=10s 300s node tests/load/wcs-e2e-load.mjs
+          touch "$stop_file"
+          wait "$monitor_pid" || true
+
+      - name: Validate sustained stability
+        run: |
+          result="artifacts/e2e-load-results.json"
+          test -s "$result"
+          failed="$(jq -r '.http.failedRequests' "$result")"
+          p95="$(jq -r '.http.p95Milliseconds' "$result")"
+          initial="$(jq -r '.memory.initialRssMb' "$result")"
+          final="$(jq -r '.memory.finalRssMb' "$result")"
+          peak="$(jq -r '.memory.peakRssMb' "$result")"
+          peak_queued="$(awk -F'|' 'BEGIN {m=0} {if ($2+0>m)m=$2+0} END {print m}' artifacts/task-queue-samples.txt)"
+          final_queued="$(tail -n1 artifacts/task-queue-samples.txt | awk -F'|' '{print $2+0}')"
+          growth="$(awk -v f="$final" -v i="$initial" 'BEGIN {printf "%.2f", f-i}')"
+          printf 'failed=%s\np95_ms=%s\ninitial_rss_mb=%s\nfinal_rss_mb=%s\npeak_rss_mb=%s\nrss_growth_mb=%s\npeak_queued=%s\nfinal_queued=%s\n' \
+            "$failed" "$p95" "$initial" "$final" "$peak" "$growth" "$peak_queued" "$final_queued" | tee artifacts/soak-summary.txt
+          [[ "$failed" == "0" ]]
+          awk -v value="$p95" 'BEGIN {exit !(value <= 500)}'
+          awk -v value="$growth" 'BEGIN {exit !(value <= 200)}'
+          awk -v value="$peak" 'BEGIN {exit !(value <= 700)}'
+          (( peak_queued <= 100 ))
+          (( final_queued <= 25 ))
+
+      - name: Validate event volume and SQL evidence
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_LoadTest -h -1 -W \
+              -Q "SELECT COUNT_BIG(*) FROM Wcs_DeviceStateLog; SELECT COUNT_BIG(*) FROM Wcs_TaskRun;"
+          ' > artifacts/sql-counts.txt
+          mapfile -t counts < <(grep -E '^[0-9]+$' artifacts/sql-counts.txt)
+          device_logs="${counts[0]:-0}"
+          task_runs="${counts[1]:-0}"
+          printf 'device_state_logs=%s\ntask_runs=%s\n' "$device_logs" "$task_runs" | tee artifacts/sql-summary.txt
+          (( device_logs > 0 && device_logs <= 30000 ))
+          (( task_runs > 0 ))
+          if grep -Eqi 'OutOfMemory|PK_Wcs_DeviceStateLog_Id|The connection is broken|The connection is closed|current state is connecting|Persist cycle failed' artifacts/host.log; then
+            grep -Eni 'OutOfMemory|PK_Wcs_DeviceStateLog_Id|The connection is broken|The connection is closed|current state is connecting|Persist cycle failed' artifacts/host.log
+            exit 1
+          fi
+
+      - name: Stop Host
+        if: always()
+        run: |
+          if [[ -f artifacts/host.pid ]]; then
+            pid="$(cat artifacts/host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..20}; do
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload soak evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-realistic-soak-${{ github.run_number }}
+          path: |
+            artifacts/host.log
+            artifacts/e2e-load-results.json
+            artifacts/task-queue-samples.txt
+            artifacts/soak-summary.txt
+            artifacts/sql-counts.txt
+            artifacts/sql-summary.txt
+          retention-days: 14
