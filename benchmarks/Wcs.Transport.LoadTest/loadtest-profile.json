@@ -1,0 +1,11 @@
+{
+  "singleRunTaskCounts": [100, 500, 1000, 2500, 5000],
+  "strategyComparisonTaskCount": 1000,
+  "concurrentRequests": 8,
+  "concurrentTasksPerRequest": 500,
+  "retentionIterations": 20,
+  "retentionTasksPerRun": 1000,
+  "capacityVehicleCounts": [5, 10, 20],
+  "capacityTaskRatesPerHour": [120, 240, 480],
+  "capacityRepetitions": 2
+}
