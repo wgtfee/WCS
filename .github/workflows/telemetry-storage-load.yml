@@ -26,7 +26,7 @@ jobs:
   telemetry-load:
     name: ${{ matrix.provider }} exact-count and replay
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -66,7 +66,7 @@ jobs:
       Storage__Telemetry__BatchSize: "1000"
       Storage__Telemetry__FlushIntervalMs: "250"
       Storage__Telemetry__RetryDelayMs: "500"
-      Storage__Telemetry__SpoolDirectory: "artifacts/plc-telemetry-spool-${{ matrix.provider }}"
+      Storage__Telemetry__SpoolDirectory: "${{ github.workspace }}/artifacts/plc-telemetry-spool-${{ matrix.provider }}"
       Storage__Telemetry__InfluxDb__ApiVersion: "V2"
       Storage__Telemetry__InfluxDb__Url: "http://127.0.0.1:8086"
       Storage__Telemetry__InfluxDb__Token: "wcs-load-test-token"
@@ -85,7 +85,7 @@ jobs:
           dotnet restore src/Wcs.Host/Wcs.Host.csproj
           dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
 
-      - name: Wait for databases and create SQL database
+      - name: Prepare databases
         shell: bash
         run: |
           mkdir -p artifacts
@@ -130,24 +130,22 @@ jobs:
           cat "artifacts/telemetry-${{ matrix.provider }}-host.log"
           exit 1
 
-      - name: Wait for initial telemetry drain
+      - name: Capture drained baseline
         shell: bash
         run: |
           for attempt in {1..120}; do
             status="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
-            queued="$(jq -r '.queueDepth' <<<"$status")"
-            spooled="$(jq -r '.spoolPending' <<<"$status")"
-            inflight="$(jq -r '.inFlight' <<<"$status")"
-            if [[ "$queued" == "0" && "$spooled" == "0" && "$inflight" == "0" ]]; then
+            if [[ "$(jq -r '.queueDepth' <<<"$status")" == "0" && \
+                  "$(jq -r '.spoolPending' <<<"$status")" == "0" && \
+                  "$(jq -r '.inFlight' <<<"$status")" == "0" ]]; then
               echo "$status" > "artifacts/${{ matrix.provider }}-baseline-status.json"
               exit 0
             fi
             sleep 1
           done
-          curl --silent "$ASPNETCORE_URLS/api/telemetry/status"
           exit 1
 
-      - name: Capture provider baseline count
+      - name: Capture physical baseline
         shell: bash
         run: |
           if [[ "${{ matrix.provider }}" == "SqlServer" ]]; then
@@ -162,7 +160,10 @@ jobs:
             docker exec "$influx_container" influx query \
               --host http://localhost:8086 --org wcs --token wcs-load-test-token --raw \
               'from(bucket:"wcs_plc") |> range(start: 0) |> filter(fn:(r) => r._measurement == "plc_signal" and r._field == "sequence") |> group() |> count(column:"_value")' \
-              | awk -F, 'NR>1 && $NF ~ /^[0-9]+$/ {v=$NF} END {print v+0}' > artifacts/provider-baseline-count.txt
+              > artifacts/influx-baseline-raw.csv
+            tr -d '\r' < artifacts/influx-baseline-raw.csv \
+              | awk -F, '$NF ~ /^[0-9]+$/ {sum += $NF} END {print sum+0}' \
+              > artifacts/provider-baseline-count.txt
           fi
           cat artifacts/provider-baseline-count.txt
 
@@ -178,22 +179,22 @@ jobs:
           [[ "$(jq -r '.acceptedDelta' artifacts/${{ matrix.provider }}-load-response.json)" == "200000" ]]
           [[ "$(jq -r '.droppedDelta' artifacts/${{ matrix.provider }}-load-response.json)" == "0" ]]
 
-      - name: Wait for exact drain
+      - name: Wait for exact internal drain
         shell: bash
         run: |
-          for attempt in {1..600}; do
+          baseline_accepted="$(jq -r '.accepted' artifacts/${{ matrix.provider }}-baseline-status.json)"
+          baseline_persisted="$(jq -r '.persisted' artifacts/${{ matrix.provider }}-baseline-status.json)"
+          baseline_dropped="$(jq -r '.dropped' artifacts/${{ matrix.provider }}-baseline-status.json)"
+          for attempt in {1..900}; do
             status="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
-            baseline_accepted="$(jq -r '.accepted' artifacts/${{ matrix.provider }}-baseline-status.json)"
-            baseline_persisted="$(jq -r '.persisted' artifacts/${{ matrix.provider }}-baseline-status.json)"
             accepted="$(jq -r '.accepted' <<<"$status")"
             persisted="$(jq -r '.persisted' <<<"$status")"
-            queued="$(jq -r '.queueDepth' <<<"$status")"
-            spooled="$(jq -r '.spoolPending' <<<"$status")"
-            inflight="$(jq -r '.inFlight' <<<"$status")"
             dropped="$(jq -r '.dropped' <<<"$status")"
-            delta="$(jq -r '.conservationDelta' <<<"$status")"
-            if (( accepted - baseline_accepted == 200000 && persisted - baseline_persisted == 200000 )) && \
-               [[ "$queued" == "0" && "$spooled" == "0" && "$inflight" == "0" && "$dropped" == "0" && "$delta" == "0" ]]; then
+            if (( accepted - baseline_accepted == 200000 && persisted - baseline_persisted == 200000 && dropped - baseline_dropped == 0 )) && \
+               [[ "$(jq -r '.queueDepth' <<<"$status")" == "0" && \
+                  "$(jq -r '.spoolPending' <<<"$status")" == "0" && \
+                  "$(jq -r '.inFlight' <<<"$status")" == "0" && \
+                  "$(jq -r '.conservationDelta' <<<"$status")" == "0" ]]; then
               echo "$status" > "artifacts/${{ matrix.provider }}-drained-status.json"
               exit 0
             fi
@@ -202,7 +203,7 @@ jobs:
           curl --silent "$ASPNETCORE_URLS/api/telemetry/status"
           exit 1
 
-      - name: Verify physical provider count
+      - name: Verify exact physical count
         shell: bash
         run: |
           baseline="$(cat artifacts/provider-baseline-count.txt)"
@@ -215,10 +216,11 @@ jobs:
             ' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1)"
           else
             influx_container="${{ job.services.influxdb.id }}"
-            final="$(docker exec "$influx_container" influx query \
+            docker exec "$influx_container" influx query \
               --host http://localhost:8086 --org wcs --token wcs-load-test-token --raw \
               'from(bucket:"wcs_plc") |> range(start: 0) |> filter(fn:(r) => r._measurement == "plc_signal" and r._field == "sequence") |> group() |> count(column:"_value")' \
-              | awk -F, 'NR>1 && $NF ~ /^[0-9]+$/ {v=$NF} END {print v+0}')"
+              > artifacts/influx-final-raw.csv
+            final="$(tr -d '\r' < artifacts/influx-final-raw.csv | awk -F, '$NF ~ /^[0-9]+$/ {sum += $NF} END {print sum+0}')"
           fi
           printf 'baseline=%s\nfinal=%s\ndelta=%s\n' "$baseline" "$final" "$((final-baseline))" | tee "artifacts/${{ matrix.provider }}-physical-count.txt"
           (( final - baseline == 200000 ))
@@ -233,6 +235,7 @@ jobs:
           before="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
           before_accepted="$(jq -r '.accepted' <<<"$before")"
           before_persisted="$(jq -r '.persisted' <<<"$before")"
+          before_dropped="$(jq -r '.dropped' <<<"$before")"
 
           curl --fail --silent --show-error \
             --request POST "$ASPNETCORE_URLS/api/telemetry/load" \
@@ -257,23 +260,37 @@ jobs:
             sleep 2
           done
 
-          for attempt in {1..600}; do
+          for attempt in {1..900}; do
             status="$(curl --fail --silent "$ASPNETCORE_URLS/api/telemetry/status")"
             accepted="$(jq -r '.accepted' <<<"$status")"
             persisted="$(jq -r '.persisted' <<<"$status")"
-            queued="$(jq -r '.queueDepth' <<<"$status")"
-            spooled="$(jq -r '.spoolPending' <<<"$status")"
-            inflight="$(jq -r '.inFlight' <<<"$status")"
             dropped="$(jq -r '.dropped' <<<"$status")"
-            delta="$(jq -r '.conservationDelta' <<<"$status")"
-            if (( accepted - before_accepted == 20000 && persisted - before_persisted == 20000 )) && \
-               [[ "$queued" == "0" && "$spooled" == "0" && "$inflight" == "0" && "$dropped" == "0" && "$delta" == "0" ]]; then
+            if (( accepted - before_accepted == 20000 && persisted - before_persisted == 20000 && dropped - before_dropped == 0 )) && \
+               [[ "$(jq -r '.queueDepth' <<<"$status")" == "0" && \
+                  "$(jq -r '.spoolPending' <<<"$status")" == "0" && \
+                  "$(jq -r '.inFlight' <<<"$status")" == "0" && \
+                  "$(jq -r '.conservationDelta' <<<"$status")" == "0" ]]; then
               echo "$status" > artifacts/InfluxDb-replayed-status.json
+              break
+            fi
+            if [[ "$attempt" -eq 900 ]]; then echo "$status"; exit 1; fi
+            sleep 1
+          done
+
+          baseline="$(cat artifacts/provider-baseline-count.txt)"
+          for attempt in {1..120}; do
+            docker exec "$influx_container" influx query \
+              --host http://localhost:8086 --org wcs --token wcs-load-test-token --raw \
+              'from(bucket:"wcs_plc") |> range(start: 0) |> filter(fn:(r) => r._measurement == "plc_signal" and r._field == "sequence") |> group() |> count(column:"_value")' \
+              > artifacts/influx-after-replay-raw.csv
+            final="$(tr -d '\r' < artifacts/influx-after-replay-raw.csv | awk -F, '$NF ~ /^[0-9]+$/ {sum += $NF} END {print sum+0}')"
+            if (( final - baseline == 220000 )); then
+              printf 'baseline=%s\nfinal=%s\ndelta=%s\n' "$baseline" "$final" "$((final-baseline))" > artifacts/InfluxDb-replay-physical-count.txt
               exit 0
             fi
             sleep 1
           done
-          curl --silent "$ASPNETCORE_URLS/api/telemetry/status"
+          printf 'baseline=%s\nfinal=%s\ndelta=%s\n' "$baseline" "$final" "$((final-baseline))" | tee artifacts/InfluxDb-replay-physical-count.txt
           exit 1
 
       - name: Validate logs
