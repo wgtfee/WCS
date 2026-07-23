@@ -1,7 +1,9 @@
 namespace Wcs.Host.BackgroundServices;
 
+using System.Collections.Concurrent;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
+using Wcs.Core.StateCenter.Models;
 using Wcs.Infrastructure.SignalR;
 
 /// <summary>
@@ -10,9 +12,12 @@ using Wcs.Infrastructure.SignalR;
 /// </summary>
 public sealed class SignalRBridgeBackgroundService : BackgroundService
 {
+    private static readonly TimeSpan DeviceFlushInterval = TimeSpan.FromMilliseconds(100);
+
     private readonly IEventBus _eventBus;
     private readonly SignalRStatePublisher _publisher;
     private readonly ILogger<SignalRBridgeBackgroundService> _logger;
+    private readonly ConcurrentDictionary<string, DeviceState> _pendingDeviceStates = new();
 
     public SignalRBridgeBackgroundService(
         IEventBus eventBus,
@@ -24,12 +29,16 @@ public sealed class SignalRBridgeBackgroundService : BackgroundService
         _logger = logger;
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _eventBus.Subscribe<DeviceStateChangedEvent>(async (evt, ct) =>
+        // PLC polling can change the same device many times before a WebSocket
+        // client consumes the previous update. Keep only the latest state per
+        // device so slow clients cannot create an unbounded number of send tasks.
+        _eventBus.Subscribe<DeviceStateChangedEvent>((evt, _) =>
         {
             if (evt.DeviceState is not null)
-                await _publisher.PushDeviceStateAsync(evt.DeviceId, evt.DeviceState);
+                _pendingDeviceStates[evt.DeviceId] = evt.DeviceState;
+            return Task.CompletedTask;
         });
         _eventBus.Subscribe<TaskStateChangedEvent>(async (evt, ct) =>
         {
@@ -49,7 +58,41 @@ public sealed class SignalRBridgeBackgroundService : BackgroundService
                 evt.OldPosition,
                 evt.NewPosition));
 
-        _logger.LogInformation("SignalR 事件桥接服务已启动");
-        return Task.CompletedTask;
+        _logger.LogInformation(
+            "SignalR 事件桥接服务已启动 — 设备状态按 {Interval}ms 合并刷新",
+            DeviceFlushInterval.TotalMilliseconds);
+
+        using var timer = new PeriodicTimer(DeviceFlushInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+                await FlushDeviceStatesAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal host shutdown.
+        }
+    }
+
+    private async Task FlushDeviceStatesAsync(CancellationToken stoppingToken)
+    {
+        foreach (var deviceId in _pendingDeviceStates.Keys)
+        {
+            if (!_pendingDeviceStates.TryRemove(deviceId, out var state))
+                continue;
+
+            try
+            {
+                await _publisher.PushDeviceStateAsync(deviceId, state);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "SignalR 设备状态推送失败: {DeviceId}", deviceId);
+            }
+        }
     }
 }
