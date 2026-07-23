@@ -117,23 +117,23 @@ jobs:
             "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_AnomalyLoad -h -1 -W -Q "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly"
           ' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1 > artifacts/anomaly-baseline-count.txt
 
-      - name: Generate 2k lifecycles and 200k normal samples
+      - name: Generate threshold, consistency, and normal samples
         shell: bash
         run: |
           curl --fail --silent --show-error \
             --request POST "$ASPNETCORE_URLS/api/anomaly/load" \
             --header 'content-type: application/json' \
-            --data '{"cycles":2000,"concurrency":32,"normalEvents":200000}' \
+            --data '{"cycles":2000,"consistencyCycles":1000,"concurrency":32,"normalEvents":200000}' \
             --max-time 1200 | tee artifacts/anomaly-load-response.json
 
-          [[ "$(jq -r '.raisedDelta' artifacts/anomaly-load-response.json)" == "2000" ]]
-          [[ "$(jq -r '.recoveredDelta' artifacts/anomaly-load-response.json)" == "2000" ]]
+          [[ "$(jq -r '.raisedDelta' artifacts/anomaly-load-response.json)" == "3000" ]]
+          [[ "$(jq -r '.recoveredDelta' artifacts/anomaly-load-response.json)" == "3000" ]]
           [[ "$(jq -r '.failureDelta' artifacts/anomaly-load-response.json)" == "0" ]]
           [[ "$(jq -r '.suppressedDelta' artifacts/anomaly-load-response.json)" == "0" ]]
           [[ "$(jq -r '.activeDelta' artifacts/anomaly-load-response.json)" == "0" ]]
-          (( $(jq -r '.processedDelta' artifacts/anomaly-load-response.json) >= 210000 ))
-          [[ "$(jq -r '.status.configuredRules' artifacts/anomaly-load-response.json)" == "1" ]]
-          (( $(jq -r '.status.matchedRuleEvaluations' artifacts/anomaly-load-response.json) >= 210000 ))
+          (( $(jq -r '.processedDelta' artifacts/anomaly-load-response.json) >= 213000 ))
+          [[ "$(jq -r '.status.configuredRules' artifacts/anomaly-load-response.json)" == "2" ]]
+          (( $(jq -r '.status.matchedRuleEvaluations' artifacts/anomaly-load-response.json) >= 213000 ))
 
       - name: Verify exact anomaly SQL lifecycle count
         shell: bash
@@ -148,20 +148,22 @@ jobs:
             " | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1
           }
 
-          for attempt in {1..180}; do
+          for attempt in {1..240}; do
             final="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly')"
             recovered="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Status = 1')"
             active="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Status = 0')"
             duplicates="$(query_sql 'SELECT COUNT_BIG(*) FROM (SELECT AnomalyKey FROM Wcs_PlcAnomaly GROUP BY AnomalyKey HAVING COUNT_BIG(*) > 1) d')"
-            if (( final - baseline == 2000 && recovered == 2000 && active == 0 && duplicates == 0 )); then
-              printf 'baseline=%s\nfinal=%s\ndelta=%s\nrecovered=%s\nactive=%s\nduplicates=%s\n' \
-                "$baseline" "$final" "$((final-baseline))" "$recovered" "$active" "$duplicates" \
+            threshold="$(query_sql \"SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE RuleId = 'ANOMALY-LOAD-HIGH-CURRENT'\")"
+            consistency="$(query_sql \"SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE RuleId = 'ANOMALY-LOAD-RUNNING-WITHOUT-SPEED'\")"
+            if (( final - baseline == 3000 && recovered == 3000 && active == 0 && duplicates == 0 && threshold == 2000 && consistency == 1000 )); then
+              printf 'baseline=%s\nfinal=%s\ndelta=%s\nrecovered=%s\nactive=%s\nduplicates=%s\nthreshold=%s\nconsistency=%s\n' \
+                "$baseline" "$final" "$((final-baseline))" "$recovered" "$active" "$duplicates" "$threshold" "$consistency" \
                 | tee artifacts/anomaly-physical-count.txt
               break
             fi
-            if [[ "$attempt" -eq 180 ]]; then
-              printf 'baseline=%s\nfinal=%s\nrecovered=%s\nactive=%s\nduplicates=%s\n' \
-                "$baseline" "$final" "$recovered" "$active" "$duplicates" \
+            if [[ "$attempt" -eq 240 ]]; then
+              printf 'baseline=%s\nfinal=%s\nrecovered=%s\nactive=%s\nduplicates=%s\nthreshold=%s\nconsistency=%s\n' \
+                "$baseline" "$final" "$recovered" "$active" "$duplicates" "$threshold" "$consistency" \
                 | tee artifacts/anomaly-physical-count.txt
               exit 1
             fi
