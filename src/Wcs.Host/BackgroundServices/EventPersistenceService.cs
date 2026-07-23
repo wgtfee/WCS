@@ -45,7 +45,7 @@ public class EventPersistenceService : BackgroundService
                 using var db = CreateDb();
                 await db.Insertable(new DeviceStateLogEntity
                 {
-                    Id = DateTime.UtcNow.Ticks + Random.Shared.Next(0, 9999),
+                    Id = SnowFlakeSingle.Instance.NextId(),
                     DeviceId = ExtractDeviceId(evt.FieldName) ?? evt.FieldName,
                     FieldName = evt.FieldName,
                     OldValue = evt.OldValue,
@@ -73,7 +73,7 @@ public class EventPersistenceService : BackgroundService
                 using var db = CreateDb();
                 await db.Insertable(new DeviceStateLogEntity
                 {
-                    Id = DateTime.UtcNow.Ticks + Random.Shared.Next(0, 9999),
+                    Id = SnowFlakeSingle.Instance.NextId(),
                     DeviceId = evt.DeviceId,
                     FieldName = "PalletArrived",
                     NewValue = "true",
