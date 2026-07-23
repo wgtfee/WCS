@@ -1,0 +1,48 @@
+name: Transport Simulation Load Test
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'benchmarks/Wcs.Transport.LoadTest/**'
+      - 'src/Wcs.Core/**'
+      - '.github/workflows/transport-load-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore benchmark
+        run: dotnet restore benchmarks/Wcs.Transport.LoadTest/Wcs.Transport.LoadTest.csproj
+
+      - name: Build benchmark
+        run: dotnet build benchmarks/Wcs.Transport.LoadTest/Wcs.Transport.LoadTest.csproj --configuration Release --no-restore
+
+      - name: Run transport load test
+        shell: pwsh
+        run: |
+          dotnet run --project benchmarks/Wcs.Transport.LoadTest/Wcs.Transport.LoadTest.csproj --configuration Release --no-build
+          $summary = Get-ChildItem -Recurse benchmarks/Wcs.Transport.LoadTest/bin/Release/net8.0/loadtest-results/transport-loadtest-summary.md | Select-Object -First 1
+          if (-not $summary) { throw 'Load-test summary not found.' }
+          Get-Content $summary.FullName | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload load-test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: transport-loadtest-results
+          path: benchmarks/Wcs.Transport.LoadTest/bin/Release/net8.0/loadtest-results/*
+          if-no-files-found: error
+          retention-days: 7
