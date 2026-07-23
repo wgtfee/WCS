@@ -2,6 +2,7 @@ namespace Wcs.Infrastructure.Persistence;
 
 using SqlSugar;
 using Microsoft.Extensions.Logging;
+using Wcs.Core.AnomalyDetection;
 using Wcs.Core.PlcSubsystem.Examples;
 using Wcs.Core.Telemetry;
 
@@ -48,6 +49,7 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(AlarmHistoryEntity),
                 typeof(TaskEventEntity),
                 typeof(PlcTelemetryEntity),
+                typeof(PlcAnomalyEntity),
                 typeof(TransportConfigurationEntity),
                 typeof(TransportJournalEntity),
                 typeof(TransportGovernedOperationEntity),
@@ -61,9 +63,15 @@ public class DatabaseInitializer : IDatabaseInitializer
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcTelemetry_Time' AND object_id = OBJECT_ID('Wcs_PlcTelemetry'))
     CREATE INDEX IX_Wcs_PlcTelemetry_Time ON Wcs_PlcTelemetry(TimestampUtc);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcTelemetry_Signal' AND object_id = OBJECT_ID('Wcs_PlcTelemetry'))
-    CREATE INDEX IX_Wcs_PlcTelemetry_Signal ON Wcs_PlcTelemetry(PlcName, DeviceId, SignalName, TimestampUtc);");
+    CREATE INDEX IX_Wcs_PlcTelemetry_Signal ON Wcs_PlcTelemetry(PlcName, DeviceId, SignalName, TimestampUtc);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcAnomaly_Time' AND object_id = OBJECT_ID('Wcs_PlcAnomaly'))
+    CREATE INDEX IX_Wcs_PlcAnomaly_Time ON Wcs_PlcAnomaly(StartTimeUtc, Status);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcAnomaly_Device' AND object_id = OBJECT_ID('Wcs_PlcAnomaly'))
+    CREATE INDEX IX_Wcs_PlcAnomaly_Device ON Wcs_PlcAnomaly(DeviceId, SignalName, StartTimeUtc);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcAnomaly_Key' AND object_id = OBJECT_ID('Wcs_PlcAnomaly'))
+    CREATE INDEX IX_Wcs_PlcAnomaly_Key ON Wcs_PlcAnomaly(AnomalyKey, Status);");
 
-            _logger.LogInformation("数据库和所有表已就绪 (19 张)");
+            _logger.LogInformation("数据库和所有表已就绪 (20 张)");
             await Task.CompletedTask;
             return true;
         }
