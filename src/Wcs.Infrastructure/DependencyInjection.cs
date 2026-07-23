@@ -5,9 +5,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.Persistence;
+using Wcs.Core.Telemetry;
 using Wcs.Core.TransportScheduling;
 using Wcs.Infrastructure.Persistence;
 using Wcs.Infrastructure.Persistence.Services;
+using Wcs.Infrastructure.Telemetry;
 
 public static class DependencyInjection
 {
@@ -98,7 +100,64 @@ public static class DependencyInjection
         services.Replace(ServiceDescriptor.Singleton<ITransportLogicalBackupStorage>(
             _ => new FileTransportLogicalBackupStorage(backupDirectory)));
 
+        AddPlcTelemetryStorage(services, configuration, connectionString);
         return services;
+    }
+
+    private static void AddPlcTelemetryStorage(
+        IServiceCollection services,
+        IConfiguration configuration,
+        string connectionString)
+    {
+        var options = configuration
+            .GetSection("Storage:Telemetry")
+            .Get<PlcTelemetryOptions>() ?? new PlcTelemetryOptions();
+
+        options.ChannelCapacity = Math.Clamp(options.ChannelCapacity, 1_000, 1_000_000);
+        options.BatchSize = Math.Clamp(options.BatchSize, 1, Math.Min(10_000, options.ChannelCapacity));
+        options.FlushIntervalMs = Math.Clamp(options.FlushIntervalMs, 10, 60_000);
+        options.RetryDelayMs = Math.Clamp(options.RetryDelayMs, 100, 60_000);
+        options.Site = string.IsNullOrWhiteSpace(options.Site) ? "default" : options.Site.Trim();
+        options.Measurement = string.IsNullOrWhiteSpace(options.Measurement)
+            ? "plc_signal"
+            : options.Measurement.Trim();
+        options.SpoolDirectory = string.IsNullOrWhiteSpace(options.SpoolDirectory)
+            ? "data/plc-telemetry-spool"
+            : options.SpoolDirectory;
+
+        if (options.Provider == PlcTelemetryProvider.InfluxDb)
+        {
+            if (!Uri.TryCreate(options.InfluxDb.Url, UriKind.Absolute, out _))
+                throw new InvalidOperationException("Storage:Telemetry:InfluxDb:Url 不是有效的绝对地址。");
+            if (options.InfluxDb.ApiVersion == InfluxDbApiVersion.V2 &&
+                (string.IsNullOrWhiteSpace(options.InfluxDb.Organization) ||
+                 string.IsNullOrWhiteSpace(options.InfluxDb.Bucket)))
+                throw new InvalidOperationException("InfluxDB V2 必须配置 Organization 和 Bucket。");
+            if (options.InfluxDb.ApiVersion == InfluxDbApiVersion.V3 &&
+                string.IsNullOrWhiteSpace(options.InfluxDb.Database))
+                throw new InvalidOperationException("InfluxDB V3 必须配置 Database。");
+        }
+
+        services.Replace(ServiceDescriptor.Singleton(options));
+        services.AddSingleton<FilePlcTelemetrySpool>();
+        services.AddSingleton<PlcTelemetryBuffer>();
+        services.AddSingleton<IPlcTelemetrySink>(sp => sp.GetRequiredService<PlcTelemetryBuffer>());
+        services.AddSingleton<IPlcTelemetryStatusProvider>(sp => sp.GetRequiredService<PlcTelemetryBuffer>());
+        services.AddHttpClient("WcsInfluxTelemetry", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        services.AddSingleton<IPlcTelemetryStore>(sp => options.Provider switch
+        {
+            PlcTelemetryProvider.Disabled => new DisabledPlcTelemetryStore(),
+            PlcTelemetryProvider.SqlServer => new SqlServerPlcTelemetryStore(connectionString),
+            PlcTelemetryProvider.InfluxDb => new InfluxDbPlcTelemetryStore(
+                sp.GetRequiredService<IHttpClientFactory>().CreateClient("WcsInfluxTelemetry"),
+                options),
+            _ => throw new InvalidOperationException($"不支持的 PLC telemetry provider: {options.Provider}")
+        });
+        services.AddHostedService<PlcTelemetryBatchWriterService>();
     }
 
     private static bool GetBool(IConfiguration configuration, string key, bool defaultValue) =>
