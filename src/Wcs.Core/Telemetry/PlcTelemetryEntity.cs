@@ -4,8 +4,6 @@ using SqlSugar;
 
 /// <summary>SQL Server 模式下的 PLC 时序历史表。</summary>
 [SugarTable("Wcs_PlcTelemetry")]
-[SugarIndex("IX_Wcs_PlcTelemetry_Time", nameof(TimestampUtc), OrderByType.Asc)]
-[SugarIndex("IX_Wcs_PlcTelemetry_Signal", nameof(PlcName), OrderByType.Asc, nameof(DeviceId), OrderByType.Asc, nameof(SignalName), OrderByType.Asc)]
 public sealed class PlcTelemetryEntity
 {
     [SugarColumn(IsPrimaryKey = true)]
@@ -42,7 +40,7 @@ public sealed class PlcTelemetryEntity
     [SugarColumn(IsNullable = true)]
     public bool? BoolValue { get; set; }
 
-    [SugarColumn(IsNullable = true, DecimalDigits = 8)]
+    [SugarColumn(IsNullable = true)]
     public decimal? NumericValue { get; set; }
 
     [SugarColumn(IsNullable = true, Length = 2000)]
