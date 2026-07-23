@@ -226,15 +226,15 @@ public class AlarmCenterTests
     // ========== 查询方法 ==========
 
     [Fact]
-    public void GetAlarmsByLevel_FiltersCorrectly()
+    public async Task GetAlarmsByLevel_FiltersCorrectly()
     {
         var (ac, _) = CreateAlarmCenter();
         ac.SetAlarmRule(new AlarmRule { AlarmCode = "ERR", Level = AlarmLevelEnum.Error, DelayRaiseMs = 10 });
         ac.SetAlarmRule(new AlarmRule { AlarmCode = "WARN", Level = AlarmLevelEnum.Warning, DelayRaiseMs = 10 });
 
-        ac.RaiseAlarmAsync("ERR", AlarmLevelEnum.Error, "Error").GetAwaiter().GetResult();
-        ac.RaiseAlarmAsync("WARN", AlarmLevelEnum.Warning, "Warning").GetAwaiter().GetResult();
-        Thread.Sleep(50);
+        await ac.RaiseAlarmAsync("ERR", AlarmLevelEnum.Error, "Error");
+        await ac.RaiseAlarmAsync("WARN", AlarmLevelEnum.Warning, "Warning");
+        await WaitUntilAsync(() => ac.GetTotalCount() == 2);
 
         var errors = ac.GetAlarmsByLevel(AlarmLevelEnum.Error).ToList();
         Assert.NotEmpty(errors);
@@ -242,15 +242,15 @@ public class AlarmCenterTests
     }
 
     [Fact]
-    public void GetAlarmsByTimeRange_FiltersCorrectly()
+    public async Task GetAlarmsByTimeRange_FiltersCorrectly()
     {
         var (ac, _) = CreateAlarmCenter();
         ac.SetAlarmRule(new AlarmRule { AlarmCode = "T1", Level = AlarmLevelEnum.Info, DelayRaiseMs = 10 });
         ac.SetAlarmRule(new AlarmRule { AlarmCode = "T2", Level = AlarmLevelEnum.Info, DelayRaiseMs = 10 });
 
-        ac.RaiseAlarmAsync("T1", AlarmLevelEnum.Info, "Event 1").GetAwaiter().GetResult();
-        ac.RaiseAlarmAsync("T2", AlarmLevelEnum.Info, "Event 2").GetAwaiter().GetResult();
-        Thread.Sleep(50);
+        await ac.RaiseAlarmAsync("T1", AlarmLevelEnum.Info, "Event 1");
+        await ac.RaiseAlarmAsync("T2", AlarmLevelEnum.Info, "Event 2");
+        await WaitUntilAsync(() => ac.GetTotalCount() == 2);
 
         var from = DateTime.UtcNow.AddMinutes(-1);
         var to = DateTime.UtcNow.AddMinutes(1);
@@ -260,15 +260,15 @@ public class AlarmCenterTests
     }
 
     [Fact]
-    public void GetTotalCount_ReturnsCorrect()
+    public async Task GetTotalCount_ReturnsCorrect()
     {
         var (ac, _) = CreateAlarmCenter();
         ac.SetAlarmRule(new AlarmRule { AlarmCode = "C1", Level = AlarmLevelEnum.Info, DelayRaiseMs = 10 });
         ac.SetAlarmRule(new AlarmRule { AlarmCode = "C2", Level = AlarmLevelEnum.Info, DelayRaiseMs = 10 });
 
-        ac.RaiseAlarmAsync("C1", AlarmLevelEnum.Info, "Count 1").GetAwaiter().GetResult();
-        ac.RaiseAlarmAsync("C2", AlarmLevelEnum.Info, "Count 2").GetAwaiter().GetResult();
-        Thread.Sleep(50);
+        await ac.RaiseAlarmAsync("C1", AlarmLevelEnum.Info, "Count 1");
+        await ac.RaiseAlarmAsync("C2", AlarmLevelEnum.Info, "Count 2");
+        await WaitUntilAsync(() => ac.GetTotalCount() == 2);
 
         Assert.Equal(2, ac.GetTotalCount());
     }
