@@ -181,13 +181,13 @@ try
     }
     else
     {
-        //builder.Services.AddSingleton(sp => new SimulatedPlcPollingService(
-        //    sp.GetRequiredService<Wcs.Core.PlcSubsystem.S7.PlcStructRegistry>(),
-        //    sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
-        //    sp.GetRequiredService<Wcs.Core.EventDetection.EventDetector>(),
-        //    sp.GetRequiredService<Wcs.Core.SignalSnapshot.SignalSnapshotCenter>(),
-        //    sp.GetRequiredService<ILogger<SimulatedPlcPollingService>>()));
-        //builder.Services.AddHostedService<SimulatorBackgroundService>();
+        builder.Services.AddSingleton(sp => new SimulatedPlcPollingService(
+            sp.GetRequiredService<PlcStructRegistry>(),
+            sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
+            sp.GetRequiredService<EventDetector>(),
+            sp.GetRequiredService<SignalSnapshotCenter>(),
+            sp.GetRequiredService<ILogger<SimulatedPlcPollingService>>()));
+        builder.Services.AddHostedService<SimulatorBackgroundService>();
         Log.Logger.Information("🧪 模拟模式 — 3 PLC 9 DB + 18 验证器");
     }
 
@@ -202,6 +202,8 @@ try
 
     builder.Services.AddWindowsService(options => options.ServiceName = "WCS Runtime Engine");
     builder.Services.AddSignalR();
+    builder.Services.AddSingleton<SignalRStatePublisher>();
+    builder.Services.AddHostedService<SignalRBridgeBackgroundService>();
     builder.Services.AddControllers();
     builder.Services.AddHealthChecks()
         .AddCheck<Wcs.Host.HealthChecks.WcsReadinessCheck>("readiness")

@@ -10,3 +10,4 @@ obj/
 *.so
 *.obj
 *.vs
+artifacts/

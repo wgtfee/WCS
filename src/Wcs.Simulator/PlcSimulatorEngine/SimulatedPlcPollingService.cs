@@ -18,7 +18,6 @@ public class SimulatedPlcPollingService
     private readonly List<Timer> _timers = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _previousStructs = new();
     private bool _running;
-    private static readonly Random _rng = new();
 
     public double ChangeProbability { get; set; } = 0.3;
 
@@ -68,7 +67,7 @@ public class SimulatedPlcPollingService
                 r.PlcName == cfg.Key.Split('.')[0] && r.BlockNumber == cfg.BlockNumber);
             var interval = reg?.PollIntervalMs ?? 200;
 
-            var timer = new Timer(async _ =>
+            var timer = new Timer(_ =>
             {
                 try
                 {

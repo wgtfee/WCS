@@ -229,6 +229,9 @@ public sealed record TransportCapacityBenchmarkPoint
     public int VehicleCount { get; init; }
     public int TaskRatePerHour { get; init; }
     public double AverageCompletedTasks { get; init; }
+    public double AverageArrivedTasks { get; init; }
+    public double AverageOutstandingTasksAtCutoff { get; init; }
+    public double AverageFailedTasks { get; init; }
     public double AverageThroughputPerHour { get; init; }
     public double AverageP95WaitingSeconds { get; init; }
     public double AverageDeadlineMissRatePercent { get; init; }

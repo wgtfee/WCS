@@ -412,7 +412,7 @@ public sealed class TransportSimulationService : ITransportSimulationService
         {
             foreach (var taskRate in taskRates)
             {
-                var metrics = new List<TransportSimulationMetrics>();
+                var metrics = new List<CapacityBenchmarkSample>();
                 for (var repetition = 0; repetition < repetitions; repetition++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -422,13 +422,25 @@ public sealed class TransportSimulationService : ITransportSimulationService
                         vehicleCount,
                         taskRate,
                         repetition);
-                    metrics.Add(ExecuteCore(scenario, request.Policy, initiatedBy, cancellationToken).Metrics);
+                    var run = ExecuteCore(
+                        scenario,
+                        request.Policy,
+                        initiatedBy,
+                        cancellationToken,
+                        drainAfterHorizon: true);
+                    metrics.Add(BuildCapacityBenchmarkSample(
+                        run,
+                        scenario.HorizonSeconds,
+                        scenario.Vehicles.Count));
                 }
                 var point = new TransportCapacityBenchmarkPoint
                 {
                     VehicleCount = vehicleCount,
                     TaskRatePerHour = taskRate,
                     AverageCompletedTasks = Math.Round(metrics.Average(x => x.CompletedTaskCount), 2),
+                    AverageArrivedTasks = Math.Round(metrics.Average(x => x.ArrivedTaskCount), 2),
+                    AverageOutstandingTasksAtCutoff = Math.Round(metrics.Average(x => x.OutstandingTaskCount), 2),
+                    AverageFailedTasks = Math.Round(metrics.Average(x => x.FailedTaskCount), 2),
                     AverageThroughputPerHour = Math.Round(metrics.Average(x => x.ThroughputPerHour), 2),
                     AverageP95WaitingSeconds = Math.Round(metrics.Average(x => x.P95WaitingSeconds), 2),
                     AverageDeadlineMissRatePercent = Math.Round(metrics.Average(x => x.DeadlineMissRatePercent), 2),
@@ -602,7 +614,8 @@ public sealed class TransportSimulationService : ITransportSimulationService
         TransportSimulationScenario scenario,
         TransportSimulationPolicy policy,
         string initiatedBy,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool drainAfterHorizon = false)
     {
         var started = DateTime.UtcNow;
         var vehicles = scenario.Vehicles
@@ -700,7 +713,7 @@ public sealed class TransportSimulationService : ITransportSimulationService
                 .Sum(x => Math.Max(0, x.AddedLatencySeconds));
             duration += latency;
 
-            if (dispatch > scenario.HorizonSeconds)
+            if (!drainAfterHorizon && dispatch > scenario.HorizonSeconds)
             {
                 results.Add(FailedTask(task, effectivePriority, scenario.HorizonSeconds, "任务在仿真窗口内无法开始"));
                 pending.Remove(task);
@@ -715,7 +728,9 @@ public sealed class TransportSimulationService : ITransportSimulationService
             if (commandFailure is not null &&
                 DeterministicProbability(scenario.Seed, task.TaskId, commandFailure.FaultId) < Math.Clamp(commandFailure.FailureProbability, 0, 1))
             {
-                var releaseAt = Math.Min(scenario.HorizonSeconds, dispatch + Math.Max(1, latency));
+                var releaseAt = drainAfterHorizon
+                    ? dispatch + Math.Max(1, latency)
+                    : Math.Min(scenario.HorizonSeconds, dispatch + Math.Max(1, latency));
                 selected.Vehicle.AvailableAtSeconds = releaseAt;
                 results.Add(new TransportSimulationTaskResult
                 {
@@ -735,7 +750,7 @@ public sealed class TransportSimulationService : ITransportSimulationService
             }
 
             var completion = dispatch + duration;
-            if (completion > scenario.HorizonSeconds)
+            if (!drainAfterHorizon && completion > scenario.HorizonSeconds)
             {
                 selected.Vehicle.AvailableAtSeconds = scenario.HorizonSeconds;
                 results.Add(new TransportSimulationTaskResult
@@ -878,11 +893,12 @@ public sealed class TransportSimulationService : ITransportSimulationService
     {
         var horizon = durationMinutes * 60;
         var taskCount = Math.Max(1, (int)Math.Round(taskRate * durationMinutes / 60d));
-        var random = new Random(unchecked(request.Seed + vehicleCount * 7919 + taskRate * 104729 + repetition * 31));
+        var random = new Random(unchecked(request.Seed + taskRate * 104729 + repetition * 31));
         var tasks = Enumerable.Range(0, taskCount)
             .Select(index =>
             {
                 var arrival = taskCount == 1 ? 0 : (int)Math.Round(index * (horizon - 1d) / taskCount);
+                var arrivalOffset = Math.Clamp(arrival + random.Next(-2, 3), 0, horizon - 1);
                 return new TransportSimulationTask
                 {
                     TaskId = $"STRESS-{vehicleCount}-{taskRate}-{repetition}-{index:00000}",
@@ -892,8 +908,8 @@ public sealed class TransportSimulationService : ITransportSimulationService
                     RequiredVehicleKind = request.VehicleKind,
                     Priority = random.Next(0, 20),
                     ProductionOrderPriority = random.Next(0, 30),
-                    ArrivalOffsetSeconds = Math.Clamp(arrival + random.Next(-2, 3), 0, horizon - 1),
-                    DeadlineOffsetSeconds = Math.Min(horizon, arrival + 300),
+                    ArrivalOffsetSeconds = arrivalOffset,
+                    DeadlineOffsetSeconds = arrivalOffset + 300,
                     EstimatedTravelSeconds = 20 + random.Next(0, 21),
                     ServiceSeconds = 5 + random.Next(0, 6),
                     ResourceIds = new[] { "STRESS-TRACK" }
@@ -1118,6 +1134,47 @@ public sealed class TransportSimulationService : ITransportSimulationService
         };
     }
 
+    private static CapacityBenchmarkSample BuildCapacityBenchmarkSample(
+        TransportSimulationRun run,
+        int cutoffSeconds,
+        int vehicleCount)
+    {
+        var arrived = run.Tasks
+            .Where(x => x.ArrivalOffsetSeconds < cutoffSeconds)
+            .ToArray();
+        var successful = arrived.Where(x => x.Completed).ToArray();
+        var completedByCutoff = successful.Count(x => x.CompletionOffsetSeconds <= cutoffSeconds);
+        var outstandingAtCutoff = successful.Length - completedByCutoff;
+        var failed = arrived.Length - successful.Length;
+        var waits = successful
+            .Select(x => (double)x.WaitingSeconds)
+            .OrderBy(x => x)
+            .ToArray();
+        var throughput = completedByCutoff /
+                         Math.Max(1d / 3600d, cutoffSeconds / 3600d);
+        var deadlineMissRate = successful.Length == 0
+            ? 0
+            : successful.Count(x => x.DeadlineMissed) * 100d / successful.Length;
+        var fleetBusySeconds = arrived
+            .Where(x => x.VehicleId is not null)
+            .Sum(x => BusySecondsWithinHorizon(
+                x.DispatchOffsetSeconds,
+                x.CompletionOffsetSeconds,
+                cutoffSeconds));
+        var fleetUtilization = Percent(
+            fleetBusySeconds,
+            Math.Max(1L, (long)vehicleCount * cutoffSeconds));
+        return new CapacityBenchmarkSample(
+            arrived.Length,
+            completedByCutoff,
+            outstandingAtCutoff,
+            failed,
+            Math.Round(throughput, 2),
+            Math.Round(Percentile(waits, 0.95), 2),
+            Math.Round(deadlineMissRate, 2),
+            fleetUtilization);
+    }
+
     private static int MaximumQueueLength(IReadOnlyList<TransportSimulationTaskResult> results)
     {
         var events = results
@@ -1154,6 +1211,16 @@ public sealed class TransportSimulationService : ITransportSimulationService
             maximum = Math.Max(maximum, current);
         }
         return maximum;
+    }
+
+    private static long BusySecondsWithinHorizon(
+        int startSeconds,
+        int endSeconds,
+        int horizonSeconds)
+    {
+        var start = Math.Clamp(startSeconds, 0, horizonSeconds);
+        var end = Math.Clamp(endSeconds, 0, horizonSeconds);
+        return Math.Max(0, end - start);
     }
 
     private static double Percent(double numerator, double denominator) =>
@@ -1348,6 +1415,16 @@ public sealed class TransportSimulationService : ITransportSimulationService
         if (excess > 0)
             items.RemoveRange(0, excess);
     }
+
+    private sealed record CapacityBenchmarkSample(
+        int ArrivedTaskCount,
+        int CompletedTaskCount,
+        int OutstandingTaskCount,
+        int FailedTaskCount,
+        double ThroughputPerHour,
+        double P95WaitingSeconds,
+        double DeadlineMissRatePercent,
+        double FleetUtilizationPercent);
 
     private sealed class VehicleState
     {

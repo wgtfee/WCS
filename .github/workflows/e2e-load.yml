@@ -1,0 +1,179 @@
+name: WCS End-to-End Load
+
+on:
+  pull_request:
+    branches: [ "develop" ]
+    paths:
+      - ".github/workflows/e2e-load.yml"
+      - "src/Wcs.Application/**"
+      - "src/Wcs.Core/**"
+      - "src/Wcs.Host/**"
+      - "src/Wcs.Infrastructure/**"
+      - "src/Wcs.Simulator/**"
+      - "tests/load/**"
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: "Sustained load duration in seconds"
+        required: true
+        default: "300"
+      http_concurrency:
+        description: "Concurrent HTTP workers"
+        required: true
+        default: "32"
+      signalr_connections:
+        description: "Concurrent SignalR connections"
+        required: true
+        default: "100"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-e2e-load-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-load:
+    name: Host + SQL + SimPLC + SignalR
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_LoadTest!2026"
+        ports:
+          - 1433:1433
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: "LoadTest"
+      DOTNET_ENVIRONMENT: "LoadTest"
+      ASPNETCORE_URLS: "http://127.0.0.1:5080"
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_LoadTest;User Id=sa;Password=Wcs_LoadTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build Host
+        shell: bash
+        run: |
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then
+              break
+            fi
+            if [[ "$attempt" -eq 60 ]]; then
+              docker logs "$sql_container"
+              exit 1
+            fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master \
+              -Q "CREATE DATABASE [WCS_LoadTest]"
+          '
+
+      - name: Start isolated WCS Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/host.log" 2>&1 &
+          host_pid="$!"
+          popd
+          echo "$host_pid" > artifacts/host.pid
+
+          for attempt in {1..90}; do
+            if curl --fail --silent "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/host.pid)" 2>/dev/null; then
+              cat artifacts/host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/host.log
+          exit 1
+
+      - name: Run sustained end-to-end load
+        shell: bash
+        env:
+          DURATION_SECONDS: ${{ inputs.duration_seconds || '60' }}
+          HTTP_CONCURRENCY: ${{ inputs.http_concurrency || '16' }}
+          SIGNALR_CONNECTIONS: ${{ inputs.signalr_connections || '50' }}
+          MAX_ERROR_RATE_PERCENT: "1"
+          MAX_P95_MS: "1000"
+          MIN_SIGNALR_MESSAGES: "1"
+          OUTPUT_PATH: "artifacts/e2e-load-results.json"
+        run: |
+          export HOST_PID
+          HOST_PID="$(cat artifacts/host.pid)"
+          node tests/load/wcs-e2e-load.mjs
+
+      - name: Capture SQL evidence
+        if: always()
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_LoadTest -W -s "|" \
+              -Q "SELECT COUNT_BIG(*) AS DeviceRuntimeRows FROM Wcs_DeviceRuntime;
+                  SELECT COUNT_BIG(*) AS DeviceStateLogRows FROM Wcs_DeviceStateLog;
+                  SELECT COUNT_BIG(*) AS TaskRuntimeRows FROM Wcs_TaskRuntime;
+                  SELECT COUNT_BIG(*) AS TaskRunRows FROM Wcs_TaskRun;"
+          ' > artifacts/sql-evidence.txt 2>&1 || true
+
+      - name: Stop WCS Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/host.pid ]]; then
+            host_pid="$(cat artifacts/host.pid)"
+            if [[ "$host_pid" =~ ^[0-9]+$ ]] && kill -0 "$host_pid" 2>/dev/null; then
+              kill "$host_pid"
+              for attempt in {1..20}; do
+                if ! kill -0 "$host_pid" 2>/dev/null; then break; fi
+                sleep 1
+              done
+              if kill -0 "$host_pid" 2>/dev/null; then kill -9 "$host_pid"; fi
+            fi
+          fi
+
+      - name: Upload load evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-e2e-load-${{ github.run_number }}
+          path: |
+            artifacts/host.log
+            artifacts/e2e-load-results.json
+            artifacts/sql-evidence.txt
+          if-no-files-found: warn
+          retention-days: 14

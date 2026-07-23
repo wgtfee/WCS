@@ -25,10 +25,11 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddWcsApplication(this IServiceCollection services)
     {
-        services.AddSingleton<StateCenter>(_ => new StateCenter());
+        services.AddSingleton<IEventBus, EventBus>();
+        services.AddSingleton<StateCenter>(sp =>
+            new StateCenter(sp.GetRequiredService<IEventBus>()));
         services.AddSingleton<IStateCenter>(sp => sp.GetRequiredService<StateCenter>());
         services.AddSingleton<ISnapshotProvider>(sp => sp.GetRequiredService<StateCenter>());
-        services.AddSingleton<IEventBus, EventBus>();
         services.AddSingleton<IIdempotencyManager, IdempotencyManager>();
         services.AddSingleton<ITaskScheduler, TaskScheduler>();
         services.AddSingleton<IResourceLockManager, ResourceLockManager>();

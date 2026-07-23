@@ -231,6 +231,43 @@ public class TransportSimulationTests
     }
 
     [Fact]
+    public async Task CapacityBenchmark_DrainsTailWithoutTreatingOutstandingTasksAsFailures()
+    {
+        using var provider = CreateProvider();
+        var service = provider.GetRequiredService<ITransportSimulationService>();
+
+        var report = await service.RunCapacityBenchmarkAsync(new TransportCapacityBenchmarkRequest
+        {
+            Name = "capacity-drain",
+            DurationMinutes = 5,
+            VehicleCounts = new[] { 1, 20 },
+            TaskRatesPerHour = new[] { 300 },
+            Repetitions = 1,
+            Policy = new TransportSimulationPolicy { Name = "baseline" },
+            Seed = 20260723
+        }, "tester");
+
+        var overloaded = report.Points.Single(x => x.VehicleCount == 1);
+        var sustainable = report.Points.Single(x => x.VehicleCount == 20);
+
+        Assert.Equal(25d, sustainable.AverageArrivedTasks);
+        Assert.True(sustainable.AverageCompletedTasks < sustainable.AverageArrivedTasks);
+        Assert.True(sustainable.AverageOutstandingTasksAtCutoff > 0);
+        Assert.Equal(0d, sustainable.AverageFailedTasks);
+        Assert.Equal(
+            sustainable.AverageArrivedTasks,
+            sustainable.AverageCompletedTasks +
+            sustainable.AverageOutstandingTasksAtCutoff +
+            sustainable.AverageFailedTasks);
+        Assert.True(sustainable.Sustainable);
+
+        Assert.False(overloaded.Sustainable);
+        Assert.True(overloaded.AverageP95WaitingSeconds > 120);
+        Assert.Equal(300, report.MaximumSustainableTaskRatePerHour);
+        Assert.Equal(20, report.RecommendedVehicleCount);
+    }
+
+    [Fact]
     public async Task AcceptanceReport_UsesExplicitThresholds()
     {
         using var provider = CreateProvider();

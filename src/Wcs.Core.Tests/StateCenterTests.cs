@@ -1,3 +1,5 @@
+using Wcs.Core.EventBus.Events;
+using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.StateCenter.Implementation;
 using Wcs.Core.StateCenter.Models;
 
@@ -184,5 +186,45 @@ public class StateCenterTests
 
         Assert.NotNull(received);
         Assert.Equal(DeviceStatusEnum.Running, received.Status);
+    }
+
+    [Fact]
+    public async Task StateChanges_WithEventBus_PublishRealtimeEvents()
+    {
+        var eventBus = new EventBus();
+        var deviceEvent = new TaskCompletionSource<DeviceStateChangedEvent>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var taskEvent = new TaskCompletionSource<TaskStateChangedEvent>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        eventBus.Subscribe<DeviceStateChangedEvent>((evt, _) =>
+        {
+            deviceEvent.TrySetResult(evt);
+            return Task.CompletedTask;
+        });
+        eventBus.Subscribe<TaskStateChangedEvent>((evt, _) =>
+        {
+            taskEvent.TrySetResult(evt);
+            return Task.CompletedTask;
+        });
+        var sc = new StateCenter(eventBus);
+
+        sc.UpdateDeviceState("CV_01", new DeviceState
+        {
+            DeviceId = "CV_01",
+            Status = DeviceStatusEnum.Running
+        });
+        sc.UpdateTaskRuntime("TASK-01", new TaskRuntime
+        {
+            TaskId = "TASK-01",
+            Status = TaskStatusEnum.Running
+        });
+
+        var publishedDevice = await deviceEvent.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var publishedTask = await taskEvent.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal("CV_01", publishedDevice.DeviceId);
+        Assert.Equal(DeviceStatusEnum.Running, publishedDevice.NewStatus);
+        Assert.Equal("TASK-01", publishedTask.TaskId);
+        Assert.Equal(TaskStatusEnum.Running, publishedTask.NewStatus);
     }
 }

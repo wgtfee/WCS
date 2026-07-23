@@ -8,6 +8,7 @@
 - [ ] `FaultInjection_IsDeterministicAndDoesNotWriteProductionDriver`
 - [ ] `HistoricalReplay_BuildsScenarioFromPersistedQueueRecords`
 - [ ] `CapacityBenchmark_MoreVehiclesDoNotReduceCompletedTasksAtSameRate`
+- [ ] `CapacityBenchmark_DrainsTailWithoutTreatingOutstandingTasksAsFailures`
 - [ ] `AcceptanceReport_UsesExplicitThresholds`
 - [ ] `BatchOptimization_ReturnsRecommendationWithoutChangingProductionTuning`
 - [ ] `CongestionForecast_ReportsHeavyLevelForOverloadedFleet`
@@ -32,6 +33,9 @@
 - [ ] 单个容量点任务数不超过 5,000
 - [ ] 容量估算任务总量不超过 250,000
 - [ ] 同一时刻仅允许一个容量压力任务
+- [ ] 容量任务在到达观察窗截止后继续排空
+- [ ] 截止时未清任务与真实失败分别统计
+- [ ] 容量吞吐和利用率不包含观察窗后的排空时间
 - [ ] 相同任务/故障/Seed 使用相同故障样本
 - [ ] 运行时 `GetQueue()` 使用纯快照，不刷新优先级或清理终态任务
 - [ ] 真实 `DispatchCycleAsync()` 继续执行优先级刷新和终态清理
