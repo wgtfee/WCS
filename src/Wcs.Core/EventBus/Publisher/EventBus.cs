@@ -7,7 +7,7 @@ using Wcs.Core.EventBus.Persistence;
 
 /// <summary>
 /// 内存事件总线实现 — 可选 IEventStore 持久化集成
-/// 持久化为 fire-and-forget 模式，不影响主事件发布流程
+/// IEventStore 自身负责缓冲和批量刷盘；发布端只等待事件进入内存缓冲。
 /// </summary>
 public class EventBus : IEventBus
 {
@@ -120,29 +120,20 @@ public class EventBus : IEventBus
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
-        // Fire-and-forget: 持久化事件到 EventStore（不影响主流程）
+        // The event store owns buffering and batched disk writes. Awaiting the
+        // in-memory enqueue avoids creating one Task.Run per PLC event.
         if (_eventStore != null)
-        {
-            PersistFireAndForget(@event);
-        }
-    }
-
-    /// <summary>
-    /// fire-and-forget 事件持久化
-    /// </summary>
-    private void PersistFireAndForget<TEvent>(TEvent @event) where TEvent : IEvent
-    {
-        Task.Run(async () =>
         {
             try
             {
-                await _eventStore!.AppendAsync(@event);
+                await _eventStore.AppendAsync(@event, cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch
             {
-                // 持久化失败不应影响事件发布
+                // Persistence failure must not stop other event handlers.
             }
-        });
+        }
     }
 
     public Task PublishAsync(IEvent @event, CancellationToken cancellationToken = default)

@@ -39,6 +39,14 @@ public class EventDetector
     }
 
     public void Detect(string blockKey, object current, string plcName = "", int dbBlock = 0)
+        => DetectAsync(blockKey, current, plcName, dbBlock).GetAwaiter().GetResult();
+
+    public async Task DetectAsync(
+        string blockKey,
+        object current,
+        string plcName = "",
+        int dbBlock = 0,
+        CancellationToken cancellationToken = default)
     {
         var snapshot = _snapshotCenter.Get(blockKey);
         var previous = snapshot?.Previous;
@@ -88,7 +96,8 @@ public class EventDetector
                 if (domainEvent != null)
                 {
                     rawSignal.DomainEventType = domainEvent.GetType().Name;
-                    _eventBus.PublishAsync(domainEvent).GetAwaiter().GetResult();
+                    await _eventBus.PublishAsync(domainEvent, cancellationToken)
+                        .ConfigureAwait(false);
                 }
 
                 // 验证通过 + 有命令 → 发布命令请求事件，自动写入 PLC
@@ -100,13 +109,15 @@ public class EventDetector
                         CommandType = commandResult.CommandType ?? meta.FieldName,
                         DeviceId = commandResult.TargetDeviceId ?? meta.DeviceId ?? "",
                     };
-                    _eventBus.PublishAsync(cmdEvent).GetAwaiter().GetResult();
+                    await _eventBus.PublishAsync(cmdEvent, cancellationToken)
+                        .ConfigureAwait(false);
                     _logger?.LogInformation("[Detector] ⚡ {Field} 验证通过 → 发命令 {Cmd}",
                         meta.FieldName, commandResult.CommandType);
                 }
             }
             //验证成功的数据进行推送
-            _eventBus.PublishAsync(rawSignal).GetAwaiter().GetResult();
+            await _eventBus.PublishAsync(rawSignal, cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 

@@ -15,8 +15,9 @@ public class SimulatedPlcPollingService
     private readonly EventDetector _eventDetector;
     private readonly SignalSnapshotCenter _snapshotCenter;
     private readonly ILogger<SimulatedPlcPollingService>? _logger;
-    private readonly List<Timer> _timers = new();
+    private readonly List<Task> _pollingTasks = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _previousStructs = new();
+    private CancellationTokenSource? _pollingCts;
     private bool _running;
 
     public double ChangeProbability { get; set; } = 0.3;
@@ -47,6 +48,8 @@ public class SimulatedPlcPollingService
     {
         if (_running) return;
         _running = true;
+        var pollingCts = new CancellationTokenSource();
+        _pollingCts = pollingCts;
 
         var blockConfigs = new (string Key, int BlockNumber, int Length, Func<byte[]> Generate, Type StructType)[]
         {
@@ -67,27 +70,9 @@ public class SimulatedPlcPollingService
                 r.PlcName == cfg.Key.Split('.')[0] && r.BlockNumber == cfg.BlockNumber);
             var interval = reg?.PollIntervalMs ?? 200;
 
-            var timer = new Timer(_ =>
-            {
-                try
-                {
-                    var data = cfg.Generate();
-                    var current = Wcs.Core.PlcSubsystem.SignalMapper.S7.Struct.FromBytes(
-                        cfg.StructType, data, cfg.Length, 0);
-                    if (current == null) return;
-
-                    SyncStateCenter(cfg.StructType, current);
-                    _snapshotCenter.Update(cfg.Key, current, cfg.StructType);
-                    _eventDetector.Detect(cfg.Key, current, cfg.Key.Split('.')[0], cfg.BlockNumber);
-                    _previousStructs[cfg.Key] = current;
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogError(ex, "[SimPLC] {Key}", cfg.Key);
-                }
-            }, null, 0, interval);
-
-            _timers.Add(timer);
+            _pollingTasks.Add(Task.Run(
+                () => PollBlockAsync(cfg, interval, pollingCts.Token),
+                pollingCts.Token));
         }
 
         _logger?.LogInformation("[SimPLC] ✅ 3 PLC 9 DB 块模拟轮询已启动");
@@ -110,10 +95,66 @@ public class SimulatedPlcPollingService
         }
     }
 
-    public void Stop()
+    private async Task PollBlockAsync(
+        (string Key, int BlockNumber, int Length, Func<byte[]> Generate, Type StructType) cfg,
+        int intervalMs,
+        CancellationToken cancellationToken)
     {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(intervalMs));
+        try
+        {
+            do
+            {
+                var data = cfg.Generate();
+                var current = Wcs.Core.PlcSubsystem.SignalMapper.S7.Struct.FromBytes(
+                    cfg.StructType, data, cfg.Length, 0);
+                if (current is not null)
+                {
+                    SyncStateCenter(cfg.StructType, current);
+                    _snapshotCenter.Update(cfg.Key, current, cfg.StructType);
+                    await _eventDetector.DetectAsync(
+                        cfg.Key,
+                        current,
+                        cfg.Key.Split('.')[0],
+                        cfg.BlockNumber,
+                        cancellationToken);
+                    _previousStructs[cfg.Key] = current;
+                }
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal simulator shutdown.
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "[SimPLC] {Key}", cfg.Key);
+        }
+    }
+
+    public async Task StopAsync()
+    {
+        if (!_running) return;
         _running = false;
-        foreach (var t in _timers) t.Dispose();
-        _timers.Clear();
+
+        var cts = _pollingCts;
+        _pollingCts = null;
+        if (cts is null) return;
+
+        cts.Cancel();
+        try
+        {
+            await Task.WhenAll(_pollingTasks);
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal simulator shutdown.
+        }
+        finally
+        {
+            _pollingTasks.Clear();
+            cts.Dispose();
+        }
     }
 }

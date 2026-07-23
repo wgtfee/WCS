@@ -56,7 +56,7 @@ public class SimulatorBackgroundService : BackgroundService
         }
         finally
         {
-            _simulatedService.Stop();
+            await _simulatedService.StopAsync();
         }
     }
 }
