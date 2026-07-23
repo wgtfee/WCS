@@ -43,6 +43,20 @@ public sealed class PlcAnomalyDetectionService : BackgroundService
             _options.Rules.Count,
             _options.WindowSize,
             _options.MinimumSamples);
+        foreach (var rule in _options.Rules)
+        {
+            _logger.LogInformation(
+                "PLC anomaly rule: Id={RuleId}, Enabled={Enabled}, Plc={PlcPattern}, Device={DevicePattern}, Signal={SignalPattern}, Min={Minimum}, Max={Maximum}, Rate={MaximumRate}, DurationMs={MaximumDuration}",
+                rule.RuleId,
+                rule.Enabled,
+                rule.PlcPattern,
+                rule.DevicePattern,
+                rule.SignalPattern,
+                rule.Minimum,
+                rule.Maximum,
+                rule.MaximumRatePerSecond,
+                rule.MaximumTrueDurationMs);
+        }
 
         using var timer = new PeriodicTimer(
             TimeSpan.FromMilliseconds(Math.Max(100, _options.DurationSweepIntervalMs)));
