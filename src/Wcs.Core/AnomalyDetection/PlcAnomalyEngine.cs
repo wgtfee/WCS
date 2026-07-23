@@ -1,6 +1,7 @@
 namespace Wcs.Core.AnomalyDetection;
 
 using System.Collections.Concurrent;
+using System.IO.Enumeration;
 using System.Security.Cryptography;
 using System.Text;
 using Wcs.Core.EventBus.Events;
@@ -20,6 +21,7 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
     private readonly ConcurrentDictionary<string, PlcAnomalyRecord> _active = new(StringComparer.Ordinal);
 
     private long _processedSamples;
+    private long _matchedRuleEvaluations;
     private long _detectorObservations;
     private long _raised;
     private long _recovered;
@@ -50,6 +52,7 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             foreach (var rule in _options.Rules)
             {
                 if (!RuleMatches(rule, sample)) continue;
+                Interlocked.Increment(ref _matchedRuleEvaluations);
 
                 var stateKey = BuildStateKey(rule.RuleId, sample);
                 if (!_states.TryGetValue(stateKey, out var state))
@@ -139,7 +142,9 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         return new PlcAnomalyStatus
         {
             Enabled = _options.Enabled,
+            ConfiguredRules = _options.Rules.Count,
             ProcessedSamples = Interlocked.Read(ref _processedSamples),
+            MatchedRuleEvaluations = Interlocked.Read(ref _matchedRuleEvaluations),
             DetectorObservations = Interlocked.Read(ref _detectorObservations),
             Raised = Interlocked.Read(ref _raised),
             Recovered = Interlocked.Read(ref _recovered),
@@ -197,8 +202,8 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             state.LastNumericValue = current;
             state.LastNumericUtc = sample.TimestampUtc;
 
-            // 异常值不回灌动态基线，避免基线被故障值带偏。
-            if (candidate is null || candidate.Type != PlcAnomalyType.StatisticalBaseline)
+            // 任意检测器判定异常时都不回灌动态基线，避免阈值/速率故障污染 MAD 窗口。
+            if (candidate is null)
                 AddWindowValue(state, current);
         }
 
@@ -489,40 +494,7 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
     private static bool WildcardMatch(string? pattern, string value)
     {
         if (string.IsNullOrWhiteSpace(pattern) || pattern == "*") return true;
-
-        var p = 0;
-        var v = 0;
-        var star = -1;
-        var match = 0;
-        while (v < value.Length)
-        {
-            if (p < pattern.Length &&
-                (pattern[p] == '?' || char.ToUpperInvariant(pattern[p]) == char.ToUpperInvariant(value[v])))
-            {
-                p++;
-                v++;
-                continue;
-            }
-
-            if (p < pattern.Length && pattern[p] == '*')
-            {
-                star = p++;
-                match = v;
-                continue;
-            }
-
-            if (star >= 0)
-            {
-                p = star + 1;
-                v = ++match;
-                continue;
-            }
-
-            return false;
-        }
-
-        while (p < pattern.Length && pattern[p] == '*') p++;
-        return p == pattern.Length;
+        return FileSystemName.MatchesSimpleExpression(pattern, value, ignoreCase: true);
     }
 
     private static string BuildStateKey(string ruleId, PlcAnomalySample sample) =>
