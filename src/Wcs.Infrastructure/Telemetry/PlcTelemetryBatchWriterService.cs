@@ -81,7 +81,7 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
                         Math.Min(Math.Max(50, _options.FlushIntervalMs), 500));
                     if (offlineBatch.Count > 0)
                     {
-                        await SpoolChannelBatchAsync(offlineBatch, stoppingToken);
+                        await SpoolChannelBatchAsync(offlineBatch);
                         continue;
                     }
 
@@ -197,11 +197,11 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
     }
 
     private async Task SpoolChannelBatchAsync(
-        IReadOnlyCollection<PlcTelemetryPoint> batch,
-        CancellationToken cancellationToken)
+        IReadOnlyCollection<PlcTelemetryPoint> batch)
     {
         _buffer.BeginChannelWrite(batch.Count);
-        await SpoolStartedBatchAsync(batch, cancellationToken, null);
+        // 该批已经从 Channel 取出，必须完成短暂落盘后才能响应正常关机。
+        await SpoolStartedBatchAsync(batch, CancellationToken.None, null);
     }
 
     private async Task SpoolStartedBatchAsync(
