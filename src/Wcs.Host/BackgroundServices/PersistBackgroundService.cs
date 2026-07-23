@@ -142,12 +142,31 @@ public class PersistBackgroundService : BackgroundService
                 if (total > 0)
                     _logger.LogDebug("Persisted {Total} records", total);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception) when (stoppingToken.IsCancellationRequested)
+            {
+                // SqlClient may surface a cancelled command as SqlException rather than
+                // OperationCanceledException during graceful Host shutdown.
+                break;
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Persist cycle failed");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(_options.CurrentValue.Persistence.IntervalSeconds), stoppingToken);
+            try
+            {
+                await Task.Delay(
+                    TimeSpan.FromSeconds(_options.CurrentValue.Persistence.IntervalSeconds),
+                    stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 }
