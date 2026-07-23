@@ -144,7 +144,12 @@ jobs:
         run: |
           export HOST_PID
           HOST_PID="$(cat artifacts/host.pid)"
-          node tests/load/wcs-e2e-load.mjs
+          load_timeout_seconds="$((DURATION_SECONDS + 120))"
+          timeout \
+            --signal=TERM \
+            --kill-after=10s \
+            "${load_timeout_seconds}s" \
+            node tests/load/wcs-e2e-load.mjs
 
       - name: Capture SQL evidence
         if: always()
