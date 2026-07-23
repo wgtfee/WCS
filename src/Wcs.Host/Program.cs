@@ -85,8 +85,13 @@ try
     // ===== SqlSugar DI =====
     var dbConnStr = builder.Configuration.GetConnectionString("WcsDb");
     if (!string.IsNullOrEmpty(dbConnStr))
-        builder.Services.AddSingleton<ISqlSugarClient>(_ => new SqlSugarClient(
-            new ConnectionConfig { ConnectionString = dbConnStr + ";MultipleActiveResultSets=True;Max Pool Size=200", DbType = DbType.SqlServer, IsAutoCloseConnection = false }));
+        builder.Services.AddSingleton<ISqlSugarClient>(_ => new SqlSugarScope(
+            new ConnectionConfig
+            {
+                ConnectionString = dbConnStr + ";MultipleActiveResultSets=True;Max Pool Size=200",
+                DbType = DbType.SqlServer,
+                IsAutoCloseConnection = true
+            }));
 
     // ===== PLC 核心注册 =====
     var connectToPlc = !builder.Configuration.GetSection("Simulator").GetValue<bool>("Enabled");

@@ -9,17 +9,16 @@ namespace Wcs.Infrastructure.Persistence.Services;
 /// </summary>
 public class TaskQueryService : ITaskQueryService
 {
-    private readonly string _connectionString;
+    private readonly ISqlSugarClient _db;
 
-    public TaskQueryService(string connectionString)
+    public TaskQueryService(ISqlSugarClient db)
     {
-        _connectionString = connectionString;
+        _db = db;
     }
 
     public async Task<List<TaskRunEntity>> GetTaskRunsAsync(CancellationToken ct = default)
     {
-        using var db = CreateDb();
-        return await db.Queryable<TaskRunEntity>()
+        return await _db.Queryable<TaskRunEntity>()
             .OrderByDescending(e => e.CreatedTime)
             .ToListAsync(ct);
     }
@@ -29,8 +28,7 @@ public class TaskQueryService : ITaskQueryService
         int page = 1, int pageSize = 50,
         CancellationToken ct = default)
     {
-        using var db = CreateDb();
-        var query = db.Queryable<TaskHistoryEntity>();
+        var query = _db.Queryable<TaskHistoryEntity>();
 
         if (from.HasValue)
             query = query.Where(e => e.StartTime >= from.Value);
@@ -52,12 +50,4 @@ public class TaskQueryService : ITaskQueryService
 
         return (items, total);
     }
-
-    private SqlSugarClient CreateDb() =>
-        new(new ConnectionConfig
-        {
-            ConnectionString = _connectionString,
-            DbType = DbType.SqlServer,
-            IsAutoCloseConnection = true
-        });
 }

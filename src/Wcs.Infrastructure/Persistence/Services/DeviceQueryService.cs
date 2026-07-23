@@ -9,25 +9,16 @@ namespace Wcs.Infrastructure.Persistence.Services;
 /// </summary>
 public class DeviceQueryService : IDeviceQueryService
 {
-    private readonly string _connectionString;
+    private readonly ISqlSugarClient _db;
 
-    public DeviceQueryService(string connectionString)
+    public DeviceQueryService(ISqlSugarClient db)
     {
-        _connectionString = connectionString;
+        _db = db;
     }
 
     public async Task<List<DeviceRuntimeEntity>> GetDeviceRuntimesAsync(CancellationToken ct = default)
     {
-        using var db = CreateDb();
-        return await db.Queryable<DeviceRuntimeEntity>()
+        return await _db.Queryable<DeviceRuntimeEntity>()
             .ToListAsync(ct);
     }
-
-    private SqlSugarClient CreateDb() =>
-        new(new ConnectionConfig
-        {
-            ConnectionString = _connectionString,
-            DbType = DbType.SqlServer,
-            IsAutoCloseConnection = true
-        });
 }

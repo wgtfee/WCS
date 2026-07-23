@@ -9,17 +9,16 @@ namespace Wcs.Infrastructure.Persistence.Services;
 /// </summary>
 public class AlarmQueryService : IAlarmQueryService
 {
-    private readonly string _connectionString;
+    private readonly ISqlSugarClient _db;
 
-    public AlarmQueryService(string connectionString)
+    public AlarmQueryService(ISqlSugarClient db)
     {
-        _connectionString = connectionString;
+        _db = db;
     }
 
     public async Task<List<AlarmRuntimeEntity>> GetRuntimeAlarmsAsync(CancellationToken ct = default)
     {
-        using var db = CreateDb();
-        return await db.Queryable<AlarmRuntimeEntity>()
+        return await _db.Queryable<AlarmRuntimeEntity>()
             .ToListAsync(ct);
     }
 
@@ -28,8 +27,7 @@ public class AlarmQueryService : IAlarmQueryService
         int page = 1, int pageSize = 50,
         CancellationToken ct = default)
     {
-        using var db = CreateDb();
-        var query = db.Queryable<AlarmHistoryEntity>();
+        var query = _db.Queryable<AlarmHistoryEntity>();
 
         if (from.HasValue)
             query = query.Where(e => e.StartTime >= from.Value);
@@ -47,12 +45,4 @@ public class AlarmQueryService : IAlarmQueryService
 
         return (items, total);
     }
-
-    private SqlSugarClient CreateDb() =>
-        new(new ConnectionConfig
-        {
-            ConnectionString = _connectionString,
-            DbType = DbType.SqlServer,
-            IsAutoCloseConnection = true
-        });
 }
