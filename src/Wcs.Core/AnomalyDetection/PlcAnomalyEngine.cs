@@ -1,6 +1,7 @@
 namespace Wcs.Core.AnomalyDetection;
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO.Enumeration;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,7 +9,7 @@ using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 
 /// <summary>
-/// PLC 异常检测引擎 v1：阈值、变化率、持续时间与 Median/MAD 动态基线。
+/// PLC 异常检测引擎 v1：阈值、变化率、持续时间、跨信号一致性与 Median/MAD 动态基线。
 /// 检测器只生成候选，连续命中/连续恢复状态机负责抑制毛刺和报警风暴。
 /// </summary>
 public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvider
@@ -19,6 +20,8 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
     private readonly IEventBus _eventBus;
     private readonly ConcurrentDictionary<string, SignalRuleState> _states = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, PlcAnomalyRecord> _active = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PlcAnomalySample>>
+        _latestSamplesByDevice = new(StringComparer.Ordinal);
 
     private long _processedSamples;
     private long _matchedRuleEvaluations;
@@ -46,36 +49,64 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         Interlocked.Increment(ref _processedSamples);
         Volatile.Write(ref _lastProcessedTicks, sample.TimestampUtc.Ticks);
 
+        var deviceSamples = _latestSamplesByDevice.GetOrAdd(
+            BuildDeviceKey(sample),
+            static _ => new ConcurrentDictionary<string, PlcAnomalySample>(StringComparer.OrdinalIgnoreCase));
+        deviceSamples[sample.SignalName] = sample;
+
         try
         {
             List<AnomalyTransition>? transitions = null;
             foreach (var rule in _options.Rules)
             {
+                if (IsConsistencyRule(rule))
+                {
+                    if (!ConsistencyRuleRelevant(rule, sample)) continue;
+                    Interlocked.Increment(ref _matchedRuleEvaluations);
+
+                    var state = GetOrCreateState(BuildConsistencyStateKey(rule.RuleId, sample), rule);
+                    if (state is null) continue;
+
+                    AnomalyTransition? transition;
+                    lock (state.Gate)
+                    {
+                        var evaluation = EvaluateConsistency(rule, sample, deviceSamples);
+                        var anchor = evaluation.Anchor with
+                        {
+                            EventId = sample.EventId,
+                            TimestampUtc = sample.TimestampUtc,
+                            TaskId = sample.TaskId ?? evaluation.Anchor.TaskId
+                        };
+                        if (evaluation.Candidate is not null)
+                            Interlocked.Increment(ref _detectorObservations);
+                        transition = ApplyCandidateLocked(state, anchor, evaluation.Candidate);
+                        state.LastSample = anchor;
+                    }
+
+                    if (transition is not null)
+                    {
+                        transitions ??= new List<AnomalyTransition>();
+                        transitions.Add(transition);
+                    }
+                    continue;
+                }
+
                 if (!RuleMatches(rule, sample)) continue;
                 Interlocked.Increment(ref _matchedRuleEvaluations);
 
-                var stateKey = BuildStateKey(rule.RuleId, sample);
-                if (!_states.TryGetValue(stateKey, out var state))
-                {
-                    if (_states.Count >= _options.MaximumTrackedRuleSignals)
-                    {
-                        Interlocked.Increment(ref _suppressed);
-                        continue;
-                    }
+                var normalState = GetOrCreateState(BuildStateKey(rule.RuleId, sample), rule);
+                if (normalState is null) continue;
 
-                    state = _states.GetOrAdd(stateKey, _ => new SignalRuleState(rule));
+                AnomalyTransition? normalTransition;
+                lock (normalState.Gate)
+                {
+                    normalTransition = EvaluateSampleLocked(normalState, sample);
                 }
 
-                AnomalyTransition? transition;
-                lock (state.Gate)
-                {
-                    transition = EvaluateSampleLocked(state, sample);
-                }
-
-                if (transition is not null)
+                if (normalTransition is not null)
                 {
                     transitions ??= new List<AnomalyTransition>();
-                    transitions.Add(transition);
+                    transitions.Add(normalTransition);
                 }
             }
 
@@ -107,7 +138,7 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         foreach (var state in _states.Values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (state.Rule.MaximumTrueDurationMs is null) continue;
+            if (state.Rule.MaximumTrueDurationMs is null || IsConsistencyRule(state.Rule)) continue;
 
             AnomalyTransition? transition = null;
             lock (state.Gate)
@@ -155,6 +186,17 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             LastProcessedUtc = ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc),
             LastError = Volatile.Read(ref _lastError)
         };
+    }
+
+    private SignalRuleState? GetOrCreateState(string stateKey, PlcAnomalyRule rule)
+    {
+        if (_states.TryGetValue(stateKey, out var existing)) return existing;
+        if (_states.Count >= _options.MaximumTrackedRuleSignals)
+        {
+            Interlocked.Increment(ref _suppressed);
+            return null;
+        }
+        return _states.GetOrAdd(stateKey, _ => new SignalRuleState(rule));
     }
 
     private AnomalyTransition? EvaluateSampleLocked(SignalRuleState state, PlcAnomalySample sample)
@@ -208,6 +250,75 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         }
 
         return transition;
+    }
+
+    private ConsistencyEvaluation EvaluateConsistency(
+        PlcAnomalyRule rule,
+        PlcAnomalySample current,
+        ConcurrentDictionary<string, PlcAnomalySample> deviceSamples)
+    {
+        var primary = FindLatest(deviceSamples, rule.SignalPattern) ?? current;
+        var related = FindLatest(deviceSamples, rule.RelatedSignalPattern!);
+
+        if (!ValueEquals(primary, rule.WhenValueEquals ?? "true"))
+            return new ConsistencyEvaluation(primary, null);
+
+        if (related is null)
+        {
+            return new ConsistencyEvaluation(primary, new DetectorCandidate(
+                PlcAnomalyType.Consistency,
+                "ConsistencyDetector",
+                1.0,
+                null,
+                null,
+                rule.RelatedMinimum,
+                rule.RelatedMaximum,
+                $"条件信号 {primary.SignalName}={primary.NewValue}，但尚未获得关联信号 {rule.RelatedSignalPattern}"));
+        }
+
+        var ageMs = Math.Max(0, (current.TimestampUtc - related.TimestampUtc).TotalMilliseconds);
+        if (ageMs > rule.MaximumRelatedAgeMs)
+        {
+            return new ConsistencyEvaluation(primary, new DetectorCandidate(
+                PlcAnomalyType.Consistency,
+                "ConsistencyDetector",
+                1.0,
+                ToNumeric(related),
+                null,
+                rule.RelatedMinimum,
+                rule.RelatedMaximum,
+                $"关联信号 {related.SignalName} 已超过 {ageMs:F0}ms 未更新，允许值 {rule.MaximumRelatedAgeMs}ms"));
+        }
+
+        var mismatch = false;
+        if (!string.IsNullOrWhiteSpace(rule.RelatedExpectedValue) &&
+            !ValueEquals(related, rule.RelatedExpectedValue))
+            mismatch = true;
+
+        if (rule.RelatedMinimum is { } minimum &&
+            (related.NumericValue is null || related.NumericValue.Value < minimum))
+            mismatch = true;
+
+        if (rule.RelatedMaximum is { } maximum &&
+            (related.NumericValue is null || related.NumericValue.Value > maximum))
+            mismatch = true;
+
+        if (!mismatch) return new ConsistencyEvaluation(primary, null);
+
+        var actual = ToNumeric(related);
+        var expected = rule.RelatedExpectedValue is not null &&
+                       double.TryParse(rule.RelatedExpectedValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : rule.RelatedMinimum ?? rule.RelatedMaximum;
+        return new ConsistencyEvaluation(primary, new DetectorCandidate(
+            PlcAnomalyType.Consistency,
+            "ConsistencyDetector",
+            0.95,
+            actual,
+            expected,
+            rule.RelatedMinimum,
+            rule.RelatedMaximum,
+            $"{primary.SignalName}={primary.NewValue} 时，关联信号 {related.SignalName}={related.NewValue} 不满足预期"));
     }
 
     private AnomalyTransition? ApplyCandidateLocked(
@@ -307,7 +418,9 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         DetectorCandidate candidate,
         DateTime startUtc)
     {
-        var anomalyKey = BuildStateKey(rule.RuleId, sample);
+        var anomalyKey = IsConsistencyRule(rule)
+            ? BuildConsistencyStateKey(rule.RuleId, sample)
+            : BuildStateKey(rule.RuleId, sample);
         return new PlcAnomalyRecord
         {
             AnomalyId = Guid.NewGuid().ToString("N"),
@@ -483,13 +596,32 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         return configured;
     }
 
+    private static bool IsConsistencyRule(PlcAnomalyRule rule) =>
+        !string.IsNullOrWhiteSpace(rule.RelatedSignalPattern);
+
     private static bool RuleMatches(PlcAnomalyRule rule, PlcAnomalySample sample) =>
+        RuleScopeMatches(rule, sample) &&
+        !string.IsNullOrWhiteSpace(rule.SignalPattern) &&
+        WildcardMatch(rule.SignalPattern, sample.SignalName);
+
+    private static bool ConsistencyRuleRelevant(PlcAnomalyRule rule, PlcAnomalySample sample) =>
+        RuleScopeMatches(rule, sample) &&
+        (WildcardMatch(rule.SignalPattern, sample.SignalName) ||
+         WildcardMatch(rule.RelatedSignalPattern, sample.SignalName));
+
+    private static bool RuleScopeMatches(PlcAnomalyRule rule, PlcAnomalySample sample) =>
         rule.Enabled &&
         !string.IsNullOrWhiteSpace(rule.RuleId) &&
-        !string.IsNullOrWhiteSpace(rule.SignalPattern) &&
         WildcardMatch(rule.PlcPattern, sample.PlcName) &&
-        WildcardMatch(rule.DevicePattern, sample.DeviceId) &&
-        WildcardMatch(rule.SignalPattern, sample.SignalName);
+        WildcardMatch(rule.DevicePattern, sample.DeviceId);
+
+    private static PlcAnomalySample? FindLatest(
+        ConcurrentDictionary<string, PlcAnomalySample> samples,
+        string pattern) =>
+        samples.Values
+            .Where(item => WildcardMatch(pattern, item.SignalName))
+            .OrderByDescending(static item => item.TimestampUtc)
+            .FirstOrDefault();
 
     private static bool WildcardMatch(string? pattern, string value)
     {
@@ -497,8 +629,27 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         return FileSystemName.MatchesSimpleExpression(pattern, value, ignoreCase: true);
     }
 
+    private static bool ValueEquals(PlcAnomalySample sample, string expected)
+    {
+        if (bool.TryParse(expected, out var expectedBoolean) && sample.BooleanValue is { } actualBoolean)
+            return actualBoolean == expectedBoolean;
+        if (double.TryParse(expected, NumberStyles.Float, CultureInfo.InvariantCulture, out var expectedNumeric) &&
+            sample.NumericValue is { } actualNumeric)
+            return Math.Abs(actualNumeric - expectedNumeric) <= Math.Max(1e-9, Math.Abs(expectedNumeric) * 1e-9);
+        return string.Equals(sample.NewValue, expected, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static double? ToNumeric(PlcAnomalySample sample) =>
+        sample.NumericValue ?? (sample.BooleanValue is { } boolean ? boolean ? 1.0 : 0.0 : null);
+
+    private static string BuildDeviceKey(PlcAnomalySample sample) =>
+        $"{sample.PlcName}|{sample.DeviceId}";
+
     private static string BuildStateKey(string ruleId, PlcAnomalySample sample) =>
         $"{ruleId}|{sample.PlcName}|{sample.DeviceId}|{sample.SignalName}";
+
+    private static string BuildConsistencyStateKey(string ruleId, PlcAnomalySample sample) =>
+        $"{ruleId}|{sample.PlcName}|{sample.DeviceId}|CONSISTENCY";
 
     private static string BuildAlarmCode(string anomalyKey)
     {
@@ -514,6 +665,11 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         {
             rule.RuleId,
             rule.Description,
+            rule.RelatedSignalPattern,
+            rule.WhenValueEquals,
+            rule.RelatedExpectedValue,
+            rule.RelatedMinimum,
+            rule.RelatedMaximum,
             sample.EventId,
             sample.Source,
             sample.OldValue,
@@ -552,6 +708,10 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         double? LowerBound,
         double? UpperBound,
         string Reason);
+
+    private sealed record ConsistencyEvaluation(
+        PlcAnomalySample Anchor,
+        DetectorCandidate? Candidate);
 
     private sealed record AnomalyTransition(bool IsDetected, PlcAnomalyRecord Record);
 }
