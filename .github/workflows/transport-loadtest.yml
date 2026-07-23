@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/transport-loadtest
+  pull_request:
+    branches:
+      - develop
   workflow_dispatch:
 
 permissions:
