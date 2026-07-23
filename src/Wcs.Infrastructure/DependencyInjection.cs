@@ -208,6 +208,16 @@ public static class DependencyInjection
             rule.PlcPattern = string.IsNullOrWhiteSpace(rule.PlcPattern) ? "*" : rule.PlcPattern.Trim();
             rule.DevicePattern = string.IsNullOrWhiteSpace(rule.DevicePattern) ? "*" : rule.DevicePattern.Trim();
             rule.SignalPattern = rule.SignalPattern?.Trim() ?? string.Empty;
+            rule.RelatedSignalPattern = string.IsNullOrWhiteSpace(rule.RelatedSignalPattern)
+                ? null
+                : rule.RelatedSignalPattern.Trim();
+            rule.WhenValueEquals = string.IsNullOrWhiteSpace(rule.WhenValueEquals)
+                ? null
+                : rule.WhenValueEquals.Trim();
+            rule.RelatedExpectedValue = string.IsNullOrWhiteSpace(rule.RelatedExpectedValue)
+                ? null
+                : rule.RelatedExpectedValue.Trim();
+            rule.MaximumRelatedAgeMs = Math.Clamp(rule.MaximumRelatedAgeMs, 100, 3_600_000);
             rule.MadMultiplier = Math.Clamp(rule.MadMultiplier, 1, 100);
             rule.MinimumMad = Math.Clamp(rule.MinimumMad, 0.000001, 1_000_000);
             if (rule.MaximumTrueDurationMs is not null)
@@ -216,6 +226,9 @@ public static class DependencyInjection
                 rule.ConsecutiveAbnormalCount = Math.Clamp(rule.ConsecutiveAbnormalCount.Value, 1, 1_000);
             if (rule.ConsecutiveRecoveryCount is not null)
                 rule.ConsecutiveRecoveryCount = Math.Clamp(rule.ConsecutiveRecoveryCount.Value, 1, 10_000);
+
+            if (rule.Enabled && string.IsNullOrWhiteSpace(rule.SignalPattern))
+                throw new InvalidOperationException($"AnomalyDetection 规则 {rule.RuleId} 未配置 SignalPattern。");
         }
 
         services.Replace(ServiceDescriptor.Singleton(options));
