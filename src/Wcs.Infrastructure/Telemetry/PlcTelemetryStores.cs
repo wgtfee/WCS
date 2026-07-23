@@ -41,16 +41,16 @@ internal sealed class SqlServerPlcTelemetryStore : IPlcTelemetryStore
         });
 
         var entities = points.Select(ToEntity).ToList();
-        var sequences = entities.Select(static item => item.Sequence).ToArray();
+        var eventIds = entities.Select(static item => item.EventId).ToArray();
         var existing = await db.Queryable<PlcTelemetryEntity>()
-            .Where(item => sequences.Contains(item.Sequence))
-            .Select(static item => item.Sequence)
+            .Where(item => eventIds.Contains(item.EventId))
+            .Select(static item => item.EventId)
             .ToListAsync();
 
         if (existing.Count > 0)
         {
-            var existingSet = existing.ToHashSet();
-            entities.RemoveAll(item => existingSet.Contains(item.Sequence));
+            var existingSet = existing.ToHashSet(StringComparer.Ordinal);
+            entities.RemoveAll(item => existingSet.Contains(item.EventId));
         }
 
         if (entities.Count > 0)
