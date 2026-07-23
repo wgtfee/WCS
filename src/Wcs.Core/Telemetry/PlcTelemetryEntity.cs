@@ -6,13 +6,12 @@ using SqlSugar;
 [SugarTable("Wcs_PlcTelemetry")]
 public sealed class PlcTelemetryEntity
 {
-    [SugarColumn(IsPrimaryKey = true)]
     public long Sequence { get; set; }
 
     public long TimestampUnixNanoseconds { get; set; }
     public DateTime TimestampUtc { get; set; }
 
-    [SugarColumn(Length = 40)]
+    [SugarColumn(IsPrimaryKey = true, Length = 40)]
     public string EventId { get; set; } = string.Empty;
 
     [SugarColumn(Length = 100)]
