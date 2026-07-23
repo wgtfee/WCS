@@ -5,15 +5,25 @@ using Microsoft.Extensions.Logging;
 using Wcs.Core.Telemetry;
 
 /// <summary>
-/// 单消费者批量写入服务。失败批次先落本地 spool，连接恢复后按文件顺序重放。
+/// 单消费者批量写入服务。Provider 不可用时继续把内存队列按批转入 spool，
+/// 避免旧 spool 重放失败后阻塞生产端。
 /// </summary>
 internal sealed class PlcTelemetryBatchWriterService : BackgroundService
 {
+    private enum ReplayResult
+    {
+        None,
+        Succeeded,
+        Failed
+    }
+
     private readonly PlcTelemetryBuffer _buffer;
     private readonly FilePlcTelemetrySpool _spool;
     private readonly IPlcTelemetryStore _store;
     private readonly PlcTelemetryOptions _options;
     private readonly ILogger<PlcTelemetryBatchWriterService> _logger;
+    private DateTime _nextReplayAttemptUtc = DateTime.MinValue;
+    private bool _providerUnavailable;
 
     public PlcTelemetryBatchWriterService(
         PlcTelemetryBuffer buffer,
@@ -48,10 +58,44 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                if (await TryReplayOldestAsync(stoppingToken))
-                    continue;
+                if (_spool.PendingPoints > 0 && DateTime.UtcNow >= _nextReplayAttemptUtc)
+                {
+                    var replay = await TryReplayOldestAsync(stoppingToken);
+                    if (replay == ReplayResult.Succeeded)
+                    {
+                        _providerUnavailable = false;
+                        continue;
+                    }
+                    if (replay == ReplayResult.Failed)
+                    {
+                        _providerUnavailable = true;
+                        _nextReplayAttemptUtc = DateTime.UtcNow.AddMilliseconds(
+                            Math.Max(100, _options.RetryDelayMs));
+                    }
+                }
 
-                var batch = await ReadChannelBatchAsync(stoppingToken);
+                if (_providerUnavailable || _spool.PendingPoints > 0)
+                {
+                    var offlineBatch = await ReadChannelBatchAsync(
+                        stoppingToken,
+                        Math.Min(Math.Max(50, _options.FlushIntervalMs), 500));
+                    if (offlineBatch.Count > 0)
+                    {
+                        await SpoolChannelBatchAsync(offlineBatch, stoppingToken);
+                        continue;
+                    }
+
+                    var delay = _nextReplayAttemptUtc - DateTime.UtcNow;
+                    if (delay > TimeSpan.Zero)
+                        await Task.Delay(
+                            TimeSpan.FromMilliseconds(Math.Min(delay.TotalMilliseconds, 250)),
+                            stoppingToken);
+                    continue;
+                }
+
+                var batch = await ReadChannelBatchAsync(
+                    stoppingToken,
+                    Math.Max(50, _options.FlushIntervalMs));
                 if (batch.Count == 0) continue;
                 await PersistChannelBatchAsync(batch, stoppingToken);
             }
@@ -66,15 +110,15 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
         }
     }
 
-    private async Task<bool> TryReplayOldestAsync(CancellationToken cancellationToken)
+    private async Task<ReplayResult> TryReplayOldestAsync(CancellationToken cancellationToken)
     {
         var spoolBatch = await _spool.TryPeekOldestAsync(cancellationToken);
-        if (spoolBatch is null) return false;
+        if (spoolBatch is null) return ReplayResult.None;
 
         if (spoolBatch.Points.Count == 0)
         {
             await _spool.AcknowledgeAsync(spoolBatch, cancellationToken);
-            return true;
+            return ReplayResult.Succeeded;
         }
 
         try
@@ -82,7 +126,7 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
             await _store.WriteBatchAsync(spoolBatch.Points, cancellationToken);
             await _spool.AcknowledgeAsync(spoolBatch, cancellationToken);
             _buffer.CompleteReplay(spoolBatch.Points.Count);
-            return true;
+            return ReplayResult.Succeeded;
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -92,16 +136,20 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
                 "PLC telemetry spool replay failed: Provider={Provider}, Count={Count}",
                 _store.ProviderName,
                 spoolBatch.Points.Count);
-            await Task.Delay(Math.Max(100, _options.RetryDelayMs), cancellationToken);
-            return true;
+            return ReplayResult.Failed;
         }
     }
 
     private async Task<List<PlcTelemetryPoint>> ReadChannelBatchAsync(
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int waitForFirstMilliseconds)
     {
         var batch = new List<PlcTelemetryPoint>(Math.Max(1, _options.BatchSize));
-        if (!await _buffer.Reader.WaitToReadAsync(cancellationToken))
+        var readyTask = _buffer.Reader.WaitToReadAsync(cancellationToken).AsTask();
+        var firstWait = Task.Delay(Math.Max(10, waitForFirstMilliseconds), cancellationToken);
+        if (await Task.WhenAny(readyTask, firstWait) == firstWait)
+            return batch;
+        if (!await readyTask)
             return batch;
 
         var deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(10, _options.FlushIntervalMs));
@@ -141,26 +189,47 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             _buffer.MarkFailed(ex);
-            try
-            {
-                await _spool.AppendAsync(batch, cancellationToken);
-                _buffer.ChannelWriteSpooled(batch.Count);
-            }
-            catch (Exception spoolException) when (!cancellationToken.IsCancellationRequested)
-            {
-                _buffer.MarkDropped(batch.Count, spoolException);
-                _logger.LogCritical(
-                    spoolException,
-                    "PLC telemetry batch could not be persisted or spooled; Count={Count}",
-                    batch.Count);
-            }
+            _providerUnavailable = true;
+            _nextReplayAttemptUtc = DateTime.UtcNow.AddMilliseconds(
+                Math.Max(100, _options.RetryDelayMs));
+            await SpoolStartedBatchAsync(batch, cancellationToken, ex);
+        }
+    }
 
+    private async Task SpoolChannelBatchAsync(
+        IReadOnlyCollection<PlcTelemetryPoint> batch,
+        CancellationToken cancellationToken)
+    {
+        _buffer.BeginChannelWrite(batch.Count);
+        await SpoolStartedBatchAsync(batch, cancellationToken, null);
+    }
+
+    private async Task SpoolStartedBatchAsync(
+        IReadOnlyCollection<PlcTelemetryPoint> batch,
+        CancellationToken cancellationToken,
+        Exception? providerException)
+    {
+        try
+        {
+            await _spool.AppendAsync(batch, cancellationToken);
+            _buffer.ChannelWriteSpooled(batch.Count);
+        }
+        catch (Exception spoolException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _buffer.MarkDropped(batch.Count, spoolException);
+            _logger.LogCritical(
+                spoolException,
+                "PLC telemetry batch could not be persisted or spooled; Count={Count}",
+                batch.Count);
+        }
+
+        if (providerException is not null)
+        {
             _logger.LogWarning(
-                ex,
+                providerException,
                 "PLC telemetry write failed and batch was moved to spool: Provider={Provider}, Count={Count}",
                 _store.ProviderName,
                 batch.Count);
-            await Task.Delay(Math.Max(100, _options.RetryDelayMs), cancellationToken);
         }
     }
 
