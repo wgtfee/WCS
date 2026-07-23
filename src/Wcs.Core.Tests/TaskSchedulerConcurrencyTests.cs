@@ -9,8 +9,8 @@ public class TaskSchedulerConcurrencyTests
     public async Task DefaultDeviceLimit_AllowsOnlyOneRunningTaskPerDevice()
     {
         var scheduler = new Scheduler();
-        await scheduler.EnqueueAsync(Task("A-1", "CV-01"));
-        await scheduler.EnqueueAsync(Task("A-2", "CV-01"));
+        await scheduler.EnqueueAsync(Task("A-1", "CV-01", priority: 4));
+        await scheduler.EnqueueAsync(Task("A-2", "CV-01", priority: 2));
 
         var first = await scheduler.DequeueAsync();
         var blocked = await scheduler.DequeueAsync();
