@@ -133,6 +133,11 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
             await _store.WriteBatchAsync(batch, cancellationToken);
             _buffer.CompleteChannelWrite(batch.Count);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await SpoolCancelledInFlightBatchAsync(batch);
+            throw;
+        }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             _buffer.MarkFailed(ex);
@@ -156,6 +161,20 @@ internal sealed class PlcTelemetryBatchWriterService : BackgroundService
                 _store.ProviderName,
                 batch.Count);
             await Task.Delay(Math.Max(100, _options.RetryDelayMs), cancellationToken);
+        }
+    }
+
+    private async Task SpoolCancelledInFlightBatchAsync(IReadOnlyCollection<PlcTelemetryPoint> batch)
+    {
+        try
+        {
+            await _spool.AppendAsync(batch, CancellationToken.None);
+            _buffer.ChannelWriteSpooled(batch.Count);
+        }
+        catch (Exception ex)
+        {
+            _buffer.MarkDropped(batch.Count, ex);
+            _logger.LogCritical(ex, "PLC telemetry cancelled in-flight batch could not be spooled; Count={Count}", batch.Count);
         }
     }
 
