@@ -1,0 +1,52 @@
+name: Transport Simulation Load Test
+
+on:
+  push:
+    branches:
+      - agent/transport-loadtest
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      COMPlus_gcServer: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore load test
+        shell: pwsh
+        run: dotnet restore src/Wcs.LoadTests/Wcs.LoadTests.csproj
+
+      - name: Build load test
+        shell: pwsh
+        run: dotnet build src/Wcs.LoadTests/Wcs.LoadTests.csproj --configuration Release --no-restore
+
+      - name: Run load test
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path TestResults | Out-Null
+          dotnet run --project src/Wcs.LoadTests/Wcs.LoadTests.csproj --configuration Release --no-build -- TestResults/transport-loadtest-results.json 2>&1 | Tee-Object -FilePath TestResults/transport-loadtest-console.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-Content TestResults/transport-loadtest-results.json
+
+      - name: Upload load test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transport-loadtest-results
+          path: TestResults
+          if-no-files-found: warn
+          retention-days: 7
