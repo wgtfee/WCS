@@ -180,6 +180,18 @@ public static class DependencyInjection
             options.MaximumTrackedRuleSignals,
             100,
             1_000_000);
+        options.InactiveStateRetentionSeconds = Math.Clamp(
+            options.InactiveStateRetentionSeconds,
+            1,
+            86_400);
+        options.RelatedSampleRetentionSeconds = Math.Clamp(
+            options.RelatedSampleRetentionSeconds,
+            1,
+            86_400);
+        options.MaximumCleanupItemsPerSweep = Math.Clamp(
+            options.MaximumCleanupItemsPerSweep,
+            100,
+            1_000_000);
         options.ObserveThreshold = Math.Clamp(options.ObserveThreshold, 0, 1);
         options.WarningThreshold = Math.Clamp(
             Math.Max(options.WarningThreshold, options.ObserveThreshold),
