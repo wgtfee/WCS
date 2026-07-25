@@ -22,6 +22,21 @@ public sealed class FilePlcMlModelStore : IPlcMlModelStore
         CancellationToken cancellationToken = default) =>
         ReadModelAsync(GetActivePath(profileId), cancellationToken);
 
+    public async Task<PlcIsolationForestModel?> LoadVersionAsync(
+        string profileId,
+        string version,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            throw new ArgumentException("模型版本不能为空。", nameof(version));
+        var model = await ReadModelAsync(GetVersionPath(profileId, version), cancellationToken);
+        if (model is null) return null;
+        if (!string.Equals(model.ProfileId, profileId, StringComparison.Ordinal) ||
+            !string.Equals(model.Version, version, StringComparison.Ordinal))
+            throw new InvalidOperationException("模型文件元数据与请求的 Profile/Version 不一致。");
+        return model;
+    }
+
     public async Task SaveAndActivateAsync(
         PlcIsolationForestModel model,
         CancellationToken cancellationToken = default)
@@ -55,22 +70,6 @@ public sealed class FilePlcMlModelStore : IPlcMlModelStore
             .OrderByDescending(static item => item.CreatedUtc)
             .ThenByDescending(static item => item.Version, StringComparer.Ordinal)
             .ToList();
-    }
-
-    public async Task<PlcIsolationForestModel> ActivateAsync(
-        string profileId,
-        string version,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(version))
-            throw new ArgumentException("模型版本不能为空。", nameof(version));
-        var model = await ReadModelAsync(GetVersionPath(profileId, version), cancellationToken)
-            ?? throw new KeyNotFoundException($"未找到模型：Profile={profileId}, Version={version}。");
-        if (!string.Equals(model.ProfileId, profileId, StringComparison.Ordinal) ||
-            !string.Equals(model.Version, version, StringComparison.Ordinal))
-            throw new InvalidOperationException("模型文件元数据与请求的 Profile/Version 不一致。");
-        await WriteAtomicAsync(GetActivePath(profileId), model, cancellationToken);
-        return model;
     }
 
     private static PlcMlModelVersionInfo ToInfo(PlcIsolationForestModel model, bool isActive) => new()
