@@ -9,19 +9,19 @@ using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 
 /// <summary>
-/// PLC 异常检测引擎 v1：阈值、变化率、持续时间、跨信号一致性与 Median/MAD 动态基线。
-/// 检测器只生成候选，连续命中/连续恢复状态机负责抑制毛刺和报警风暴。
+/// PLC anomaly detection engine v1.1: threshold, rate, duration,
+/// cross-signal consistency and Median/MAD dynamic baseline.
+/// Inactive per-signal state and related-signal snapshots are bounded by TTL.
 /// </summary>
 public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvider
 {
-    private const string ModelVersion = "rules-mad-v1";
+    private const string ModelVersion = "rules-mad-v1.1";
 
     private readonly PlcAnomalyOptions _options;
     private readonly IEventBus _eventBus;
     private readonly ConcurrentDictionary<string, SignalRuleState> _states = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, PlcAnomalyRecord> _active = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PlcAnomalySample>>
-        _latestSamplesByDevice = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, DeviceSampleCache> _latestSamplesByDevice = new(StringComparer.Ordinal);
 
     private long _processedSamples;
     private long _matchedRuleEvaluations;
@@ -30,6 +30,9 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
     private long _recovered;
     private long _suppressed;
     private long _failures;
+    private long _evictedRuleStates;
+    private long _evictedRelatedSamples;
+    private long _evictedDeviceSnapshots;
     private long _lastProcessedTicks;
     private string? _lastError;
 
@@ -47,16 +50,13 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         cancellationToken.ThrowIfCancellationRequested();
 
         Interlocked.Increment(ref _processedSamples);
-        Volatile.Write(ref _lastProcessedTicks, sample.TimestampUtc.Ticks);
-
-        var deviceSamples = _latestSamplesByDevice.GetOrAdd(
-            BuildDeviceKey(sample),
-            static _ => new ConcurrentDictionary<string, PlcAnomalySample>(StringComparer.OrdinalIgnoreCase));
-        deviceSamples[sample.SignalName] = sample;
+        UpdateMaximum(ref _lastProcessedTicks, sample.TimestampUtc.Ticks);
 
         try
         {
             List<AnomalyTransition>? transitions = null;
+            DeviceSampleCache? deviceCache = null;
+
             foreach (var rule in _options.Rules)
             {
                 if (IsConsistencyRule(rule))
@@ -64,25 +64,8 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
                     if (!ConsistencyRuleRelevant(rule, sample)) continue;
                     Interlocked.Increment(ref _matchedRuleEvaluations);
 
-                    var state = GetOrCreateState(BuildConsistencyStateKey(rule.RuleId, sample), rule);
-                    if (state is null) continue;
-
-                    AnomalyTransition? transition;
-                    lock (state.Gate)
-                    {
-                        var evaluation = EvaluateConsistency(rule, sample, deviceSamples);
-                        var anchor = evaluation.Anchor with
-                        {
-                            EventId = sample.EventId,
-                            TimestampUtc = sample.TimestampUtc,
-                            TaskId = sample.TaskId ?? evaluation.Anchor.TaskId
-                        };
-                        if (evaluation.Candidate is not null)
-                            Interlocked.Increment(ref _detectorObservations);
-                        transition = ApplyCandidateLocked(state, anchor, evaluation.Candidate);
-                        state.LastSample = anchor;
-                    }
-
+                    deviceCache ??= StoreRelatedSample(sample);
+                    var transition = EvaluateConsistencyState(rule, sample, deviceCache);
                     if (transition is not null)
                     {
                         transitions ??= new List<AnomalyTransition>();
@@ -94,15 +77,7 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
                 if (!RuleMatches(rule, sample)) continue;
                 Interlocked.Increment(ref _matchedRuleEvaluations);
 
-                var normalState = GetOrCreateState(BuildStateKey(rule.RuleId, sample), rule);
-                if (normalState is null) continue;
-
-                AnomalyTransition? normalTransition;
-                lock (normalState.Gate)
-                {
-                    normalTransition = EvaluateSampleLocked(normalState, sample);
-                }
-
+                var normalTransition = EvaluateNormalState(rule, sample);
                 if (normalTransition is not null)
                 {
                     transitions ??= new List<AnomalyTransition>();
@@ -113,7 +88,7 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             if (transitions is not null)
             {
                 foreach (var transition in transitions)
-                    await PublishTransitionAsync(transition, cancellationToken);
+                    await PublishTransitionAsync(transition, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -127,7 +102,10 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         }
     }
 
-    /// <summary>周期检查保持为 true 的持续时间规则，即使 PLC 没有再次产生边沿也能触发。</summary>
+    /// <summary>
+    /// Evaluates duration rules and performs bounded cleanup of inactive states
+    /// and expired related-signal snapshots.
+    /// </summary>
     public async ValueTask SweepAsync(
         DateTime utcNow,
         CancellationToken cancellationToken = default)
@@ -135,15 +113,16 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         if (!_options.Enabled) return;
 
         List<AnomalyTransition>? transitions = null;
-        foreach (var state in _states.Values)
+        foreach (var pair in _states)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var state = pair.Value;
             if (state.Rule.MaximumTrueDurationMs is null || IsConsistencyRule(state.Rule)) continue;
 
             AnomalyTransition? transition = null;
             lock (state.Gate)
             {
-                if (state.LastSample?.BooleanValue != true || state.TrueSinceUtc is null)
+                if (state.IsRetired || state.LastSample?.BooleanValue != true || state.TrueSinceUtc is null)
                     continue;
 
                 var candidate = EvaluateDuration(state.Rule, state.LastSample, state.TrueSinceUtc.Value, utcNow);
@@ -160,8 +139,11 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         if (transitions is not null)
         {
             foreach (var transition in transitions)
-                await PublishTransitionAsync(transition, cancellationToken);
+                await PublishTransitionAsync(transition, cancellationToken).ConfigureAwait(false);
         }
+
+        CleanupInactiveStates(utcNow, _options.MaximumCleanupItemsPerSweep);
+        CleanupRelatedSamples(utcNow, _options.MaximumCleanupItemsPerSweep);
     }
 
     public IReadOnlyList<PlcAnomalyRecord> GetActiveAnomalies() =>
@@ -170,6 +152,16 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
     public PlcAnomalyStatus GetStatus()
     {
         var ticks = Volatile.Read(ref _lastProcessedTicks);
+        var statisticalWindows = 0;
+        foreach (var state in _states.Values)
+        {
+            if (state.NumericWindow is not null) statisticalWindows++;
+        }
+
+        var relatedSamples = 0;
+        foreach (var cache in _latestSamplesByDevice.Values)
+            relatedSamples += cache.Samples.Count;
+
         return new PlcAnomalyStatus
         {
             Enabled = _options.Enabled,
@@ -182,21 +174,157 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             Suppressed = Interlocked.Read(ref _suppressed),
             Failures = Interlocked.Read(ref _failures),
             TrackedRuleSignals = _states.Count,
+            StatisticalWindows = statisticalWindows,
+            TrackedDeviceSnapshots = _latestSamplesByDevice.Count,
+            TrackedRelatedSamples = relatedSamples,
+            EvictedRuleStates = Interlocked.Read(ref _evictedRuleStates),
+            EvictedRelatedSamples = Interlocked.Read(ref _evictedRelatedSamples),
+            EvictedDeviceSnapshots = Interlocked.Read(ref _evictedDeviceSnapshots),
             ActiveAnomalies = _active.Count,
             LastProcessedUtc = ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc),
             LastError = Volatile.Read(ref _lastError)
         };
     }
 
-    private SignalRuleState? GetOrCreateState(string stateKey, PlcAnomalyRule rule)
+    private AnomalyTransition? EvaluateNormalState(PlcAnomalyRule rule, PlcAnomalySample sample)
     {
-        if (_states.TryGetValue(stateKey, out var existing)) return existing;
+        var stateKey = BuildStateKey(rule.RuleId, sample);
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var state = GetOrCreateState(stateKey, rule, sample.TimestampUtc);
+            if (state is null) return null;
+            state.Touch(sample.TimestampUtc);
+
+            lock (state.Gate)
+            {
+                if (state.IsRetired) continue;
+                return EvaluateSampleLocked(state, sample);
+            }
+        }
+
+        Interlocked.Increment(ref _suppressed);
+        return null;
+    }
+
+    private AnomalyTransition? EvaluateConsistencyState(
+        PlcAnomalyRule rule,
+        PlcAnomalySample sample,
+        DeviceSampleCache deviceCache)
+    {
+        var stateKey = BuildConsistencyStateKey(rule.RuleId, sample);
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var state = GetOrCreateState(stateKey, rule, sample.TimestampUtc);
+            if (state is null) return null;
+            state.Touch(sample.TimestampUtc);
+
+            lock (state.Gate)
+            {
+                if (state.IsRetired) continue;
+
+                var evaluation = EvaluateConsistency(rule, sample, deviceCache.Samples);
+                var anchor = evaluation.Anchor with
+                {
+                    EventId = sample.EventId,
+                    TimestampUtc = sample.TimestampUtc,
+                    TaskId = sample.TaskId ?? evaluation.Anchor.TaskId
+                };
+                if (evaluation.Candidate is not null)
+                    Interlocked.Increment(ref _detectorObservations);
+
+                var transition = ApplyCandidateLocked(state, anchor, evaluation.Candidate);
+                state.LastSample = anchor;
+                return transition;
+            }
+        }
+
+        Interlocked.Increment(ref _suppressed);
+        return null;
+    }
+
+    private SignalRuleState? GetOrCreateState(
+        string stateKey,
+        PlcAnomalyRule rule,
+        DateTime sampleUtc)
+    {
+        if (_states.TryGetValue(stateKey, out var existing) && !existing.IsRetired)
+            return existing;
+
         if (_states.Count >= _options.MaximumTrackedRuleSignals)
         {
-            Interlocked.Increment(ref _suppressed);
-            return null;
+            CleanupInactiveStates(sampleUtc, Math.Min(_options.MaximumCleanupItemsPerSweep, 1_000));
+            if (_states.Count >= _options.MaximumTrackedRuleSignals)
+            {
+                Interlocked.Increment(ref _suppressed);
+                return null;
+            }
         }
-        return _states.GetOrAdd(stateKey, _ => new SignalRuleState(rule));
+
+        var created = new SignalRuleState(rule, _options.WindowSize, sampleUtc);
+        return _states.GetOrAdd(stateKey, created);
+    }
+
+    private DeviceSampleCache StoreRelatedSample(PlcAnomalySample sample)
+    {
+        var deviceKey = BuildDeviceKey(sample);
+        var cache = _latestSamplesByDevice.GetOrAdd(deviceKey, static _ => new DeviceSampleCache());
+        cache.Touch(sample.TimestampUtc);
+        cache.Samples[sample.SignalName] = sample;
+        return cache;
+    }
+
+    private void CleanupInactiveStates(DateTime utcNow, int maximumItems)
+    {
+        if (maximumItems <= 0 || _states.IsEmpty) return;
+        var cutoff = utcNow.AddSeconds(-Math.Max(1, _options.InactiveStateRetentionSeconds));
+        var inspected = 0;
+        var collection = (ICollection<KeyValuePair<string, SignalRuleState>>)_states;
+
+        foreach (var pair in _states)
+        {
+            if (inspected++ >= maximumItems) break;
+            var state = pair.Value;
+            lock (state.Gate)
+            {
+                if (state.IsRetired ||
+                    state.Active is not null ||
+                    state.TrueSinceUtc is not null ||
+                    state.LastTouchedUtc > cutoff)
+                    continue;
+
+                state.IsRetired = true;
+                if (collection.Remove(pair))
+                    Interlocked.Increment(ref _evictedRuleStates);
+                else
+                    state.IsRetired = false;
+            }
+        }
+    }
+
+    private void CleanupRelatedSamples(DateTime utcNow, int maximumItems)
+    {
+        if (maximumItems <= 0 || _latestSamplesByDevice.IsEmpty) return;
+        var cutoff = utcNow.AddSeconds(-Math.Max(1, _options.RelatedSampleRetentionSeconds));
+        var inspected = 0;
+        var deviceCollection = (ICollection<KeyValuePair<string, DeviceSampleCache>>)_latestSamplesByDevice;
+
+        foreach (var devicePair in _latestSamplesByDevice)
+        {
+            if (inspected >= maximumItems) break;
+            var cache = devicePair.Value;
+            var sampleCollection = (ICollection<KeyValuePair<string, PlcAnomalySample>>)cache.Samples;
+
+            foreach (var samplePair in cache.Samples)
+            {
+                if (inspected++ >= maximumItems) break;
+                if (samplePair.Value.TimestampUtc > cutoff) continue;
+                if (sampleCollection.Remove(samplePair))
+                    Interlocked.Increment(ref _evictedRelatedSamples);
+            }
+
+            if (cache.Samples.IsEmpty && cache.LastTouchedUtc <= cutoff && deviceCollection.Remove(devicePair))
+                Interlocked.Increment(ref _evictedDeviceSnapshots);
+        }
     }
 
     private AnomalyTransition? EvaluateSampleLocked(SignalRuleState state, PlcAnomalySample sample)
@@ -244,9 +372,9 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             state.LastNumericValue = current;
             state.LastNumericUtc = sample.TimestampUtc;
 
-            // 任意检测器判定异常时都不回灌动态基线，避免阈值/速率故障污染 MAD 窗口。
+            // Allocate and update the baseline window only for rules that use it.
             if (candidate is null)
-                AddWindowValue(state, current);
+                state.NumericWindow?.Add(current);
         }
 
         return transition;
@@ -401,14 +529,14 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             await _eventBus.PublishAsync(new PlcAnomalyDetectedEvent
             {
                 Anomaly = transition.Record
-            }, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             await _eventBus.PublishAsync(new PlcAnomalyRecoveredEvent
             {
                 Anomaly = transition.Record
-            }, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -517,13 +645,16 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         SignalRuleState state,
         double value)
     {
-        if (!rule.StatisticalBaselineEnabled || state.NumericWindow.Count < _options.MinimumSamples)
+        var window = state.NumericWindow;
+        if (!rule.StatisticalBaselineEnabled || window is null || window.Count < _options.MinimumSamples)
             return null;
 
-        var values = state.NumericWindow.ToArray();
+        var values = window.Snapshot();
         Array.Sort(values);
         var median = Median(values);
-        var deviations = values.Select(item => Math.Abs(item - median)).ToArray();
+        var deviations = new double[values.Length];
+        for (var index = 0; index < values.Length; index++)
+            deviations[index] = Math.Abs(values[index] - median);
         Array.Sort(deviations);
         var mad = Median(deviations);
         var scale = Math.Max(
@@ -567,13 +698,6 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             0,
             maximumDurationMs,
             $"信号保持 true 已 {durationMs:F0}ms，超过允许值 {maximumDurationMs}ms");
-    }
-
-    private void AddWindowValue(SignalRuleState state, double value)
-    {
-        state.NumericWindow.Enqueue(value);
-        while (state.NumericWindow.Count > _options.WindowSize)
-            state.NumericWindow.Dequeue();
     }
 
     private static double Median(double[] sorted)
@@ -682,13 +806,32 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
             candidate.UpperBound
         });
 
+    private static void UpdateMaximum(ref long target, long value)
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref target);
+            if (value <= current) return;
+            if (Interlocked.CompareExchange(ref target, value, current) == current) return;
+        }
+    }
+
     private sealed class SignalRuleState
     {
-        public SignalRuleState(PlcAnomalyRule rule) => Rule = rule;
+        private long _lastTouchedTicks;
+
+        public SignalRuleState(PlcAnomalyRule rule, int windowSize, DateTime createdUtc)
+        {
+            Rule = rule;
+            NumericWindow = rule.StatisticalBaselineEnabled
+                ? new FixedDoubleWindow(windowSize)
+                : null;
+            _lastTouchedTicks = createdUtc.Ticks;
+        }
 
         public object Gate { get; } = new();
         public PlcAnomalyRule Rule { get; }
-        public Queue<double> NumericWindow { get; } = new();
+        public FixedDoubleWindow? NumericWindow { get; }
         public double? LastNumericValue { get; set; }
         public DateTime? LastNumericUtc { get; set; }
         public DateTime? TrueSinceUtc { get; set; }
@@ -697,6 +840,57 @@ public sealed class PlcAnomalyEngine : IPlcAnomalyEngine, IPlcAnomalyStatusProvi
         public int NormalCount { get; set; }
         public DateTime? FirstAbnormalUtc { get; set; }
         public PlcAnomalyRecord? Active { get; set; }
+        public bool IsRetired { get; set; }
+        public DateTime LastTouchedUtc => new(Volatile.Read(ref _lastTouchedTicks), DateTimeKind.Utc);
+
+        public void Touch(DateTime utc) => UpdateMaximum(ref _lastTouchedTicks, utc.Ticks);
+    }
+
+    private sealed class DeviceSampleCache
+    {
+        private long _lastTouchedTicks;
+        public ConcurrentDictionary<string, PlcAnomalySample> Samples { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+        public DateTime LastTouchedUtc
+        {
+            get
+            {
+                var ticks = Volatile.Read(ref _lastTouchedTicks);
+                return ticks == 0 ? DateTime.MinValue : new DateTime(ticks, DateTimeKind.Utc);
+            }
+        }
+        public void Touch(DateTime utc) => UpdateMaximum(ref _lastTouchedTicks, utc.Ticks);
+    }
+
+    private sealed class FixedDoubleWindow
+    {
+        private readonly double[] _values;
+        private int _count;
+        private int _next;
+
+        public FixedDoubleWindow(int capacity)
+        {
+            _values = new double[Math.Max(1, capacity)];
+        }
+
+        public int Count => _count;
+
+        public void Add(double value)
+        {
+            _values[_next] = value;
+            _next = (_next + 1) % _values.Length;
+            if (_count < _values.Length) _count++;
+        }
+
+        public double[] Snapshot()
+        {
+            var result = new double[_count];
+            if (_count == 0) return result;
+            var start = _count == _values.Length ? _next : 0;
+            for (var index = 0; index < _count; index++)
+                result[index] = _values[(start + index) % _values.Length];
+            return result;
+        }
     }
 
     private sealed record DetectorCandidate(
