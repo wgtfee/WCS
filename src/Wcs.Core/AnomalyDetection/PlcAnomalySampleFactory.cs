@@ -9,9 +9,13 @@ public static class PlcAnomalySampleFactory
     {
         ArgumentNullException.ThrowIfNull(evt);
 
-        var timestampUtc = evt.OccurTime.Kind == DateTimeKind.Utc
-            ? evt.OccurTime
-            : evt.OccurTime.ToUniversalTime();
+        var sourceTimestamp = evt.SourceTimestampUtc ?? evt.OccurTime;
+        var timestampUtc = sourceTimestamp.Kind switch
+        {
+            DateTimeKind.Utc => sourceTimestamp,
+            DateTimeKind.Local => sourceTimestamp.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(sourceTimestamp, DateTimeKind.Utc)
+        };
 
         bool? booleanValue = null;
         double? numericValue = null;
