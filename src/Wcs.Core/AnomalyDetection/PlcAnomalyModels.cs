@@ -71,6 +71,15 @@ public sealed class PlcAnomalyOptions
     public int MinimumSamples { get; set; } = 30;
     public int MaximumTrackedRuleSignals { get; set; } = 20_000;
 
+    /// <summary>无活动异常、无持续 true 状态的规则状态空闲多久后淘汰。</summary>
+    public int InactiveStateRetentionSeconds { get; set; } = 300;
+
+    /// <summary>跨信号一致性检测使用的关联信号快照保留时间。</summary>
+    public int RelatedSampleRetentionSeconds { get; set; } = 60;
+
+    /// <summary>单次 Sweep 最多检查的状态/快照数量，避免清理造成长停顿。</summary>
+    public int MaximumCleanupItemsPerSweep { get; set; } = 10_000;
+
     public double ObserveThreshold { get; set; } = 0.70;
     public double WarningThreshold { get; set; } = 0.85;
     public double AlarmThreshold { get; set; } = 0.95;
@@ -153,6 +162,12 @@ public sealed record PlcAnomalyStatus
     public long Suppressed { get; init; }
     public long Failures { get; init; }
     public int TrackedRuleSignals { get; init; }
+    public int StatisticalWindows { get; init; }
+    public int TrackedDeviceSnapshots { get; init; }
+    public int TrackedRelatedSamples { get; init; }
+    public long EvictedRuleStates { get; init; }
+    public long EvictedRelatedSamples { get; init; }
+    public long EvictedDeviceSnapshots { get; init; }
     public int ActiveAnomalies { get; init; }
     public DateTime? LastProcessedUtc { get; init; }
     public string? LastError { get; init; }
