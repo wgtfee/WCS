@@ -21,7 +21,7 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
     private readonly ConcurrentDictionary<string, PlcIsolationForestModel> _models = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, InferenceState> _states = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ProfileRuntimeMetrics> _metrics = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _trainingLocks = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _profileLocks = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _initializeLock = new(1, 1);
     private int _initialized;
 
@@ -42,7 +42,7 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
         foreach (var profile in options.Profiles)
         {
             _metrics.TryAdd(profile.ProfileId, new ProfileRuntimeMetrics());
-            _trainingLocks.TryAdd(profile.ProfileId, new SemaphoreSlim(1, 1));
+            _profileLocks.TryAdd(profile.ProfileId, new SemaphoreSlim(1, 1));
         }
     }
 
@@ -130,8 +130,8 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
         CancellationToken cancellationToken = default)
     {
         var profile = GetProfile(profileId);
-        var trainingLock = _trainingLocks[profileId];
-        await trainingLock.WaitAsync(cancellationToken);
+        var profileLock = _profileLocks[profileId];
+        await profileLock.WaitAsync(cancellationToken);
         try
         {
             EnsureNoActiveAnomalies(profileId, "训练并激活新模型");
@@ -157,7 +157,7 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
         }
         finally
         {
-            trainingLock.Release();
+            profileLock.Release();
         }
     }
 
@@ -175,19 +175,21 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
         CancellationToken cancellationToken = default)
     {
         var profile = GetProfile(profileId);
-        var trainingLock = _trainingLocks[profileId];
-        await trainingLock.WaitAsync(cancellationToken);
+        var profileLock = _profileLocks[profileId];
+        await profileLock.WaitAsync(cancellationToken);
         try
         {
             EnsureNoActiveAnomalies(profileId, "切换模型版本");
-            var model = await _modelStore.ActivateAsync(profileId, version, cancellationToken);
+            var model = await _modelStore.LoadVersionAsync(profileId, version, cancellationToken)
+                ?? throw new KeyNotFoundException($"未找到模型：Profile={profileId}, Version={version}。");
             ValidateModel(profile, model);
+            await _modelStore.SaveAndActivateAsync(model, cancellationToken);
             _models[profileId] = model;
             return ToVersionInfo(model, isActive: true);
         }
         finally
         {
-            trainingLock.Release();
+            profileLock.Release();
         }
     }
 
@@ -233,23 +235,32 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
                 runtime.IncrementTrainingCount();
             }
 
-            if (!_models.TryGetValue(profile.ProfileId, out var model)) return;
-            if (!vector.FeatureNames.SequenceEqual(model.FeatureNames, StringComparer.Ordinal))
-                throw new InvalidOperationException($"Profile {profile.ProfileId} 特征顺序与活动模型不一致。");
-
-            var score = IsolationForest.Score(model, vector.Values);
-            var threshold = Math.Max(model.DecisionThreshold, profile.ObserveThreshold);
-            var abnormal = score >= threshold;
-            runtime.IncrementPredictions();
-            if (abnormal) runtime.IncrementAnomalyObservations();
-
-            var stateKey = $"{profile.ProfileId}|{vector.PlcName}|{vector.DeviceId}";
-            var state = _states.GetOrAdd(stateKey, _ => new InferenceState(profile));
-            AnomalyTransition? transition;
-            lock (state.Gate)
+            AnomalyTransition? transition = null;
+            var profileLock = _profileLocks[profile.ProfileId];
+            await profileLock.WaitAsync(cancellationToken);
+            try
             {
-                transition = ApplyPredictionLocked(state, vector, model, score, threshold, abnormal);
-                state.LastUpdatedUtc = vector.WindowEndUtc;
+                if (!_models.TryGetValue(profile.ProfileId, out var model)) return;
+                if (!vector.FeatureNames.SequenceEqual(model.FeatureNames, StringComparer.Ordinal))
+                    throw new InvalidOperationException($"Profile {profile.ProfileId} 特征顺序与活动模型不一致。");
+
+                var score = IsolationForest.Score(model, vector.Values);
+                var threshold = Math.Max(model.DecisionThreshold, profile.ObserveThreshold);
+                var abnormal = score >= threshold;
+                runtime.IncrementPredictions();
+                if (abnormal) runtime.IncrementAnomalyObservations();
+
+                var stateKey = $"{profile.ProfileId}|{vector.PlcName}|{vector.DeviceId}";
+                var state = _states.GetOrAdd(stateKey, _ => new InferenceState(profile));
+                lock (state.Gate)
+                {
+                    transition = ApplyPredictionLocked(state, vector, model, score, threshold, abnormal);
+                    state.LastUpdatedUtc = vector.WindowEndUtc;
+                }
+            }
+            finally
+            {
+                profileLock.Release();
             }
 
             if (transition is null) return;
