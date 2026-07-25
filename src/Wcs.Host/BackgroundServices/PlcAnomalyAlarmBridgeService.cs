@@ -6,7 +6,10 @@ using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.StateCenter.Models;
 
-/// <summary>只有正式激活的异常才进入 AlarmCenter；观察级异常只保留在异常历史中。</summary>
+/// <summary>
+/// 只有正式激活并明确 RaiseAlarm 的异常才进入 AlarmCenter。订阅器始终启动，
+/// 使规则、统计和机器学习检测器可以分别启停。
+/// </summary>
 public sealed class PlcAnomalyAlarmBridgeService : BackgroundService
 {
     private readonly IEventBus _eventBus;
@@ -28,8 +31,6 @@ public sealed class PlcAnomalyAlarmBridgeService : BackgroundService
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_options.Enabled) return Task.CompletedTask;
-
         _eventBus.Subscribe<PlcAnomalyDetectedEvent>(async (evt, ct) =>
         {
             var anomaly = evt.Anomaly;
@@ -52,7 +53,7 @@ public sealed class PlcAnomalyAlarmBridgeService : BackgroundService
                 anomaly.AlarmCode,
                 level,
                 anomaly.Reason,
-                source: "PlcAnomalyEngine",
+                source: anomaly.DetectorName,
                 deviceId: anomaly.DeviceId,
                 alarmGroup: $"PLC_ANOMALY:{anomaly.DeviceId}",
                 ct: ct);
