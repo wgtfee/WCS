@@ -43,6 +43,7 @@ jobs:
       ASPNETCORE_URLS: "http://127.0.0.1:5090"
       ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_AnomalyMl;User Id=sa;Password=Wcs_MlTest!2026;Encrypt=False;TrustServerCertificate=True;"
       Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0"
       Storage__Telemetry__Provider: "Disabled"
       AnomalyDetection__MachineLearning__ModelDirectory: "${{ github.workspace }}/artifacts/plc-ml-models"
       AnomalyDetection__MachineLearning__TrainingDirectory: "${{ github.workspace }}/artifacts/plc-ml-training"
@@ -106,12 +107,12 @@ jobs:
           curl --fail --silent --show-error \
             --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
             --header 'content-type: application/json' \
-            --data '{"mode":"training","devices":100,"windows":5,"deviceOffset":0,"startOffsetSeconds":0,"concurrency":16}' \
+            --data '{"mode":"training","devices":200,"windows":20,"deviceOffset":0,"startOffsetSeconds":0,"concurrency":32}' \
             --max-time 600 | tee artifacts/ml-training-load.json
 
-          [[ "$(jq -r '.completedWindowDelta' artifacts/ml-training-load.json)" == "500" ]]
+          [[ "$(jq -r '.completedWindowDelta' artifacts/ml-training-load.json)" == "4000" ]]
           [[ "$(jq -r '.droppedWindowDelta' artifacts/ml-training-load.json)" == "0" ]]
-          [[ "$(jq -r '.trainingWindowDelta' artifacts/ml-training-load.json)" == "500" ]]
+          [[ "$(jq -r '.trainingWindowDelta' artifacts/ml-training-load.json)" == "4000" ]]
           [[ "$(jq -r '.predictionDelta' artifacts/ml-training-load.json)" == "0" ]]
           [[ "$(jq -r '.raisedDelta' artifacts/ml-training-load.json)" == "0" ]]
           [[ "$(jq -r '.failureDelta' artifacts/ml-training-load.json)" == "0" ]]
@@ -120,7 +121,7 @@ jobs:
             --request POST "$ASPNETCORE_URLS/api/anomaly/ml/train/ML-CV-CURRENT" \
             --max-time 600 | tee artifacts/ml-training-result.json
 
-          [[ "$(jq -r '.trainingSampleCount' artifacts/ml-training-result.json)" == "500" ]]
+          [[ "$(jq -r '.trainingSampleCount' artifacts/ml-training-result.json)" == "4000" ]]
           [[ "$(jq -r '.treeCount' artifacts/ml-training-result.json)" == "120" ]]
           jq -e '.decisionThreshold > 0 and .decisionThreshold < 1' artifacts/ml-training-result.json >/dev/null
           jq -r '.modelVersion' artifacts/ml-training-result.json > artifacts/ml-model-version.txt
@@ -128,13 +129,14 @@ jobs:
           model_path="artifacts/plc-ml-models/ML-CV-CURRENT/active.json"
           test -s "$model_path"
           jq -e '.profileId == "ML-CV-CURRENT"' "$model_path" >/dev/null
-          jq -e '.trainingSampleCount == 500' "$model_path" >/dev/null
+          jq -e '.trainingSampleCount == 4000' "$model_path" >/dev/null
+          jq -e '.calibrationSampleCount == 800' "$model_path" >/dev/null
           jq -e '.subsampleSize == 256' "$model_path" >/dev/null
           jq -e '.featureNames | length == 8' "$model_path" >/dev/null
           jq -e '.trees | length == 120' "$model_path" >/dev/null
           sha256sum "$model_path" | tee artifacts/ml-active-model.sha256
           test -s artifacts/plc-ml-training/ML-CV-CURRENT/features.jsonl
-          [[ "$(wc -l < artifacts/plc-ml-training/ML-CV-CURRENT/features.jsonl)" == "500" ]]
+          [[ "$(wc -l < artifacts/plc-ml-training/ML-CV-CURRENT/features.jsonl)" == "4000" ]]
 
       - name: Stop training Host
         shell: bash
@@ -161,7 +163,7 @@ jobs:
               expected="$(cat artifacts/ml-model-version.txt)"
               actual="$(jq -r '.[0].activeModelVersion' artifacts/ml-reloaded-status.json)"
               [[ "$actual" == "$expected" ]]
-              [[ "$(jq -r '.[0].trainingWindowCount' artifacts/ml-reloaded-status.json)" == "500" ]]
+              [[ "$(jq -r '.[0].trainingWindowCount' artifacts/ml-reloaded-status.json)" == "4000" ]]
               [[ "$(jq -r '.[0].failures' artifacts/ml-reloaded-status.json)" == "0" ]]
               ps -o rss= -p "$(cat artifacts/ml-host.pid)" | tr -d ' ' > artifacts/ml-initial-rss-kb.txt
               exit 0
