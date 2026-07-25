@@ -183,6 +183,12 @@ public class RawSignalEvent : EventBase
     public override EventPriority Priority => EventPriority.Medium;
     public string PlcName { get; set; } = string.Empty;
     public int DbBlock { get; set; }
+
+    /// <summary>
+    /// PLC 或回放源提供的原始 UTC 时间。为空时使用事件总线生成的 OccurTime。
+    /// </summary>
+    public DateTime? SourceTimestampUtc { get; set; }
+
     public string FieldName { get; set; } = string.Empty;
     public string? OldValue { get; set; }
     public string? NewValue { get; set; }
