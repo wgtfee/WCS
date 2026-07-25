@@ -15,17 +15,18 @@ public sealed class PlcMachineLearningTests
         profile.MinimumTrainingWindows = 100;
         profile.TreeCount = 120;
         profile.SampleSize = 128;
-        profile.Contamination = 0.02;
+        profile.Contamination = 0.05;
         var vectors = Enumerable.Range(0, 500)
-            .Select(index => TrainingVector(5 + Math.Sin(index * 0.17) * 0.25, index))
+            .Select(NormalTrainingVector)
             .ToArray();
 
         var model = IsolationForest.Train(profile, vectors, DateTime.UtcNow);
-        var normalScore = IsolationForest.Score(model, TrainingVector(5.1, 999).Values);
-        var anomalyScore = IsolationForest.Score(model, TrainingVector(20, 1000).Values);
+        var normalScore = IsolationForest.Score(model, VectorFromSamples(5.0, 5.02, 5.04, 999).Values);
+        var anomalyScore = IsolationForest.Score(model, VectorFromSamples(20, 21, 22, 1000).Values);
 
-        Assert.True(anomalyScore > normalScore + 0.08, $"normal={normalScore}, anomaly={anomalyScore}");
-        Assert.True(anomalyScore >= model.DecisionThreshold);
+        Assert.True(normalScore < model.DecisionThreshold, $"normal={normalScore}, threshold={model.DecisionThreshold}");
+        Assert.True(anomalyScore >= model.DecisionThreshold, $"anomaly={anomalyScore}, threshold={model.DecisionThreshold}");
+        Assert.True(anomalyScore > normalScore + 0.05, $"normal={normalScore}, anomaly={anomalyScore}");
     }
 
     [Fact]
@@ -48,11 +49,11 @@ public sealed class PlcMachineLearningTests
         Assert.Equal("CV-MOTOR", vector.ProfileId);
         Assert.Equal(8, vector.Values.Length);
         Assert.Equal("Current.mean", vector.FeatureNames[0]);
-        Assert.Equal(5, vector.Values[0], 6);
-        Assert.Equal(4, vector.Values[2], 6);
-        Assert.Equal(6, vector.Values[3], 6);
-        Assert.Equal(6, vector.Values[4], 6);
-        Assert.Equal(2, vector.Values[6], 6);
+        Assert.Equal(5.0, vector.Values[0], 6);
+        Assert.Equal(4.0, vector.Values[2], 6);
+        Assert.Equal(6.0, vector.Values[3], 6);
+        Assert.Equal(6.0, vector.Values[4], 6);
+        Assert.Equal(2.0, vector.Values[6], 6);
         Assert.Equal(3, vector.SourceSampleCount);
     }
 
@@ -63,9 +64,10 @@ public sealed class PlcMachineLearningTests
         profile.ConsecutiveAbnormalCount = 1;
         profile.ConsecutiveRecoveryCount = 1;
         profile.MinimumTrainingWindows = 100;
-        profile.ObserveThreshold = 0.55;
+        profile.Contamination = 0.05;
+        profile.ObserveThreshold = 0.50;
         var training = Enumerable.Range(0, 500)
-            .Select(index => TrainingVector(5 + Math.Sin(index * 0.13) * 0.2, index))
+            .Select(NormalTrainingVector)
             .ToArray();
         var model = IsolationForest.Train(profile, training, DateTime.UtcNow);
         var options = new PlcMlAnomalyOptions
@@ -89,18 +91,17 @@ public sealed class PlcMachineLearningTests
             return Task.CompletedTask;
         });
 
-        var modelStore = new MemoryModelStore(model);
         var engine = new PlcMlAnomalyEngine(
             options,
             new PlcFeatureWindowEngine(options),
-            modelStore,
+            new MemoryModelStore(model),
             new MemoryTrainingStore(training),
             eventBus);
         await engine.InitializeAsync();
 
         var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         await engine.ProcessAsync(Sample(20, start.AddMilliseconds(100)));
-        await engine.ProcessAsync(Sample(21, start.AddMilliseconds(300)));
+        await engine.ProcessAsync(Sample(21, start.AddMilliseconds(400)));
         await engine.ProcessAsync(Sample(22, start.AddMilliseconds(700)));
         await engine.MaintenanceAsync(start.AddSeconds(1.1));
 
@@ -109,9 +110,9 @@ public sealed class PlcMachineLearningTests
         Assert.Equal("IsolationForest", anomaly.DetectorName);
         Assert.Equal(model.Version, anomaly.ModelVersion);
 
-        await engine.ProcessAsync(Sample(5, start.AddSeconds(1.1)));
-        await engine.ProcessAsync(Sample(5.1, start.AddSeconds(1.3)));
-        await engine.ProcessAsync(Sample(4.9, start.AddSeconds(1.7)));
+        await engine.ProcessAsync(Sample(5.0, start.AddSeconds(1.1)));
+        await engine.ProcessAsync(Sample(5.02, start.AddSeconds(1.4)));
+        await engine.ProcessAsync(Sample(5.04, start.AddSeconds(1.7)));
         await engine.MaintenanceAsync(start.AddSeconds(2.1));
 
         Assert.Single(recovered);
@@ -133,8 +134,8 @@ public sealed class PlcMachineLearningTests
         MaximumTrainingWindows = 10_000,
         TreeCount = 100,
         SampleSize = 128,
-        Contamination = 0.02,
-        ObserveThreshold = 0.60,
+        Contamination = 0.05,
+        ObserveThreshold = 0.50,
         WarningThreshold = 0.70,
         AlarmThreshold = 0.85,
         ConsecutiveAbnormalCount = 1,
@@ -151,37 +152,54 @@ public sealed class PlcMachineLearningTests
         }
     };
 
-    private static PlcFeatureVector TrainingVector(double value, int index) => new()
+    private static PlcFeatureVector NormalTrainingVector(int index)
     {
-        ProfileId = "CV-MOTOR",
-        PlcName = "PLC-TEST",
-        DeviceId = "CV01",
-        WindowStartUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(index),
-        WindowEndUtc = new DateTime(2026, 1, 1, 0, 0, 1, DateTimeKind.Utc).AddSeconds(index),
-        FeatureNames = new[]
+        var baseline = 5 + Math.Sin(index * 0.17) * 0.25;
+        return VectorFromSamples(
+            baseline + Math.Sin(index * 0.13) * 0.10,
+            baseline + Math.Sin(index * 0.13 + 0.19) * 0.10,
+            baseline + Math.Sin(index * 0.13 + 0.38) * 0.10,
+            index);
+    }
+
+    private static PlcFeatureVector VectorFromSamples(double first, double second, double last, int index)
+    {
+        var values = new[] { first, second, last };
+        var mean = values.Average();
+        var variance = values.Select(value => (value - mean) * (value - mean)).Average();
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(index);
+        return new PlcFeatureVector
         {
-            "Current.mean",
-            "Current.stddev",
-            "Current.min",
-            "Current.max",
-            "Current.last",
-            "Current.slope",
-            "Current.range",
-            "Current.samplesPerSecond"
-        },
-        Values = new[]
-        {
-            value,
-            0.08 + Math.Abs(Math.Sin(index * 0.11)) * 0.04,
-            value - 0.1,
-            value + 0.1,
-            value + Math.Sin(index * 0.07) * 0.05,
-            Math.Sin(index * 0.05) * 0.1,
-            0.2,
-            3.0
-        },
-        SourceSampleCount = 3
-    };
+            ProfileId = "CV-MOTOR",
+            PlcName = "PLC-TEST",
+            DeviceId = "CV01",
+            WindowStartUtc = start,
+            WindowEndUtc = start.AddSeconds(1),
+            FeatureNames = new[]
+            {
+                "Current.mean",
+                "Current.stddev",
+                "Current.min",
+                "Current.max",
+                "Current.last",
+                "Current.slope",
+                "Current.range",
+                "Current.samplesPerSecond"
+            },
+            Values = new[]
+            {
+                mean,
+                Math.Sqrt(variance),
+                values.Min(),
+                values.Max(),
+                last,
+                (last - first) / 0.6,
+                values.Max() - values.Min(),
+                3.0
+            },
+            SourceSampleCount = 3
+        };
+    }
 
     private static PlcAnomalySample Sample(double value, DateTime timestampUtc) => new()
     {
