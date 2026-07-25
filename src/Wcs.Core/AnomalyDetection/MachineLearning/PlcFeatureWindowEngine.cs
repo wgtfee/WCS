@@ -5,7 +5,7 @@ using System.IO.Enumeration;
 using Wcs.Core.AnomalyDetection;
 
 /// <summary>
-/// 将原始 PLC 样本聚合为固定窗口特征。只保存在线统计量，不保存窗口内全部原始点。
+/// 将原始 PLC 样本聚合为固定窗口特征。窗口只保存在线统计量，不保存全部原始点。
 /// </summary>
 public sealed class PlcFeatureWindowEngine
 {
@@ -28,7 +28,7 @@ public sealed class PlcFeatureWindowEngine
         foreach (var profile in _options.Profiles)
         {
             if (!ProfileMatches(profile, sample)) continue;
-            var matchingSignals = FindMatchingSignalIndices(profile, sample.SignalName);
+            var matchingSignals = FindMatchingSignalIndices(profile, sample);
             if (matchingSignals.Count == 0) continue;
 
             var key = BuildWindowKey(profile.ProfileId, sample.PlcName, sample.DeviceId);
@@ -39,7 +39,6 @@ public sealed class PlcFeatureWindowEngine
                     _metrics[profile.ProfileId].IncrementDropped();
                     continue;
                 }
-
                 state = _windows.GetOrAdd(
                     key,
                     _ => WindowState.Create(profile, sample.PlcName, sample.DeviceId, sample.TimestampUtc));
@@ -48,19 +47,19 @@ public sealed class PlcFeatureWindowEngine
             PlcFeatureVector? vector = null;
             lock (state.Gate)
             {
-                if (sample.TimestampUtc < state.WindowStartUtc)
-                    continue;
-
+                if (sample.TimestampUtc < state.WindowStartUtc) continue;
                 if (sample.TimestampUtc >= state.WindowEndUtc)
                 {
                     vector = TryBuildVector(state);
-                    if (vector is null) _metrics[profile.ProfileId].IncrementDropped();
-                    else _metrics[profile.ProfileId].IncrementCompleted();
+                    RecordCompletion(profile.ProfileId, vector);
                     state.Reset(sample.TimestampUtc);
                 }
 
                 foreach (var signalIndex in matchingSignals)
-                    state.Accumulators[signalIndex].Add(sample);
+                {
+                    var definition = profile.Signals[signalIndex];
+                    state.Accumulators[signalIndex].Add(sample, definition.Kind);
+                }
                 state.LastUpdatedUtc = sample.TimestampUtc;
             }
 
@@ -89,14 +88,9 @@ public sealed class PlcFeatureWindowEngine
                 vector = TryBuildVector(state);
             }
 
-            if (!_windows.TryRemove(new KeyValuePair<string, WindowState>(pair.Key, state))) continue;
-            if (vector is null)
-            {
-                _metrics[state.Profile.ProfileId].IncrementDropped();
-                continue;
-            }
-
-            _metrics[state.Profile.ProfileId].IncrementCompleted();
+            if (!((ICollection<KeyValuePair<string, WindowState>>)_windows).Remove(pair)) continue;
+            RecordCompletion(state.Profile.ProfileId, vector);
+            if (vector is null) continue;
             completed ??= new List<PlcFeatureVector>();
             completed.Add(vector);
         }
@@ -106,12 +100,16 @@ public sealed class PlcFeatureWindowEngine
     public WindowMetricsSnapshot GetMetrics(string profileId)
     {
         _metrics.TryGetValue(profileId, out var metrics);
-        var tracked = _windows.Values.Count(item =>
-            string.Equals(item.Profile.ProfileId, profileId, StringComparison.Ordinal));
-        return new WindowMetricsSnapshot(
-            metrics?.Completed ?? 0,
-            metrics?.Dropped ?? 0,
-            tracked);
+        var tracked = _windows.Values.Count(state =>
+            string.Equals(state.Profile.ProfileId, profileId, StringComparison.Ordinal));
+        return new WindowMetricsSnapshot(metrics?.Completed ?? 0, metrics?.Dropped ?? 0, tracked);
+    }
+
+    private void RecordCompletion(string profileId, PlcFeatureVector? vector)
+    {
+        var metrics = _metrics[profileId];
+        if (vector is null) metrics.IncrementDropped();
+        else metrics.IncrementCompleted();
     }
 
     private static PlcFeatureVector? TryBuildVector(WindowState state)
@@ -125,10 +123,14 @@ public sealed class PlcFeatureWindowEngine
         var sourceSamples = 0;
         for (var index = 0; index < state.Accumulators.Length; index++)
         {
-            var definition = state.Profile.Signals[index];
             var accumulator = state.Accumulators[index];
             sourceSamples += accumulator.Count;
-            accumulator.AppendFeatures(definition, state.WindowStartUtc, state.WindowEndUtc, names, values);
+            accumulator.AppendFeatures(
+                state.Profile.Signals[index],
+                state.WindowStartUtc,
+                state.WindowEndUtc,
+                names,
+                values);
         }
 
         return new PlcFeatureVector
@@ -144,12 +146,16 @@ public sealed class PlcFeatureWindowEngine
         };
     }
 
-    private static List<int> FindMatchingSignalIndices(PlcMlProfile profile, string signalName)
+    private static List<int> FindMatchingSignalIndices(PlcMlProfile profile, PlcAnomalySample sample)
     {
         var result = new List<int>(1);
         for (var index = 0; index < profile.Signals.Count; index++)
         {
-            if (WildcardMatch(profile.Signals[index].Pattern, signalName)) result.Add(index);
+            var definition = profile.Signals[index];
+            if (!WildcardMatch(definition.Pattern, sample.SignalName)) continue;
+            if (definition.Kind == PlcMlSignalKind.Numeric && sample.NumericValue is null) continue;
+            if (definition.Kind == PlcMlSignalKind.Boolean && sample.BooleanValue is null) continue;
+            result.Add(index);
         }
         return result;
     }
@@ -169,17 +175,13 @@ public sealed class PlcFeatureWindowEngine
 
     private sealed class WindowState
     {
-        private WindowState(
-            PlcMlProfile profile,
-            string plcName,
-            string deviceId,
-            DateTime startUtc)
+        private WindowState(PlcMlProfile profile, string plcName, string deviceId, DateTime timestampUtc)
         {
             Profile = profile;
             PlcName = plcName;
             DeviceId = deviceId;
             Accumulators = profile.Signals.Select(static _ => new SignalAccumulator()).ToArray();
-            SetWindow(startUtc);
+            SetWindow(timestampUtc);
         }
 
         public object Gate { get; } = new();
@@ -230,10 +232,11 @@ public sealed class PlcFeatureWindowEngine
 
         public int Count { get; private set; }
 
-        public void Add(PlcAnomalySample sample)
+        public void Add(PlcAnomalySample sample, PlcMlSignalKind kind)
         {
-            if (sample.NumericValue is { } numeric)
+            if (kind == PlcMlSignalKind.Numeric)
             {
+                if (sample.NumericValue is not { } numeric) return;
                 if (Count == 0)
                 {
                     _minimum = _maximum = _firstNumeric = numeric;
@@ -265,6 +268,7 @@ public sealed class PlcFeatureWindowEngine
             ICollection<double> values)
         {
             var prefix = definition.Name;
+            var seconds = Math.Max((windowEndUtc - windowStartUtc).TotalSeconds, 1e-9);
             if (definition.Kind == PlcMlSignalKind.Numeric)
             {
                 var mean = _sum / Count;
@@ -277,16 +281,14 @@ public sealed class PlcFeatureWindowEngine
                 names.Add($"{prefix}.last"); values.Add(_lastNumeric);
                 names.Add($"{prefix}.slope"); values.Add((_lastNumeric - _firstNumeric) / elapsed);
                 names.Add($"{prefix}.range"); values.Add(_maximum - _minimum);
-                names.Add($"{prefix}.samplesPerSecond");
-                values.Add(Count / Math.Max((windowEndUtc - windowStartUtc).TotalSeconds, 1e-9));
+                names.Add($"{prefix}.samplesPerSecond"); values.Add(Count / seconds);
                 return;
             }
 
             names.Add($"{prefix}.trueRatio"); values.Add((double)_trueCount / Count);
             names.Add($"{prefix}.transitions"); values.Add(_transitions);
             names.Add($"{prefix}.last"); values.Add(_lastBoolean ? 1.0 : 0.0);
-            names.Add($"{prefix}.samplesPerSecond");
-            values.Add(Count / Math.Max((windowEndUtc - windowStartUtc).TotalSeconds, 1e-9));
+            names.Add($"{prefix}.samplesPerSecond"); values.Add(Count / seconds);
         }
 
         public void Reset()
