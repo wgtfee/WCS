@@ -1,7 +1,8 @@
 namespace Wcs.Core.AnomalyDetection.MachineLearning;
 
 /// <summary>
-/// 纯 .NET Isolation Forest。训练阶段使用确定性随机种子，推理阶段无外部依赖。
+/// 纯 .NET Isolation Forest。训练阶段使用确定性随机种子；森林与阈值校准使用互斥数据集，
+/// 避免在训练样本自身上计算阈值导致未见正常数据误报偏高。
 /// </summary>
 public static class IsolationForest
 {
@@ -12,9 +13,9 @@ public static class IsolationForest
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(vectors);
-        if (vectors.Count < Math.Max(2, profile.MinimumTrainingWindows))
+        if (vectors.Count < Math.Max(20, profile.MinimumTrainingWindows))
             throw new InvalidOperationException(
-                $"Profile {profile.ProfileId} 训练窗口不足：{vectors.Count}/{profile.MinimumTrainingWindows}。");
+                $"Profile {profile.ProfileId} 训练窗口不足：{vectors.Count}/{Math.Max(20, profile.MinimumTrainingWindows)}。");
 
         var featureNames = vectors[0].FeatureNames;
         if (featureNames.Length == 0)
@@ -29,28 +30,40 @@ public static class IsolationForest
                 throw new InvalidOperationException("训练特征包含 NaN 或 Infinity。");
         }
 
+        var shuffled = Enumerable.Range(0, vectors.Count).ToArray();
+        Shuffle(shuffled, new Random(unchecked(profile.RandomSeed ^ 0x5F3759DF)));
+        var calibrationCount = Math.Max(5, vectors.Count / 5);
+        calibrationCount = Math.Min(calibrationCount, vectors.Count - 2);
+        var calibrationIndices = shuffled[..calibrationCount];
+        var forestIndices = shuffled[calibrationCount..];
+
         var means = new double[featureNames.Length];
         var standardDeviations = new double[featureNames.Length];
         for (var feature = 0; feature < featureNames.Length; feature++)
         {
             var sum = 0.0;
-            for (var row = 0; row < vectors.Count; row++) sum += vectors[row].Values[feature];
-            var mean = sum / vectors.Count;
+            foreach (var index in forestIndices) sum += vectors[index].Values[feature];
+            var mean = sum / forestIndices.Length;
             means[feature] = mean;
 
             var variance = 0.0;
-            for (var row = 0; row < vectors.Count; row++)
+            foreach (var index in forestIndices)
             {
-                var delta = vectors[row].Values[feature] - mean;
+                var delta = vectors[index].Values[feature] - mean;
                 variance += delta * delta;
             }
-            standardDeviations[feature] = Math.Max(Math.Sqrt(variance / vectors.Count), 1e-9);
+            standardDeviations[feature] = Math.Max(
+                Math.Sqrt(variance / forestIndices.Length),
+                1e-9);
         }
 
-        var normalized = vectors
-            .Select(vector => Normalize(vector.Values, means, standardDeviations))
+        var forestRows = forestIndices
+            .Select(index => Normalize(vectors[index].Values, means, standardDeviations))
             .ToArray();
-        var sampleSize = Math.Clamp(profile.SampleSize, 2, normalized.Length);
+        var calibrationRows = calibrationIndices
+            .Select(index => Normalize(vectors[index].Values, means, standardDeviations))
+            .ToArray();
+        var sampleSize = Math.Clamp(profile.SampleSize, 2, forestRows.Length);
         var treeCount = Math.Clamp(profile.TreeCount, 1, 1_000);
         var depthLimit = Math.Max(1, (int)Math.Ceiling(Math.Log2(sampleSize)));
         var trees = new IsolationForestNode[treeCount];
@@ -58,8 +71,8 @@ public static class IsolationForest
         for (var treeIndex = 0; treeIndex < treeCount; treeIndex++)
         {
             var random = new Random(unchecked(profile.RandomSeed + treeIndex * 104_729));
-            var sampleIndices = SampleWithoutReplacement(normalized.Length, sampleSize, random);
-            trees[treeIndex] = BuildTree(normalized, sampleIndices, 0, depthLimit, random);
+            var sampleIndices = SampleWithoutReplacement(forestRows.Length, sampleSize, random);
+            trees[treeIndex] = BuildTree(forestRows, sampleIndices, 0, depthLimit, random);
         }
 
         var provisional = new PlcIsolationForestModel
@@ -72,11 +85,12 @@ public static class IsolationForest
             StandardDeviations = standardDeviations,
             Trees = trees,
             TrainingSampleCount = vectors.Count,
+            CalibrationSampleCount = calibrationRows.Length,
             SubsampleSize = sampleSize,
             Contamination = Math.Clamp(profile.Contamination, 0.0001, 0.49)
         };
 
-        var scores = normalized
+        var scores = calibrationRows
             .Select(values => ScoreNormalized(provisional, values))
             .OrderBy(static score => score)
             .ToArray();
@@ -181,6 +195,15 @@ public static class IsolationForest
             (values[index], values[swapIndex]) = (values[swapIndex], values[index]);
         }
         return values[..count];
+    }
+
+    private static void Shuffle(int[] values, Random random)
+    {
+        for (var index = 0; index < values.Length - 1; index++)
+        {
+            var swapIndex = random.Next(index, values.Length);
+            (values[index], values[swapIndex]) = (values[swapIndex], values[index]);
+        }
     }
 
     private static double AveragePathLength(int sampleCount)
