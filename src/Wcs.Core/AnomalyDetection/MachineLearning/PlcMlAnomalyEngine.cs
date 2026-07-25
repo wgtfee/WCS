@@ -245,16 +245,18 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
                     throw new InvalidOperationException($"Profile {profile.ProfileId} 特征顺序与活动模型不一致。");
 
                 var score = IsolationForest.Score(model, vector.Values);
-                var threshold = Math.Max(model.DecisionThreshold, profile.ObserveThreshold);
-                var abnormal = score >= threshold;
+                var observationThreshold = Math.Max(model.DecisionThreshold, profile.ObserveThreshold);
+                var formalThreshold = Math.Max(observationThreshold, profile.WarningThreshold);
+                var observed = score >= observationThreshold;
+                var abnormal = score >= formalThreshold;
                 runtime.IncrementPredictions();
-                if (abnormal) runtime.IncrementAnomalyObservations();
+                if (observed) runtime.IncrementAnomalyObservations();
 
                 var stateKey = $"{profile.ProfileId}|{vector.PlcName}|{vector.DeviceId}";
                 var state = _states.GetOrAdd(stateKey, _ => new InferenceState(profile));
                 lock (state.Gate)
                 {
-                    transition = ApplyPredictionLocked(state, vector, model, score, threshold, abnormal);
+                    transition = ApplyPredictionLocked(state, vector, model, score, formalThreshold, abnormal);
                     state.LastUpdatedUtc = vector.WindowEndUtc;
                 }
             }
@@ -481,7 +483,7 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
             .OrderByDescending(static item => item.Z)
             .Take(3)
             .Select(static item => $"{item.Name}={item.Raw:G6}(偏离{item.Z:F2}σ)");
-        return $"Isolation Forest 异常分数 {score:F4}，阈值 {threshold:F4}；主要偏离：{string.Join("，", important)}";
+        return $"Isolation Forest 异常分数 {score:F4}，正式阈值 {threshold:F4}；主要偏离：{string.Join("，", important)}";
     }
 
     private static string BuildContext(
