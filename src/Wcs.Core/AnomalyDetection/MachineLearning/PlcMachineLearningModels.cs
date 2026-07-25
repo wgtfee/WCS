@@ -49,6 +49,8 @@ public sealed class PlcMlProfile
 public sealed class PlcMlAnomalyOptions
 {
     public bool Enabled { get; set; }
+    /// <summary>训练、版本列表和激活 API 的独立开关。默认关闭。</summary>
+    public bool ManagementApiEnabled { get; set; }
     public string ModelDirectory { get; set; } = "data/anomaly-models";
     public string TrainingDirectory { get; set; } = "data/anomaly-training";
     public int MaintenanceIntervalMs { get; set; } = 1_000;
@@ -150,9 +152,9 @@ public sealed record PlcMlProfileStatus
 public interface IPlcMlModelStore
 {
     Task<PlcIsolationForestModel?> LoadActiveAsync(string profileId, CancellationToken cancellationToken = default);
+    Task<PlcIsolationForestModel?> LoadVersionAsync(string profileId, string version, CancellationToken cancellationToken = default);
     Task SaveAndActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PlcMlModelVersionInfo>> ListAsync(string profileId, CancellationToken cancellationToken = default);
-    Task<PlcIsolationForestModel> ActivateAsync(string profileId, string version, CancellationToken cancellationToken = default);
 }
 
 public interface IPlcMlTrainingStore
