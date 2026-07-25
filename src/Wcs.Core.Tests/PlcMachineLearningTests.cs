@@ -108,6 +108,7 @@ public sealed class PlcMachineLearningTests
         profile.MinimumTrainingWindows = 100;
         profile.Contamination = 0.05;
         profile.ObserveThreshold = 0.50;
+        profile.WarningThreshold = 0.55;
         var training = Enumerable.Range(0, 500).Select(NormalTrainingVector).ToArray();
         var model = IsolationForest.Train(profile, training, DateTime.UtcNow);
         var options = new PlcMlAnomalyOptions
@@ -169,7 +170,7 @@ public sealed class PlcMachineLearningTests
         SampleSize = 128,
         Contamination = 0.05,
         ObserveThreshold = 0.50,
-        WarningThreshold = 0.70,
+        WarningThreshold = 0.55,
         AlarmThreshold = 0.85,
         ConsecutiveAbnormalCount = 1,
         ConsecutiveRecoveryCount = 1,
