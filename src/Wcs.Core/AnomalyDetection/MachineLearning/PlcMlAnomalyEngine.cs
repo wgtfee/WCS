@@ -58,7 +58,11 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
                 try
                 {
                     var model = await _modelStore.LoadActiveAsync(profile.ProfileId, cancellationToken);
-                    if (model is not null) _models[profile.ProfileId] = model;
+                    if (model is not null)
+                    {
+                        ValidateModel(profile, model);
+                        _models[profile.ProfileId] = model;
+                    }
                     var count = await _trainingStore.CountAsync(profile.ProfileId, cancellationToken);
                     _metrics[profile.ProfileId].SetTrainingCount(count);
                 }
@@ -125,18 +129,18 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
         string profileId,
         CancellationToken cancellationToken = default)
     {
-        if (!_profiles.TryGetValue(profileId, out var profile))
-            throw new KeyNotFoundException($"未找到 PLC ML Profile：{profileId}。");
-
+        var profile = GetProfile(profileId);
         var trainingLock = _trainingLocks[profileId];
         await trainingLock.WaitAsync(cancellationToken);
         try
         {
+            EnsureNoActiveAnomalies(profileId, "训练并激活新模型");
             var vectors = await _trainingStore.ReadAsync(
                 profileId,
                 profile.MaximumTrainingWindows,
                 cancellationToken);
             var model = IsolationForest.Train(profile, vectors, DateTime.UtcNow);
+            ValidateModel(profile, model);
             await _modelStore.SaveAndActivateAsync(model, cancellationToken);
             _models[profileId] = model;
             _metrics[profileId].SetTrainingCount(vectors.Count);
@@ -145,10 +149,41 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
                 ProfileId = profileId,
                 ModelVersion = model.Version,
                 TrainingSampleCount = model.TrainingSampleCount,
+                CalibrationSampleCount = model.CalibrationSampleCount,
                 TreeCount = model.Trees.Length,
                 DecisionThreshold = model.DecisionThreshold,
                 CreatedUtc = model.CreatedUtc
             };
+        }
+        finally
+        {
+            trainingLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<PlcMlModelVersionInfo>> ListModelsAsync(
+        string profileId,
+        CancellationToken cancellationToken = default)
+    {
+        GetProfile(profileId);
+        return await _modelStore.ListAsync(profileId, cancellationToken);
+    }
+
+    public async Task<PlcMlModelVersionInfo> ActivateModelAsync(
+        string profileId,
+        string version,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = GetProfile(profileId);
+        var trainingLock = _trainingLocks[profileId];
+        await trainingLock.WaitAsync(cancellationToken);
+        try
+        {
+            EnsureNoActiveAnomalies(profileId, "切换模型版本");
+            var model = await _modelStore.ActivateAsync(profileId, version, cancellationToken);
+            ValidateModel(profile, model);
+            _models[profileId] = model;
+            return ToVersionInfo(model, isActive: true);
         }
         finally
         {
@@ -174,9 +209,7 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
                 AnomalyObservations = runtime.AnomalyObservations,
                 Raised = runtime.Raised,
                 Recovered = runtime.Recovered,
-                ActiveAnomalies = _states.Values.Count(state =>
-                    state.Active is not null &&
-                    string.Equals(state.Profile.ProfileId, profile.ProfileId, StringComparison.Ordinal)),
+                ActiveAnomalies = CountActiveAnomalies(profile.ProfileId),
                 TrackedWindows = windows.Tracked,
                 TrackedInferenceStates = _states.Values.Count(state =>
                     string.Equals(state.Profile.ProfileId, profile.ProfileId, StringComparison.Ordinal)),
@@ -340,6 +373,77 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
             ContextJson = BuildContext(vector, model, score, threshold)
         };
     }
+
+    private PlcMlProfile GetProfile(string profileId) =>
+        _profiles.TryGetValue(profileId, out var profile)
+            ? profile
+            : throw new KeyNotFoundException($"未找到 PLC ML Profile：{profileId}。");
+
+    private void EnsureNoActiveAnomalies(string profileId, string operation)
+    {
+        var active = CountActiveAnomalies(profileId);
+        if (active > 0)
+            throw new InvalidOperationException(
+                $"Profile {profileId} 当前有 {active} 个活动异常，不能{operation}。请先完成恢复。");
+    }
+
+    private int CountActiveAnomalies(string profileId) =>
+        _states.Values.Count(state =>
+            state.Active is not null &&
+            string.Equals(state.Profile.ProfileId, profileId, StringComparison.Ordinal));
+
+    private static void ValidateModel(PlcMlProfile profile, PlcIsolationForestModel model)
+    {
+        if (!string.Equals(profile.ProfileId, model.ProfileId, StringComparison.Ordinal))
+            throw new InvalidOperationException("模型 ProfileId 与配置不一致。");
+        if (string.IsNullOrWhiteSpace(model.Version) || model.Trees.Length == 0)
+            throw new InvalidOperationException("模型版本或森林为空。");
+        var expected = BuildExpectedFeatureNames(profile);
+        if (!model.FeatureNames.SequenceEqual(expected, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                $"模型特征与 Profile {profile.ProfileId} 不一致。Expected={string.Join(',', expected)}; Actual={string.Join(',', model.FeatureNames)}");
+        if (model.Means.Length != expected.Length || model.StandardDeviations.Length != expected.Length)
+            throw new InvalidOperationException("模型标准化参数维度与特征不一致。");
+    }
+
+    private static string[] BuildExpectedFeatureNames(PlcMlProfile profile)
+    {
+        var result = new List<string>(profile.Signals.Count * 8);
+        foreach (var signal in profile.Signals)
+        {
+            if (signal.Kind == PlcMlSignalKind.Numeric)
+            {
+                result.Add($"{signal.Name}.mean");
+                result.Add($"{signal.Name}.stddev");
+                result.Add($"{signal.Name}.min");
+                result.Add($"{signal.Name}.max");
+                result.Add($"{signal.Name}.last");
+                result.Add($"{signal.Name}.slope");
+                result.Add($"{signal.Name}.range");
+                result.Add($"{signal.Name}.samplesPerSecond");
+            }
+            else
+            {
+                result.Add($"{signal.Name}.trueRatio");
+                result.Add($"{signal.Name}.transitions");
+                result.Add($"{signal.Name}.last");
+                result.Add($"{signal.Name}.samplesPerSecond");
+            }
+        }
+        return result.ToArray();
+    }
+
+    private static PlcMlModelVersionInfo ToVersionInfo(PlcIsolationForestModel model, bool isActive) => new()
+    {
+        ProfileId = model.ProfileId,
+        Version = model.Version,
+        CreatedUtc = model.CreatedUtc,
+        TrainingSampleCount = model.TrainingSampleCount,
+        CalibrationSampleCount = model.CalibrationSampleCount,
+        TreeCount = model.Trees.Length,
+        DecisionThreshold = model.DecisionThreshold,
+        IsActive = isActive
+    };
 
     private static PlcAnomalySeverity ResolveSeverity(PlcMlProfile profile, double score)
     {
