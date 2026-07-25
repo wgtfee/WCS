@@ -91,6 +91,7 @@ public sealed class PlcIsolationForestModel
     public double[] StandardDeviations { get; set; } = Array.Empty<double>();
     public IsolationForestNode[] Trees { get; set; } = Array.Empty<IsolationForestNode>();
     public int TrainingSampleCount { get; set; }
+    public int CalibrationSampleCount { get; set; }
     public int SubsampleSize { get; set; }
     public double DecisionThreshold { get; set; }
     public double Contamination { get; set; }
