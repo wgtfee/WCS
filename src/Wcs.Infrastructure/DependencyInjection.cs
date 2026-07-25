@@ -104,6 +104,7 @@ public static class DependencyInjection
 
         AddPlcTelemetryStorage(services, configuration, connectionString);
         AddPlcAnomalyDetection(services, configuration);
+        PlcMlDependencyInjection.AddPlcMachineLearning(services, configuration);
         return services;
     }
 
