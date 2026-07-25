@@ -82,6 +82,7 @@ public static class PlcMlDependencyInjection
         services.AddSingleton<IPlcMlTrainingStore, FilePlcMlTrainingStore>();
         services.AddSingleton<PlcMlAnomalyEngine>();
         services.AddSingleton<IPlcMlAnomalyEngine>(sp => sp.GetRequiredService<PlcMlAnomalyEngine>());
+        services.AddHostedService<PlcMlAnomalyBackgroundService>();
         return services;
     }
 }
