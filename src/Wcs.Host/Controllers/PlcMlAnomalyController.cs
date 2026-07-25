@@ -8,10 +8,12 @@ using Wcs.Core.AnomalyDetection.MachineLearning;
 public sealed class PlcMlAnomalyController : ControllerBase
 {
     private readonly IPlcMlAnomalyEngine _engine;
+    private readonly PlcMlAnomalyOptions _options;
 
-    public PlcMlAnomalyController(IPlcMlAnomalyEngine engine)
+    public PlcMlAnomalyController(IPlcMlAnomalyEngine engine, PlcMlAnomalyOptions options)
     {
         _engine = engine;
+        _options = options;
     }
 
     [HttpGet("status")]
@@ -20,21 +22,30 @@ public sealed class PlcMlAnomalyController : ControllerBase
     [HttpPost("train/{profileId}")]
     public async Task<ActionResult<PlcMlTrainingResult>> Train(
         string profileId,
-        CancellationToken cancellationToken) =>
-        await ExecuteAsync(() => _engine.TrainAsync(profileId, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        if (!_options.ManagementApiEnabled) return NotFound();
+        return await ExecuteAsync(() => _engine.TrainAsync(profileId, cancellationToken));
+    }
 
     [HttpGet("models/{profileId}")]
     public async Task<ActionResult<IReadOnlyList<PlcMlModelVersionInfo>>> ListModels(
         string profileId,
-        CancellationToken cancellationToken) =>
-        await ExecuteAsync(() => _engine.ListModelsAsync(profileId, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        if (!_options.ManagementApiEnabled) return NotFound();
+        return await ExecuteAsync(() => _engine.ListModelsAsync(profileId, cancellationToken));
+    }
 
     [HttpPost("models/{profileId}/{version}/activate")]
     public async Task<ActionResult<PlcMlModelVersionInfo>> ActivateModel(
         string profileId,
         string version,
-        CancellationToken cancellationToken) =>
-        await ExecuteAsync(() => _engine.ActivateModelAsync(profileId, version, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        if (!_options.ManagementApiEnabled) return NotFound();
+        return await ExecuteAsync(() => _engine.ActivateModelAsync(profileId, version, cancellationToken));
+    }
 
     private async Task<ActionResult<T>> ExecuteAsync<T>(Func<Task<T>> action)
     {
