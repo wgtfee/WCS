@@ -271,6 +271,9 @@ public sealed class PlcMachineLearningTests
         public Task<PlcIsolationForestModel?> LoadActiveAsync(string profileId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_active?.ProfileId == profileId ? _active : null);
 
+        public Task<PlcIsolationForestModel?> LoadVersionAsync(string profileId, string version, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_models.TryGetValue(version, out var model) && model.ProfileId == profileId ? model : null);
+
         public Task SaveAndActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default)
         {
             Add(model);
@@ -294,14 +297,6 @@ public sealed class PlcMachineLearningTests
                 })
                 .OrderByDescending(item => item.CreatedUtc)
                 .ToList());
-
-        public Task<PlcIsolationForestModel> ActivateAsync(string profileId, string version, CancellationToken cancellationToken = default)
-        {
-            if (!_models.TryGetValue(version, out var model) || model.ProfileId != profileId)
-                throw new KeyNotFoundException();
-            _active = model;
-            return Task.FromResult(model);
-        }
     }
 
     private sealed class MemoryTrainingStore : IPlcMlTrainingStore
