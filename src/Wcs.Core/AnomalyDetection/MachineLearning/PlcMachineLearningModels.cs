@@ -15,9 +15,7 @@ public sealed class PlcMlSignalDefinition
     public PlcMlSignalKind Kind { get; set; }
 }
 
-/// <summary>
-/// 一类设备的训练和推理配置。模型按 ProfileId 版本化，一个 Profile 可匹配多台同构设备。
-/// </summary>
+/// <summary>一类设备的训练和推理配置，一个 Profile 可匹配多台同构设备。</summary>
 public sealed class PlcMlProfile
 {
     public string ProfileId { get; set; } = string.Empty;
@@ -97,6 +95,18 @@ public sealed class PlcIsolationForestModel
     public double Contamination { get; set; }
 }
 
+public sealed record PlcMlModelVersionInfo
+{
+    public required string ProfileId { get; init; }
+    public required string Version { get; init; }
+    public required DateTime CreatedUtc { get; init; }
+    public required int TrainingSampleCount { get; init; }
+    public required int CalibrationSampleCount { get; init; }
+    public required int TreeCount { get; init; }
+    public required double DecisionThreshold { get; init; }
+    public required bool IsActive { get; init; }
+}
+
 public sealed record PlcMlPrediction
 {
     public required string ProfileId { get; init; }
@@ -112,6 +122,7 @@ public sealed record PlcMlTrainingResult
     public required string ProfileId { get; init; }
     public required string ModelVersion { get; init; }
     public required int TrainingSampleCount { get; init; }
+    public required int CalibrationSampleCount { get; init; }
     public required int TreeCount { get; init; }
     public required double DecisionThreshold { get; init; }
     public required DateTime CreatedUtc { get; init; }
@@ -140,6 +151,8 @@ public interface IPlcMlModelStore
 {
     Task<PlcIsolationForestModel?> LoadActiveAsync(string profileId, CancellationToken cancellationToken = default);
     Task SaveAndActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlcMlModelVersionInfo>> ListAsync(string profileId, CancellationToken cancellationToken = default);
+    Task<PlcIsolationForestModel> ActivateAsync(string profileId, string version, CancellationToken cancellationToken = default);
 }
 
 public interface IPlcMlTrainingStore
@@ -155,5 +168,7 @@ public interface IPlcMlAnomalyEngine
     ValueTask ProcessAsync(PlcAnomalySample sample, CancellationToken cancellationToken = default);
     Task MaintenanceAsync(DateTime utcNow, CancellationToken cancellationToken = default);
     Task<PlcMlTrainingResult> TrainAsync(string profileId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlcMlModelVersionInfo>> ListModelsAsync(string profileId, CancellationToken cancellationToken = default);
+    Task<PlcMlModelVersionInfo> ActivateModelAsync(string profileId, string version, CancellationToken cancellationToken = default);
     IReadOnlyList<PlcMlProfileStatus> GetStatus();
 }
