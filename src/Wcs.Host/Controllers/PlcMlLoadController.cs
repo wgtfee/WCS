@@ -104,7 +104,11 @@ public sealed class PlcMlLoadController : ControllerBase
         if (mode == "anomaly")
             return 19.5 + device % 5 * 0.2 + window * 0.15 + sample * 0.1;
 
-        var phase = device * 0.071 + window * 0.113 + sample * 0.19;
+        // Recovery uses one real central training window repeatedly. It is not a magic constant outside
+        // the learned distribution; these are exactly the device-0/window-0 normal samples.
+        var phase = mode == "recovery"
+            ? sample * 0.19
+            : device * 0.071 + window * 0.113 + sample * 0.19;
         return 5.0 + Math.Sin(phase) * 0.22 + Math.Cos(phase * 0.37) * 0.05;
     }
 }
