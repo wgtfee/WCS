@@ -35,9 +35,72 @@ public sealed class PlcMlLoadController : ControllerBase
         var concurrency = Math.Clamp(request.Concurrency, 1, 64);
         var deviceOffset = Math.Clamp(request.DeviceOffset, 0, 1_000_000);
         var startOffsetSeconds = Math.Clamp(request.StartOffsetSeconds, 0, 10_000_000);
-        var before = _engine.GetStatus().Single(status => status.ProfileId == "ML-CV-CURRENT");
+        var before = GetProfileStatus();
         var stopwatch = Stopwatch.StartNew();
 
+        await GenerateWindowsAsync(
+            mode,
+            devices,
+            windows,
+            deviceOffset,
+            startOffsetSeconds,
+            concurrency,
+            cancellationToken);
+        await _engine.MaintenanceAsync(
+            ProcessAnchorUtc.AddSeconds(startOffsetSeconds + windows + 1),
+            cancellationToken);
+
+        var afterEvaluation = GetProfileStatus();
+        var cleanupRecovered = 0L;
+        var finalStatus = afterEvaluation;
+        if (mode == "normal" && afterEvaluation.ActiveAnomalies > 0)
+        {
+            await GenerateWindowsAsync(
+                "recovery",
+                devices,
+                2,
+                deviceOffset,
+                startOffsetSeconds + windows,
+                concurrency,
+                cancellationToken);
+            await _engine.MaintenanceAsync(
+                ProcessAnchorUtc.AddSeconds(startOffsetSeconds + windows + 3),
+                cancellationToken);
+            finalStatus = GetProfileStatus();
+            cleanupRecovered = finalStatus.Recovered - afterEvaluation.Recovered;
+        }
+
+        stopwatch.Stop();
+        return Ok(new
+        {
+            mode,
+            devices,
+            windows,
+            totalSamples = devices * windows * 3L,
+            elapsedMs = stopwatch.Elapsed.TotalMilliseconds,
+            samplesPerSecond = devices * windows * 3L / Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001),
+            completedWindowDelta = afterEvaluation.CompletedWindows - before.CompletedWindows,
+            droppedWindowDelta = afterEvaluation.DroppedIncompleteWindows - before.DroppedIncompleteWindows,
+            trainingWindowDelta = afterEvaluation.TrainingWindowCount - before.TrainingWindowCount,
+            predictionDelta = afterEvaluation.Predictions - before.Predictions,
+            anomalyObservationDelta = afterEvaluation.AnomalyObservations - before.AnomalyObservations,
+            raisedDelta = afterEvaluation.Raised - before.Raised,
+            recoveredDelta = afterEvaluation.Recovered - before.Recovered,
+            cleanupRecoveredDelta = cleanupRecovered,
+            failureDelta = finalStatus.Failures - before.Failures,
+            status = finalStatus
+        });
+    }
+
+    private async Task GenerateWindowsAsync(
+        string mode,
+        int devices,
+        int windows,
+        int deviceOffset,
+        int startOffsetSeconds,
+        int concurrency,
+        CancellationToken cancellationToken)
+    {
         await Parallel.ForEachAsync(
             Enumerable.Range(0, devices),
             new ParallelOptions
@@ -70,31 +133,10 @@ public sealed class PlcMlLoadController : ControllerBase
                     }
                 }
             });
-
-        var flushTime = ProcessAnchorUtc.AddSeconds(startOffsetSeconds + windows + 1);
-        await _engine.MaintenanceAsync(flushTime, cancellationToken);
-        stopwatch.Stop();
-
-        var after = _engine.GetStatus().Single(status => status.ProfileId == "ML-CV-CURRENT");
-        return Ok(new
-        {
-            mode,
-            devices,
-            windows,
-            totalSamples = devices * windows * 3L,
-            elapsedMs = stopwatch.Elapsed.TotalMilliseconds,
-            samplesPerSecond = devices * windows * 3L / Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001),
-            completedWindowDelta = after.CompletedWindows - before.CompletedWindows,
-            droppedWindowDelta = after.DroppedIncompleteWindows - before.DroppedIncompleteWindows,
-            trainingWindowDelta = after.TrainingWindowCount - before.TrainingWindowCount,
-            predictionDelta = after.Predictions - before.Predictions,
-            anomalyObservationDelta = after.AnomalyObservations - before.AnomalyObservations,
-            raisedDelta = after.Raised - before.Raised,
-            recoveredDelta = after.Recovered - before.Recovered,
-            failureDelta = after.Failures - before.Failures,
-            status = after
-        });
     }
+
+    private PlcMlProfileStatus GetProfileStatus() =>
+        _engine.GetStatus().Single(status => status.ProfileId == "ML-CV-CURRENT");
 
     private static DateTime AlignToSecond(DateTime value) =>
         new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
@@ -104,8 +146,7 @@ public sealed class PlcMlLoadController : ControllerBase
         if (mode == "anomaly")
             return 19.5 + device % 5 * 0.2 + window * 0.15 + sample * 0.1;
 
-        // Recovery uses one real central training window repeatedly. It is not a magic constant outside
-        // the learned distribution; these are exactly the device-0/window-0 normal samples.
+        // Recovery repeats a real central training window (device 0 / window 0).
         var phase = mode == "recovery"
             ? sample * 0.19
             : device * 0.071 + window * 0.113 + sample * 0.19;
