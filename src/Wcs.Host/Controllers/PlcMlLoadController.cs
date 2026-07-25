@@ -9,7 +9,7 @@ using Wcs.Core.AnomalyDetection.MachineLearning;
 [Route("api/anomaly/ml/load")]
 public sealed class PlcMlLoadController : ControllerBase
 {
-    private static readonly DateTime ProcessAnchorUtc = DateTime.UtcNow.AddHours(1);
+    private static readonly DateTime ProcessAnchorUtc = AlignToSecond(DateTime.UtcNow.AddHours(1));
     private readonly IPlcMlAnomalyEngine _engine;
     private readonly IHostEnvironment _environment;
 
@@ -95,6 +95,9 @@ public sealed class PlcMlLoadController : ControllerBase
             status = after
         });
     }
+
+    private static DateTime AlignToSecond(DateTime value) =>
+        new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
 
     private static double ResolveValue(string mode, int device, int window, int sample)
     {
