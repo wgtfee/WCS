@@ -1,0 +1,81 @@
+name: WCS PLC Anomaly ML
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/anomaly-ml.yml"
+      - "src/Wcs.Core/AnomalyDetection/MachineLearning/**"
+      - "src/Wcs.Core/AnomalyDetection/PlcAnomalyModels.cs"
+      - "src/Wcs.Core.Tests/PlcMachineLearningTests.cs"
+      - "src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/**"
+      - "src/Wcs.Infrastructure/DependencyInjection.cs"
+      - "src/Wcs.Host/Controllers/PlcMlAnomalyController.cs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-plc-anomaly-ml-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: build and unit test ML engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build and test with captured log
+        id: verify
+        shell: bash
+        run: |
+          mkdir -p artifacts/TestResults
+          set +e
+          {
+            echo "=== restore Core tests ==="
+            dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+            restore_tests=$?
+            echo "=== build Core tests ==="
+            dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+            build_tests=$?
+            echo "=== test PLC ML ==="
+            dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+              --configuration Release \
+              --no-build \
+              --filter FullyQualifiedName~PlcMachineLearning \
+              --logger "trx;LogFileName=plc-ml-tests.trx" \
+              --results-directory artifacts/TestResults
+            test_ml=$?
+            echo "=== restore Host ==="
+            dotnet restore src/Wcs.Host/Wcs.Host.csproj
+            restore_host=$?
+            echo "=== build Host ==="
+            dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+            build_host=$?
+            printf 'restore_tests=%s\nbuild_tests=%s\ntest_ml=%s\nrestore_host=%s\nbuild_host=%s\n' \
+              "$restore_tests" "$build_tests" "$test_ml" "$restore_host" "$build_host" \
+              | tee artifacts/ml-build-status.txt
+            if (( restore_tests != 0 || build_tests != 0 || test_ml != 0 || restore_host != 0 || build_host != 0 )); then
+              exit 1
+            fi
+          } 2>&1 | tee artifacts/ml-build.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload ML build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-anomaly-ml-build-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 14
