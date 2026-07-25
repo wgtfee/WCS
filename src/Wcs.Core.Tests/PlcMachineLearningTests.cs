@@ -16,9 +16,7 @@ public sealed class PlcMachineLearningTests
         profile.TreeCount = 120;
         profile.SampleSize = 128;
         profile.Contamination = 0.05;
-        var vectors = Enumerable.Range(0, 500)
-            .Select(NormalTrainingVector)
-            .ToArray();
+        var vectors = Enumerable.Range(0, 500).Select(NormalTrainingVector).ToArray();
 
         var model = IsolationForest.Train(profile, vectors, DateTime.UtcNow);
         var normalScore = IsolationForest.Score(model, VectorFromSamples(5.0, 5.02, 5.04, 999).Values);
@@ -27,6 +25,7 @@ public sealed class PlcMachineLearningTests
         Assert.True(normalScore < model.DecisionThreshold, $"normal={normalScore}, threshold={model.DecisionThreshold}");
         Assert.True(anomalyScore >= model.DecisionThreshold, $"anomaly={anomalyScore}, threshold={model.DecisionThreshold}");
         Assert.True(anomalyScore > normalScore + 0.05, $"normal={normalScore}, anomaly={anomalyScore}");
+        Assert.Equal(100, model.CalibrationSampleCount);
     }
 
     [Fact]
@@ -43,9 +42,8 @@ public sealed class PlcMachineLearningTests
         engine.Process(Sample(4, start.AddMilliseconds(100)));
         engine.Process(Sample(5, start.AddMilliseconds(300)));
         engine.Process(Sample(6, start.AddMilliseconds(700)));
-        var vectors = engine.FlushExpired(start.AddSeconds(1.1));
+        var vector = Assert.Single(engine.FlushExpired(start.AddSeconds(1.1)));
 
-        var vector = Assert.Single(vectors);
         Assert.Equal("CV-MOTOR", vector.ProfileId);
         Assert.Equal(8, vector.Values.Length);
         Assert.Equal("Current.mean", vector.FeatureNames[0]);
@@ -60,15 +58,57 @@ public sealed class PlcMachineLearningTests
     [Fact]
     public async Task Ml_engine_publishes_one_lifecycle_and_recovers_after_normal_window()
     {
+        var setup = CreateEngineSetup();
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await PublishAnomalyWindow(setup.Engine, start);
+        var anomaly = Assert.Single(setup.Detected).Anomaly;
+        Assert.Equal(PlcAnomalyType.MachineLearning, anomaly.Type);
+        Assert.Equal("IsolationForest", anomaly.DetectorName);
+        Assert.Equal(setup.Model.Version, anomaly.ModelVersion);
+
+        await PublishNormalWindow(setup.Engine, start.AddSeconds(1));
+        Assert.Single(setup.Recovered);
+        var status = Assert.Single(setup.Engine.GetStatus());
+        Assert.Equal(1, status.Raised);
+        Assert.Equal(1, status.Recovered);
+        Assert.Equal(0, status.ActiveAnomalies);
+        Assert.Equal(0, status.Failures);
+    }
+
+    [Fact]
+    public async Task Model_activation_is_blocked_during_active_anomaly_and_allowed_after_recovery()
+    {
+        var setup = CreateEngineSetup();
+        var second = CloneModel(setup.Model, "rollback-version", setup.Model.CreatedUtc.AddMinutes(-1));
+        setup.ModelStore.Add(second);
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await PublishAnomalyWindow(setup.Engine, start);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            setup.Engine.ActivateModelAsync("CV-MOTOR", second.Version));
+        Assert.Contains("活动异常", error.Message);
+
+        await PublishNormalWindow(setup.Engine, start.AddSeconds(1));
+        var activated = await setup.Engine.ActivateModelAsync("CV-MOTOR", second.Version);
+        Assert.True(activated.IsActive);
+        Assert.Equal(second.Version, activated.Version);
+        Assert.Equal(second.Version, Assert.Single(setup.Engine.GetStatus()).ActiveModelVersion);
+
+        var versions = await setup.Engine.ListModelsAsync("CV-MOTOR");
+        Assert.Equal(2, versions.Count);
+        Assert.Single(versions, item => item.IsActive && item.Version == second.Version);
+    }
+
+    private static EngineSetup CreateEngineSetup()
+    {
         var profile = CreateProfile();
         profile.ConsecutiveAbnormalCount = 1;
         profile.ConsecutiveRecoveryCount = 1;
         profile.MinimumTrainingWindows = 100;
         profile.Contamination = 0.05;
         profile.ObserveThreshold = 0.50;
-        var training = Enumerable.Range(0, 500)
-            .Select(NormalTrainingVector)
-            .ToArray();
+        var training = Enumerable.Range(0, 500).Select(NormalTrainingVector).ToArray();
         var model = IsolationForest.Train(profile, training, DateTime.UtcNow);
         var options = new PlcMlAnomalyOptions
         {
@@ -76,7 +116,6 @@ public sealed class PlcMachineLearningTests
             InactiveInferenceStateRetentionSeconds = 10,
             Profiles = new List<PlcMlProfile> { profile }
         };
-
         var eventBus = new EventBus();
         var detected = new ConcurrentBag<PlcAnomalyDetectedEvent>();
         var recovered = new ConcurrentBag<PlcAnomalyRecoveredEvent>();
@@ -90,37 +129,31 @@ public sealed class PlcMachineLearningTests
             recovered.Add(evt);
             return Task.CompletedTask;
         });
-
+        var modelStore = new MemoryModelStore(model);
         var engine = new PlcMlAnomalyEngine(
             options,
             new PlcFeatureWindowEngine(options),
-            new MemoryModelStore(model),
+            modelStore,
             new MemoryTrainingStore(training),
             eventBus);
-        await engine.InitializeAsync();
+        engine.InitializeAsync().GetAwaiter().GetResult();
+        return new EngineSetup(engine, modelStore, model, detected, recovered);
+    }
 
-        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static async Task PublishAnomalyWindow(PlcMlAnomalyEngine engine, DateTime start)
+    {
         await engine.ProcessAsync(Sample(20, start.AddMilliseconds(100)));
         await engine.ProcessAsync(Sample(21, start.AddMilliseconds(400)));
         await engine.ProcessAsync(Sample(22, start.AddMilliseconds(700)));
         await engine.MaintenanceAsync(start.AddSeconds(1.1));
+    }
 
-        var anomaly = Assert.Single(detected).Anomaly;
-        Assert.Equal(PlcAnomalyType.MachineLearning, anomaly.Type);
-        Assert.Equal("IsolationForest", anomaly.DetectorName);
-        Assert.Equal(model.Version, anomaly.ModelVersion);
-
-        await engine.ProcessAsync(Sample(5.0, start.AddSeconds(1.1)));
-        await engine.ProcessAsync(Sample(5.02, start.AddSeconds(1.4)));
-        await engine.ProcessAsync(Sample(5.04, start.AddSeconds(1.7)));
-        await engine.MaintenanceAsync(start.AddSeconds(2.1));
-
-        Assert.Single(recovered);
-        var status = Assert.Single(engine.GetStatus());
-        Assert.Equal(1, status.Raised);
-        Assert.Equal(1, status.Recovered);
-        Assert.Equal(0, status.ActiveAnomalies);
-        Assert.Equal(0, status.Failures);
+    private static async Task PublishNormalWindow(PlcMlAnomalyEngine engine, DateTime start)
+    {
+        await engine.ProcessAsync(Sample(5.0, start.AddMilliseconds(100)));
+        await engine.ProcessAsync(Sample(5.02, start.AddMilliseconds(400)));
+        await engine.ProcessAsync(Sample(5.04, start.AddMilliseconds(700)));
+        await engine.MaintenanceAsync(start.AddSeconds(1.1));
     }
 
     private static PlcMlProfile CreateProfile() => new()
@@ -143,12 +176,7 @@ public sealed class PlcMachineLearningTests
         RaiseAlarm = false,
         Signals = new List<PlcMlSignalDefinition>
         {
-            new()
-            {
-                Name = "Current",
-                Pattern = "CV01_Current",
-                Kind = PlcMlSignalKind.Numeric
-            }
+            new() { Name = "Current", Pattern = "CV01_Current", Kind = PlcMlSignalKind.Numeric }
         }
     };
 
@@ -177,25 +205,13 @@ public sealed class PlcMachineLearningTests
             WindowEndUtc = start.AddSeconds(1),
             FeatureNames = new[]
             {
-                "Current.mean",
-                "Current.stddev",
-                "Current.min",
-                "Current.max",
-                "Current.last",
-                "Current.slope",
-                "Current.range",
-                "Current.samplesPerSecond"
+                "Current.mean", "Current.stddev", "Current.min", "Current.max",
+                "Current.last", "Current.slope", "Current.range", "Current.samplesPerSecond"
             },
             Values = new[]
             {
-                mean,
-                Math.Sqrt(variance),
-                values.Min(),
-                values.Max(),
-                last,
-                (last - first) / 0.6,
-                values.Max() - values.Min(),
-                3.0
+                mean, Math.Sqrt(variance), values.Min(), values.Max(), last,
+                (last - first) / 0.6, values.Max() - values.Min(), 3.0
             },
             SourceSampleCount = 3
         };
@@ -213,16 +229,78 @@ public sealed class PlcMachineLearningTests
         NumericValue = value
     };
 
+    private static PlcIsolationForestModel CloneModel(
+        PlcIsolationForestModel source,
+        string version,
+        DateTime createdUtc) => new()
+    {
+        ProfileId = source.ProfileId,
+        Version = version,
+        CreatedUtc = createdUtc,
+        FeatureNames = source.FeatureNames.ToArray(),
+        Means = source.Means.ToArray(),
+        StandardDeviations = source.StandardDeviations.ToArray(),
+        Trees = source.Trees,
+        TrainingSampleCount = source.TrainingSampleCount,
+        CalibrationSampleCount = source.CalibrationSampleCount,
+        SubsampleSize = source.SubsampleSize,
+        DecisionThreshold = source.DecisionThreshold,
+        Contamination = source.Contamination
+    };
+
+    private sealed record EngineSetup(
+        PlcMlAnomalyEngine Engine,
+        MemoryModelStore ModelStore,
+        PlcIsolationForestModel Model,
+        ConcurrentBag<PlcAnomalyDetectedEvent> Detected,
+        ConcurrentBag<PlcAnomalyRecoveredEvent> Recovered);
+
     private sealed class MemoryModelStore : IPlcMlModelStore
     {
-        private PlcIsolationForestModel? _model;
-        public MemoryModelStore(PlcIsolationForestModel model) => _model = model;
+        private readonly Dictionary<string, PlcIsolationForestModel> _models = new(StringComparer.Ordinal);
+        private PlcIsolationForestModel? _active;
+
+        public MemoryModelStore(PlcIsolationForestModel model)
+        {
+            Add(model);
+            _active = model;
+        }
+
+        public void Add(PlcIsolationForestModel model) => _models[model.Version] = model;
+
         public Task<PlcIsolationForestModel?> LoadActiveAsync(string profileId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_model?.ProfileId == profileId ? _model : null);
+            Task.FromResult(_active?.ProfileId == profileId ? _active : null);
+
         public Task SaveAndActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default)
         {
-            _model = model;
+            Add(model);
+            _active = model;
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<PlcMlModelVersionInfo>> ListAsync(string profileId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PlcMlModelVersionInfo>>(_models.Values
+                .Where(model => model.ProfileId == profileId)
+                .Select(model => new PlcMlModelVersionInfo
+                {
+                    ProfileId = model.ProfileId,
+                    Version = model.Version,
+                    CreatedUtc = model.CreatedUtc,
+                    TrainingSampleCount = model.TrainingSampleCount,
+                    CalibrationSampleCount = model.CalibrationSampleCount,
+                    TreeCount = model.Trees.Length,
+                    DecisionThreshold = model.DecisionThreshold,
+                    IsActive = _active?.Version == model.Version
+                })
+                .OrderByDescending(item => item.CreatedUtc)
+                .ToList());
+
+        public Task<PlcIsolationForestModel> ActivateAsync(string profileId, string version, CancellationToken cancellationToken = default)
+        {
+            if (!_models.TryGetValue(version, out var model) || model.ProfileId != profileId)
+                throw new KeyNotFoundException();
+            _active = model;
+            return Task.FromResult(model);
         }
     }
 
@@ -230,8 +308,7 @@ public sealed class PlcMachineLearningTests
     {
         private readonly List<PlcFeatureVector> _vectors;
         public MemoryTrainingStore(IEnumerable<PlcFeatureVector> vectors) => _vectors = vectors.ToList();
-        public Task<int> CountAsync(string profileId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_vectors.Count);
+        public Task<int> CountAsync(string profileId, CancellationToken cancellationToken = default) => Task.FromResult(_vectors.Count);
         public Task AppendAsync(PlcFeatureVector vector, int maximumWindows, CancellationToken cancellationToken = default)
         {
             if (_vectors.Count < maximumWindows) _vectors.Add(vector);
