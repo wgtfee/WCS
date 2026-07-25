@@ -9,7 +9,8 @@ public enum PlcAnomalyType
     RateOfChange = 1,
     Duration = 2,
     StatisticalBaseline = 3,
-    Consistency = 4
+    Consistency = 4,
+    MachineLearning = 5
 }
 
 /// <summary>异常严重级别。Observe 只记录，不进入报警中心。</summary>
