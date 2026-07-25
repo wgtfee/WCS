@@ -6,33 +6,28 @@ using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 
 /// <summary>
-/// 把正式异常生命周期写入业务 SQL。异常候选和每个采样点不进业务表，
-/// 仅激活/恢复状态发生变化时持久化，避免重新制造高频 SQL 压力。
+/// 把正式异常生命周期写入业务 SQL。订阅器始终启动，使规则、统计和机器学习检测器
+/// 可以独立启停；没有异常事件时不会产生数据库写入。
 /// </summary>
 public sealed class PlcAnomalyPersistenceService : BackgroundService
 {
     private readonly IEventBus _eventBus;
     private readonly string _connectionString;
-    private readonly PlcAnomalyOptions _options;
     private readonly ILogger<PlcAnomalyPersistenceService> _logger;
     private readonly SemaphoreSlim _throttle = new(8, 8);
 
     public PlcAnomalyPersistenceService(
         IEventBus eventBus,
         IConfiguration configuration,
-        PlcAnomalyOptions options,
         ILogger<PlcAnomalyPersistenceService> logger)
     {
         _eventBus = eventBus;
         _connectionString = configuration.GetConnectionString("WcsDb") ?? string.Empty;
-        _options = options;
         _logger = logger;
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_options.Enabled) return Task.CompletedTask;
-
         _eventBus.Subscribe<PlcAnomalyDetectedEvent>(async (evt, ct) =>
             await UpsertAsync(evt.Anomaly, ct));
         _eventBus.Subscribe<PlcAnomalyRecoveredEvent>(async (evt, ct) =>
