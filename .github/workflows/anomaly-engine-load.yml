@@ -134,6 +134,7 @@ jobs:
           (( $(jq -r '.processedDelta' artifacts/anomaly-load-response.json) >= 213000 ))
           [[ "$(jq -r '.status.configuredRules' artifacts/anomaly-load-response.json)" == "2" ]]
           (( $(jq -r '.status.matchedRuleEvaluations' artifacts/anomaly-load-response.json) >= 213000 ))
+          [[ "$(jq -r '.status.statisticalWindows' artifacts/anomaly-load-response.json)" == "0" ]]
 
       - name: Verify exact anomaly SQL lifecycle count
         shell: bash
@@ -170,9 +171,30 @@ jobs:
             sleep 1
           done
 
-          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/status" | tee artifacts/anomaly-final-status.json
+          for attempt in {1..120}; do
+            status="$(curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/status")"
+            tracked="$(jq -r '.trackedRuleSignals' <<<"$status")"
+            devices="$(jq -r '.trackedDeviceSnapshots' <<<"$status")"
+            related="$(jq -r '.trackedRelatedSamples' <<<"$status")"
+            if [[ "$tracked" == "0" && "$devices" == "0" && "$related" == "0" ]]; then
+              echo "$status" | tee artifacts/anomaly-final-status.json
+              break
+            fi
+            if [[ "$attempt" -eq 120 ]]; then
+              echo "$status" | tee artifacts/anomaly-final-status.json
+              exit 1
+            fi
+            sleep 0.25
+          done
+
           [[ "$(jq -r '.activeAnomalies' artifacts/anomaly-final-status.json)" == "0" ]]
           [[ "$(jq -r '.failures' artifacts/anomaly-final-status.json)" == "0" ]]
+          [[ "$(jq -r '.suppressed' artifacts/anomaly-final-status.json)" == "0" ]]
+          [[ "$(jq -r '.statisticalWindows' artifacts/anomaly-final-status.json)" == "0" ]]
+          [[ "$(jq -r '.evictedRuleStates' artifacts/anomaly-final-status.json)" == "3100" ]]
+          [[ "$(jq -r '.evictedRelatedSamples' artifacts/anomaly-final-status.json)" == "2000" ]]
+          [[ "$(jq -r '.evictedDeviceSnapshots' artifacts/anomaly-final-status.json)" == "1000" ]]
+          sleep 2
           ps -o rss= -p "$(cat artifacts/anomaly-host.pid)" | tr -d ' ' > artifacts/anomaly-final-rss-kb.txt
 
       - name: Validate memory and logs
@@ -184,7 +206,7 @@ jobs:
             final="$(cat artifacts/anomaly-final-rss-kb.txt)"
             growth_mb="$(( (final-initial) / 1024 ))"
             printf 'initial_rss_kb=%s\nfinal_rss_kb=%s\ngrowth_mb=%s\n' "$initial" "$final" "$growth_mb" | tee artifacts/anomaly-memory.txt
-            (( growth_mb <= 350 ))
+            (( growth_mb <= 250 ))
           fi
 
           test -s artifacts/anomaly-host.log
