@@ -38,6 +38,7 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
         _trainingStore = trainingStore ?? throw new ArgumentNullException(nameof(trainingStore));
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
         _profiles = options.Profiles.ToDictionary(profile => profile.ProfileId, StringComparer.Ordinal);
+
         foreach (var profile in options.Profiles)
         {
             _metrics.TryAdd(profile.ProfileId, new ProfileRuntimeMetrics());
@@ -80,8 +81,7 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
     {
         if (!_options.Enabled) return;
         if (Volatile.Read(ref _initialized) == 0) await InitializeAsync(cancellationToken);
-        var vectors = _windowEngine.Process(sample);
-        foreach (var vector in vectors)
+        foreach (var vector in _windowEngine.Process(sample))
             await ProcessVectorAsync(vector, cancellationToken);
     }
 
@@ -99,11 +99,11 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
         foreach (var pair in _states)
         {
             var state = pair.Value;
+            var removable = false;
             lock (state.Gate)
-            {
-                if (state.Active is not null || state.LastUpdatedUtc >= cutoff) continue;
-            }
-            ((ICollection<KeyValuePair<string, InferenceState>>)_states).Remove(pair);
+                removable = state.Active is null && state.LastUpdatedUtc < cutoff;
+            if (removable)
+                ((ICollection<KeyValuePair<string, InferenceState>>)_states).Remove(pair);
         }
 
         foreach (var profile in _options.Profiles)
@@ -156,17 +156,11 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
         }
     }
 
-    public IReadOnlyList<PlcMlProfileStatus> GetStatus()
-    {
-        return _options.Profiles.Select(profile =>
+    public IReadOnlyList<PlcMlProfileStatus> GetStatus() =>
+        _options.Profiles.Select(profile =>
         {
             var runtime = _metrics[profile.ProfileId];
             var windows = _windowEngine.GetMetrics(profile.ProfileId);
-            var active = _states.Values.Count(state =>
-                string.Equals(state.Profile.ProfileId, profile.ProfileId, StringComparison.Ordinal) &&
-                state.Active is not null);
-            var trackedStates = _states.Values.Count(state =>
-                string.Equals(state.Profile.ProfileId, profile.ProfileId, StringComparison.Ordinal));
             _models.TryGetValue(profile.ProfileId, out var model);
             return new PlcMlProfileStatus
             {
@@ -180,14 +174,16 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
                 AnomalyObservations = runtime.AnomalyObservations,
                 Raised = runtime.Raised,
                 Recovered = runtime.Recovered,
-                ActiveAnomalies = active,
+                ActiveAnomalies = _states.Values.Count(state =>
+                    state.Active is not null &&
+                    string.Equals(state.Profile.ProfileId, profile.ProfileId, StringComparison.Ordinal)),
                 TrackedWindows = windows.Tracked,
-                TrackedInferenceStates = trackedStates,
+                TrackedInferenceStates = _states.Values.Count(state =>
+                    string.Equals(state.Profile.ProfileId, profile.ProfileId, StringComparison.Ordinal)),
                 Failures = runtime.Failures,
                 LastError = runtime.LastError
             };
         }).ToList();
-    }
 
     private async Task ProcessVectorAsync(
         PlcFeatureVector vector,
@@ -209,9 +205,9 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
                 throw new InvalidOperationException($"Profile {profile.ProfileId} 特征顺序与活动模型不一致。");
 
             var score = IsolationForest.Score(model, vector.Values);
-            runtime.IncrementPredictions();
             var threshold = Math.Max(model.DecisionThreshold, profile.ObserveThreshold);
             var abnormal = score >= threshold;
+            runtime.IncrementPredictions();
             if (abnormal) runtime.IncrementAnomalyObservations();
 
             var stateKey = $"{profile.ProfileId}|{vector.PlcName}|{vector.DeviceId}";
@@ -223,24 +219,20 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
                 state.LastUpdatedUtc = vector.WindowEndUtc;
             }
 
-            if (transition is not null)
+            if (transition is null) return;
+            if (transition.IsDetected)
             {
-                if (transition.IsDetected)
-                {
-                    runtime.IncrementRaised();
-                    await _eventBus.PublishAsync(new PlcAnomalyDetectedEvent
-                    {
-                        Anomaly = transition.Record
-                    }, cancellationToken);
-                }
-                else
-                {
-                    runtime.IncrementRecovered();
-                    await _eventBus.PublishAsync(new PlcAnomalyRecoveredEvent
-                    {
-                        Anomaly = transition.Record
-                    }, cancellationToken);
-                }
+                runtime.IncrementRaised();
+                await _eventBus.PublishAsync(
+                    new PlcAnomalyDetectedEvent { Anomaly = transition.Record },
+                    cancellationToken);
+            }
+            else
+            {
+                runtime.IncrementRecovered();
+                await _eventBus.PublishAsync(
+                    new PlcAnomalyRecoveredEvent { Anomaly = transition.Record },
+                    cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -268,7 +260,13 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
             state.FirstAbnormalUtc ??= vector.WindowStartUtc;
             if (state.Active is null && state.AbnormalCount >= state.Profile.ConsecutiveAbnormalCount)
             {
-                var record = CreateRecord(state.Profile, vector, model, score, threshold, state.FirstAbnormalUtc.Value);
+                var record = CreateRecord(
+                    state.Profile,
+                    vector,
+                    model,
+                    score,
+                    threshold,
+                    state.FirstAbnormalUtc.Value);
                 state.Active = record;
                 return new AnomalyTransition(true, record);
             }
@@ -359,10 +357,15 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
     {
         var normalized = IsolationForest.Normalize(vector.Values, model.Means, model.StandardDeviations);
         var important = normalized
-            .Select((value, index) => new { model.FeatureNames[index], Z = Math.Abs(value), Raw = vector.Values[index] })
+            .Select((value, index) => new
+            {
+                Name = model.FeatureNames[index],
+                Z = Math.Abs(value),
+                Raw = vector.Values[index]
+            })
             .OrderByDescending(static item => item.Z)
             .Take(3)
-            .Select(static item => $"{item.FeatureNames}={item.Raw:G6}(偏离{item.Z:F2}σ)");
+            .Select(static item => $"{item.Name}={item.Raw:G6}(偏离{item.Z:F2}σ)");
         return $"Isolation Forest 异常分数 {score:F4}，阈值 {threshold:F4}；主要偏离：{string.Join("，", important)}";
     }
 
@@ -381,7 +384,9 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
             model.Version,
             score,
             threshold,
-            features = vector.FeatureNames.Zip(vector.Values, static (name, value) => new { name, value })
+            features = vector.FeatureNames.Zip(
+                vector.Values,
+                static (name, value) => new { name, value })
         });
 
     private sealed class InferenceState
