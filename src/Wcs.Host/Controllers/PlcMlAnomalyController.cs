@@ -20,15 +20,35 @@ public sealed class PlcMlAnomalyController : ControllerBase
     [HttpPost("train/{profileId}")]
     public async Task<ActionResult<PlcMlTrainingResult>> Train(
         string profileId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        await ExecuteAsync(() => _engine.TrainAsync(profileId, cancellationToken));
+
+    [HttpGet("models/{profileId}")]
+    public async Task<ActionResult<IReadOnlyList<PlcMlModelVersionInfo>>> ListModels(
+        string profileId,
+        CancellationToken cancellationToken) =>
+        await ExecuteAsync(() => _engine.ListModelsAsync(profileId, cancellationToken));
+
+    [HttpPost("models/{profileId}/{version}/activate")]
+    public async Task<ActionResult<PlcMlModelVersionInfo>> ActivateModel(
+        string profileId,
+        string version,
+        CancellationToken cancellationToken) =>
+        await ExecuteAsync(() => _engine.ActivateModelAsync(profileId, version, cancellationToken));
+
+    private async Task<ActionResult<T>> ExecuteAsync<T>(Func<Task<T>> action)
     {
         try
         {
-            return Ok(await _engine.TrainAsync(profileId, cancellationToken));
+            return Ok(await action());
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { error = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
