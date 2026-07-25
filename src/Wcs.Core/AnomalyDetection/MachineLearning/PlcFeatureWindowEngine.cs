@@ -70,7 +70,7 @@ public sealed class PlcFeatureWindowEngine
             }
         }
 
-        return completed ?? Array.Empty<PlcFeatureVector>();
+        return completed is null ? Array.Empty<PlcFeatureVector>() : completed;
     }
 
     public IReadOnlyList<PlcFeatureVector> FlushExpired(DateTime utcNow)
@@ -94,7 +94,7 @@ public sealed class PlcFeatureWindowEngine
             completed ??= new List<PlcFeatureVector>();
             completed.Add(vector);
         }
-        return completed ?? Array.Empty<PlcFeatureVector>();
+        return completed is null ? Array.Empty<PlcFeatureVector>() : completed;
     }
 
     public WindowMetricsSnapshot GetMetrics(string profileId)
