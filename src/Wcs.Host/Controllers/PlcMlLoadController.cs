@@ -2,19 +2,25 @@ namespace Wcs.Host.Controllers;
 
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using Wcs.Core.AnomalyDetection;
 using Wcs.Core.AnomalyDetection.MachineLearning;
+using Wcs.Core.EventBus.Events;
+using Wcs.Core.EventBus.Publisher;
 
 [ApiController]
 [Route("api/anomaly/ml/load")]
 public sealed class PlcMlLoadController : ControllerBase
 {
     private static readonly DateTime ProcessAnchorUtc = AlignToSecond(DateTime.UtcNow.AddHours(1));
+    private readonly IEventBus _eventBus;
     private readonly IPlcMlAnomalyEngine _engine;
     private readonly IHostEnvironment _environment;
 
-    public PlcMlLoadController(IPlcMlAnomalyEngine engine, IHostEnvironment environment)
+    public PlcMlLoadController(
+        IEventBus eventBus,
+        IPlcMlAnomalyEngine engine,
+        IHostEnvironment environment)
     {
+        _eventBus = eventBus;
         _engine = engine;
         _environment = environment;
     }
@@ -73,6 +79,7 @@ public sealed class PlcMlLoadController : ControllerBase
         stopwatch.Stop();
         return Ok(new
         {
+            pipeline = "RawSignalEvent->EventBus->SampleFactory->MlEngine",
             mode,
             devices,
             windows,
@@ -118,17 +125,15 @@ public sealed class PlcMlLoadController : ControllerBase
                     for (var sampleIndex = 0; sampleIndex < 3; sampleIndex++)
                     {
                         var value = ResolveValue(mode, deviceNumber, windowIndex, sampleIndex);
-                        await _engine.ProcessAsync(new PlcAnomalySample
+                        await _eventBus.PublishAsync(new RawSignalEvent
                         {
-                            EventId = Guid.NewGuid().ToString("N"),
-                            TimestampUtc = windowStart.AddMilliseconds(100 + sampleIndex * 300),
+                            SourceTimestampUtc = windowStart.AddMilliseconds(100 + sampleIndex * 300),
                             PlcName = "ML-PLC",
                             DbBlock = 950,
-                            DeviceId = deviceId,
-                            SignalName = $"{deviceId}_Current",
+                            FieldName = $"{deviceId}_Current",
                             NewValue = value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                            NumericValue = value,
-                            Source = "MlLoadTest"
+                            ValidatorPassed = true,
+                            DomainEventType = "MlLoadTest"
                         }, ct);
                     }
                 }
