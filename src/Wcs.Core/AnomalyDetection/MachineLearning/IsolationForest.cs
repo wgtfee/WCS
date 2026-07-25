@@ -2,7 +2,8 @@ namespace Wcs.Core.AnomalyDetection.MachineLearning;
 
 /// <summary>
 /// 纯 .NET Isolation Forest。训练阶段使用确定性随机种子；森林与阈值校准使用互斥数据集，
-/// 避免在训练样本自身上计算阈值导致未见正常数据误报偏高。
+/// 避免在训练样本自身上计算阈值导致未见正常数据误报偏高。训练窗口先稳定排序，
+/// 因此并发采集文件的写入顺序不会改变模型结果。
 /// </summary>
 public static class IsolationForest
 {
@@ -17,11 +18,17 @@ public static class IsolationForest
             throw new InvalidOperationException(
                 $"Profile {profile.ProfileId} 训练窗口不足：{vectors.Count}/{Math.Max(20, profile.MinimumTrainingWindows)}。");
 
-        var featureNames = vectors[0].FeatureNames;
+        var ordered = vectors
+            .OrderBy(static vector => vector.PlcName, StringComparer.Ordinal)
+            .ThenBy(static vector => vector.DeviceId, StringComparer.Ordinal)
+            .ThenBy(static vector => vector.WindowStartUtc)
+            .ThenBy(static vector => vector.WindowEndUtc)
+            .ToArray();
+        var featureNames = ordered[0].FeatureNames;
         if (featureNames.Length == 0)
             throw new InvalidOperationException("训练特征不能为空。");
 
-        foreach (var vector in vectors)
+        foreach (var vector in ordered)
         {
             if (vector.Values.Length != featureNames.Length ||
                 !vector.FeatureNames.SequenceEqual(featureNames, StringComparer.Ordinal))
@@ -30,10 +37,10 @@ public static class IsolationForest
                 throw new InvalidOperationException("训练特征包含 NaN 或 Infinity。");
         }
 
-        var shuffled = Enumerable.Range(0, vectors.Count).ToArray();
+        var shuffled = Enumerable.Range(0, ordered.Length).ToArray();
         Shuffle(shuffled, new Random(unchecked(profile.RandomSeed ^ 0x5F3759DF)));
-        var calibrationCount = Math.Max(5, vectors.Count / 5);
-        calibrationCount = Math.Min(calibrationCount, vectors.Count - 2);
+        var calibrationCount = Math.Max(5, ordered.Length / 5);
+        calibrationCount = Math.Min(calibrationCount, ordered.Length - 2);
         var calibrationIndices = shuffled[..calibrationCount];
         var forestIndices = shuffled[calibrationCount..];
 
@@ -42,14 +49,14 @@ public static class IsolationForest
         for (var feature = 0; feature < featureNames.Length; feature++)
         {
             var sum = 0.0;
-            foreach (var index in forestIndices) sum += vectors[index].Values[feature];
+            foreach (var index in forestIndices) sum += ordered[index].Values[feature];
             var mean = sum / forestIndices.Length;
             means[feature] = mean;
 
             var variance = 0.0;
             foreach (var index in forestIndices)
             {
-                var delta = vectors[index].Values[feature] - mean;
+                var delta = ordered[index].Values[feature] - mean;
                 variance += delta * delta;
             }
             standardDeviations[feature] = Math.Max(
@@ -58,10 +65,10 @@ public static class IsolationForest
         }
 
         var forestRows = forestIndices
-            .Select(index => Normalize(vectors[index].Values, means, standardDeviations))
+            .Select(index => Normalize(ordered[index].Values, means, standardDeviations))
             .ToArray();
         var calibrationRows = calibrationIndices
-            .Select(index => Normalize(vectors[index].Values, means, standardDeviations))
+            .Select(index => Normalize(ordered[index].Values, means, standardDeviations))
             .ToArray();
         var sampleSize = Math.Clamp(profile.SampleSize, 2, forestRows.Length);
         var treeCount = Math.Clamp(profile.TreeCount, 1, 1_000);
@@ -84,7 +91,7 @@ public static class IsolationForest
             Means = means,
             StandardDeviations = standardDeviations,
             Trees = trees,
-            TrainingSampleCount = vectors.Count,
+            TrainingSampleCount = ordered.Length,
             CalibrationSampleCount = calibrationRows.Length,
             SubsampleSize = sampleSize,
             Contamination = Math.Clamp(profile.Contamination, 0.0001, 0.49)
