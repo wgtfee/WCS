@@ -3,6 +3,7 @@ namespace Wcs.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wcs.Core.AnomalyDetection.MachineLearning;
+using Wcs.Infrastructure.AnomalyDetection.Fusion;
 using Wcs.Infrastructure.AnomalyDetection.MachineLearning;
 
 public static class PlcMlDependencyInjection
@@ -127,6 +128,7 @@ public static class PlcMlDependencyInjection
         if (options.Enabled || options.ManagementApiEnabled)
             services.AddHostedService(_ => new PlcMlGovernanceSchemaService(connectionString));
         services.AddHostedService<PlcMlAnomalyBackgroundService>();
+        services.AddAnomalyEvidenceFusion(configuration);
         return services;
     }
 }
