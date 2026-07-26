@@ -13,7 +13,7 @@ public sealed class TransportCycleFusionBridgeService : BackgroundService
     private readonly ITransportCycleAnalysisService _cycles;
     private readonly IAnomalyEvidenceSink _sink;
     private readonly ILogger<TransportCycleFusionBridgeService> _logger;
-    private readonly ConcurrentDictionary<string, DateTime> _seen = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _seen = new(StringComparer.Ordinal);
 
     public TransportCycleFusionBridgeService(
         AnomalyFusionOptions options,
@@ -41,18 +41,27 @@ public sealed class TransportCycleFusionBridgeService : BackgroundService
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                var now = DateTime.UtcNow;
-                foreach (var anomaly in _cycles.GetAnomalies(10_000).OrderBy(static item => item.DetectedAtUtc))
+                var anomalies = _cycles.GetAnomalies(10_000)
+                    .OrderBy(static item => item.DetectedAtUtc)
+                    .ToArray();
+                var retainedIds = anomalies
+                    .Select(static anomaly => anomaly.AnomalyId)
+                    .ToHashSet(StringComparer.Ordinal);
+
+                foreach (var anomaly in anomalies)
                 {
-                    if (!_seen.TryAdd(anomaly.AnomalyId, now)) continue;
-                    _sink.TryWrite(ToEvidence(anomaly));
+                    if (!_seen.TryAdd(anomaly.AnomalyId, 0)) continue;
+                    if (_sink.TryWrite(ToEvidence(anomaly))) continue;
+
+                    // 通道暂时满时不丢失去重机会，下一个轮询周期重新尝试。
+                    _seen.TryRemove(anomaly.AnomalyId, out _);
                 }
 
-                var cutoff = now.AddSeconds(-Math.Max(60, _options.EvidenceRetentionSeconds * 2));
-                foreach (var pair in _seen)
+                // 周期服务是有界集合；异常离开其保留窗口后同步释放去重状态。
+                foreach (var anomalyId in _seen.Keys)
                 {
-                    if (pair.Value >= cutoff) continue;
-                    ((ICollection<KeyValuePair<string, DateTime>>)_seen).Remove(pair);
+                    if (retainedIds.Contains(anomalyId)) continue;
+                    _seen.TryRemove(anomalyId, out _);
                 }
             }
         }
