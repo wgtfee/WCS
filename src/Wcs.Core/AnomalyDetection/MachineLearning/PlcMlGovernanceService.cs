@@ -97,6 +97,16 @@ public sealed class PlcMlGovernanceService : IPlcMlGovernanceService
     {
         EnsureManagementEnabled();
         GetProfile(profileId);
+        if (string.IsNullOrWhiteSpace(approvedBy))
+            throw new ArgumentException("审批人不能为空。", nameof(approvedBy));
+
+        var pending = await _governanceStore.GetModelAsync(profileId, version, cancellationToken)
+            ?? throw new KeyNotFoundException($"未找到待审批模型：Profile={profileId}, Version={version}。");
+        if (string.Equals(pending.RequestedBy.Trim(), approvedBy.Trim(), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("模型训练申请人不能审批自己提交的模型。");
+        if (pending.ApprovalStatus == PlcMlApprovalStatus.Rejected)
+            throw new InvalidOperationException("已拒绝的模型不能直接批准，必须重新训练生成新版本。");
+
         var approved = await _governanceStore.DecideModelAsync(
             profileId,
             version,
