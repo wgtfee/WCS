@@ -26,6 +26,11 @@ public sealed class PlcMlProfile
     public int MinimumSamplesPerSignal { get; set; } = 3;
 
     public bool CollectTrainingData { get; set; }
+    /// <summary>
+    /// 活动模型存在时是否仍允许把在线窗口追加到正常训练池。默认 false，避免故障窗口污染基线。
+    /// 仅在受控的重新采集窗口中临时启用。
+    /// </summary>
+    public bool CollectTrainingDataWhileModelActive { get; set; }
     public bool AutoTrain { get; set; }
     public int MinimumTrainingWindows { get; set; } = 500;
     public int MaximumTrainingWindows { get; set; } = 50_000;
