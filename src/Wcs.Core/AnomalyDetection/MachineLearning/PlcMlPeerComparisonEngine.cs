@@ -172,12 +172,19 @@ public sealed class PlcMlPeerComparisonEngine
 
                 var abnormal = maximumDeviation >= profile.PeerMadMultiplier;
                 var stateKey = $"{profile.ProfileId}|{vector.PlcName}|{vector.DeviceId}";
-                var state = _states.GetOrAdd(stateKey, _ => new PeerState(profile));
-                PeerTransition? transition;
+                var state = _states.GetOrAdd(stateKey, _ => new PeerState(profile, vector.ContextKey));
+                List<PeerTransition>? transitions = null;
                 var routed = ShouldRouteToActiveLifecycle(profile, vector.DeviceId);
                 lock (state.Gate)
                 {
-                    transition = ApplyLocked(
+                    var contextTransition = ResetForContextChangeLocked(state, vector);
+                    if (contextTransition is not null)
+                    {
+                        transitions ??= new List<PeerTransition>(2);
+                        transitions.Add(contextTransition);
+                    }
+
+                    var predictionTransition = ApplyLocked(
                         state,
                         vector,
                         featureNames[maximumFeature],
@@ -188,37 +195,17 @@ public sealed class PlcMlPeerComparisonEngine
                         abnormal,
                         routed,
                         vectors.Length);
+                    if (predictionTransition is not null)
+                    {
+                        transitions ??= new List<PeerTransition>(2);
+                        transitions.Add(predictionTransition);
+                    }
                     state.LastUpdatedUtc = vector.WindowEndUtc;
                 }
 
-                if (transition is null) continue;
-                if (transition.IsDetected)
-                {
-                    metrics.IncrementRaised(transition.RoutedToActiveLifecycle);
-                    await _governanceStore.UpsertCandidateAsync(
-                        ToCandidate(profile, transition.Record, transition.RoutedToActiveLifecycle),
-                        cancellationToken);
-                    if (transition.RoutedToActiveLifecycle)
-                    {
-                        await _eventBus.PublishAsync(
-                            new PlcAnomalyDetectedEvent { Anomaly = transition.Record },
-                            cancellationToken);
-                    }
-                }
-                else
-                {
-                    metrics.IncrementRecovered();
-                    await _governanceStore.RecoverCandidateAsync(
-                        transition.Record.AnomalyId,
-                        transition.Record.EndTimeUtc ?? transition.Record.LastSeenUtc,
-                        cancellationToken);
-                    if (transition.RoutedToActiveLifecycle)
-                    {
-                        await _eventBus.PublishAsync(
-                            new PlcAnomalyRecoveredEvent { Anomaly = transition.Record },
-                            cancellationToken);
-                    }
-                }
+                if (transitions is null) continue;
+                foreach (var transition in transitions)
+                    await PublishTransitionAsync(profile, metrics, transition, cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -229,6 +216,66 @@ public sealed class PlcMlPeerComparisonEngine
         {
             metrics.RecordFailure(ex);
         }
+    }
+
+    private async Task PublishTransitionAsync(
+        PlcMlProfile profile,
+        PeerMetrics metrics,
+        PeerTransition transition,
+        CancellationToken cancellationToken)
+    {
+        if (transition.IsDetected)
+        {
+            metrics.IncrementRaised(transition.RoutedToActiveLifecycle);
+            await _governanceStore.UpsertCandidateAsync(
+                ToCandidate(profile, transition.Record, transition.RoutedToActiveLifecycle),
+                cancellationToken);
+            if (transition.RoutedToActiveLifecycle)
+            {
+                await _eventBus.PublishAsync(
+                    new PlcAnomalyDetectedEvent { Anomaly = transition.Record },
+                    cancellationToken);
+            }
+            return;
+        }
+
+        metrics.IncrementRecovered();
+        await _governanceStore.RecoverCandidateAsync(
+            transition.Record.AnomalyId,
+            transition.Record.EndTimeUtc ?? transition.Record.LastSeenUtc,
+            cancellationToken);
+        if (transition.RoutedToActiveLifecycle)
+        {
+            await _eventBus.PublishAsync(
+                new PlcAnomalyRecoveredEvent { Anomaly = transition.Record },
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// 同一设备切换运行上下文时，旧上下文的连续计数必须清零；旧上下文已有活动异常时，
+    /// 在新上下文窗口开始处立即恢复，防止旧工况生命周期长期残留或污染新工况判断。
+    /// </summary>
+    private static PeerTransition? ResetForContextChangeLocked(
+        PeerState state,
+        PlcFeatureVector vector)
+    {
+        if (string.Equals(state.ContextKey, vector.ContextKey, StringComparison.Ordinal)) return null;
+
+        PeerTransition? recovery = null;
+        if (state.Active is not null)
+        {
+            var recovered = state.Active.Recover(vector.WindowStartUtc);
+            recovery = new PeerTransition(false, recovered, state.RoutedToActiveLifecycle);
+        }
+
+        state.ContextKey = vector.ContextKey;
+        state.AbnormalCount = 0;
+        state.NormalCount = 0;
+        state.FirstAbnormalUtc = null;
+        state.Active = null;
+        state.RoutedToActiveLifecycle = false;
+        return recovery;
     }
 
     private static PeerTransition? ApplyLocked(
@@ -460,9 +507,15 @@ public sealed class PlcMlPeerComparisonEngine
 
     private sealed class PeerState
     {
-        public PeerState(PlcMlProfile profile) => Profile = profile;
+        public PeerState(PlcMlProfile profile, string contextKey)
+        {
+            Profile = profile;
+            ContextKey = contextKey;
+        }
+
         public object Gate { get; } = new();
         public PlcMlProfile Profile { get; }
+        public string ContextKey { get; set; }
         public int AbnormalCount { get; set; }
         public int NormalCount { get; set; }
         public DateTime? FirstAbnormalUtc { get; set; }
