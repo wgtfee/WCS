@@ -25,8 +25,22 @@ public sealed class ObservedTransportExecutionEngine :
     public TransportExecutionResult Create(string requestId) =>
         Execute(requestId, nameof(Create), () => _inner.Create(requestId));
 
-    public TransportExecutionResult Start(string requestId) =>
-        Execute(requestId, nameof(Start), () => _inner.Start(requestId));
+    public TransportExecutionResult Start(string requestId)
+    {
+        if (!_enabled) return _inner.Start(requestId);
+        if (_inner.TryGet(requestId, out var existing) && existing is not null)
+            return Execute(requestId, nameof(Start), () => _inner.Start(requestId));
+
+        // InMemoryTransportExecutionEngine.Start 会内部调用 Create。为了保留 Assigned 阶段，
+        // 装饰器在启用周期分析时显式拆成 Create + Start，但不改变原有业务结果。
+        var created = _inner.Create(requestId);
+        ObserveResult(null, created, nameof(Create));
+        if (!created.Success || created.Snapshot is null) return created;
+
+        var started = _inner.Start(requestId);
+        ObserveResult(created.Snapshot, started, nameof(Start));
+        return started;
+    }
 
     public TransportExecutionResult ApplyPositionFeedback(TransportPositionFeedback feedback)
     {
