@@ -4,7 +4,9 @@ namespace Wcs.Core.TransportScheduling;
 /// 运输执行引擎的只读周期分析装饰器。所有业务判断和状态变更仍由
 /// CoordinatedTransportExecutionEngine 完成；装饰器仅比较调用前后快照并送入周期模型。
 /// </summary>
-public sealed class ObservedTransportExecutionEngine : ITransportExecutionEngine
+public sealed class ObservedTransportExecutionEngine :
+    ITransportExecutionEngine,
+    ITransportReassignmentExecutionControl
 {
     private readonly CoordinatedTransportExecutionEngine _inner;
     private readonly ITransportCycleAnalysisService _analysis;
@@ -50,6 +52,12 @@ public sealed class ObservedTransportExecutionEngine : ITransportExecutionEngine
     public TransportExecutionResult Cancel(string requestId, string? reason = null) =>
         Execute(requestId, nameof(Cancel), () => _inner.Cancel(requestId, reason));
 
+    public TransportExecutionResult FaultAndPrepareForReassignment(string requestId, string reason) =>
+        Execute(
+            requestId,
+            nameof(FaultAndPrepareForReassignment),
+            () => _inner.FaultAndPrepareForReassignment(requestId, reason));
+
     public bool TryGet(string requestId, out TransportExecutionSnapshot? snapshot) =>
         _inner.TryGet(requestId, out snapshot);
 
@@ -77,7 +85,7 @@ public sealed class ObservedTransportExecutionEngine : ITransportExecutionEngine
         var after = result.Snapshot;
         if (after is null) return;
 
-        // 某些业务调用会以 Failed 返回，但已把任务切换到 WaitingForRoute；
+        // 某些业务调用会以 Failed 返回，但已把任务切换到 WaitingForRoute 或 Faulted；
         // 只要快照真实变化，周期模型都必须观察到。
         if (before is not null && SnapshotsEquivalent(before, after)) return;
         _analysis.Observe(before, after, operation, result.Success);
