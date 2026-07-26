@@ -105,7 +105,13 @@ public static class IsolationForest
             (int)Math.Ceiling((1.0 - provisional.Contamination) * scores.Length) - 1,
             0,
             scores.Length - 1);
+        var p95Index = Math.Clamp(
+            (int)Math.Ceiling(0.95 * scores.Length) - 1,
+            0,
+            scores.Length - 1);
         provisional.DecisionThreshold = scores[quantileIndex];
+        provisional.CalibrationMeanScore = scores.Average();
+        provisional.CalibrationP95Score = scores[p95Index];
         return provisional;
     }
 
