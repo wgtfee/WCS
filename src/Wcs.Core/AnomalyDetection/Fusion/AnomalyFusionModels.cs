@@ -119,9 +119,25 @@ public sealed record AnomalyFusionStatus
     public long RecoveryTransitions { get; init; }
 }
 
+public sealed record AnomalyEvidenceIngressStatus
+{
+    public bool Enabled { get; init; }
+    public int Capacity { get; init; }
+    public long Written { get; init; }
+    public long Dropped { get; init; }
+    public long Read { get; init; }
+    public long Pending => Math.Max(0, Written - Dropped - Read);
+}
+
 public interface IAnomalyEvidenceSink
 {
     bool TryWrite(AnomalyEvidence evidence);
+}
+
+public interface IAnomalyEvidenceIngressStatus
+{
+    AnomalyEvidenceIngressStatus GetStatus();
+    void RecordRead();
 }
 
 public interface IAnomalyFusionEngine
