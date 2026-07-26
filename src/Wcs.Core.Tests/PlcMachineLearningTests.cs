@@ -66,14 +66,39 @@ public sealed class PlcMachineLearningTests
         Assert.Equal(PlcAnomalyType.MachineLearning, anomaly.Type);
         Assert.Equal("IsolationForest", anomaly.DetectorName);
         Assert.Equal(setup.Model.Version, anomaly.ModelVersion);
+        Assert.Single(setup.Governance.Candidates);
 
         await PublishNormalWindow(setup.Engine, start.AddSeconds(1));
         Assert.Single(setup.Recovered);
+        Assert.False(Assert.Single(setup.Governance.Candidates).IsActive);
         var status = Assert.Single(setup.Engine.GetStatus());
         Assert.Equal(1, status.Raised);
         Assert.Equal(1, status.Recovered);
+        Assert.Equal(1, status.ActiveRaised);
+        Assert.Equal(0, status.ShadowRaised);
         Assert.Equal(0, status.ActiveAnomalies);
         Assert.Equal(0, status.Failures);
+    }
+
+    [Fact]
+    public async Task Shadow_mode_records_candidate_without_publishing_formal_lifecycle()
+    {
+        var setup = CreateEngineSetup(PlcMlDeploymentMode.Shadow);
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await PublishAnomalyWindow(setup.Engine, start);
+
+        Assert.Empty(setup.Detected);
+        var candidate = Assert.Single(setup.Governance.Candidates);
+        Assert.False(candidate.RoutedToActiveLifecycle);
+        Assert.Equal(PlcMlDeploymentMode.Shadow, candidate.DeploymentMode);
+        var status = Assert.Single(setup.Engine.GetStatus());
+        Assert.Equal(1, status.ShadowRaised);
+        Assert.Equal(0, status.ActiveRaised);
+
+        await PublishNormalWindow(setup.Engine, start.AddSeconds(1));
+        Assert.Empty(setup.Recovered);
+        Assert.False(Assert.Single(setup.Governance.Candidates).IsActive);
     }
 
     [Fact]
@@ -100,9 +125,52 @@ public sealed class PlcMachineLearningTests
         Assert.Single(versions, item => item.IsActive && item.Version == second.Version);
     }
 
-    private static EngineSetup CreateEngineSetup()
+    [Fact]
+    public async Task Model_requires_approval_before_activation()
     {
         var profile = CreateProfile();
+        profile.RequireModelApproval = true;
+        profile.DeploymentMode = PlcMlDeploymentMode.Shadow;
+        var training = Enumerable.Range(0, 500).Select(NormalTrainingVector).ToArray();
+        var options = new PlcMlAnomalyOptions
+        {
+            Enabled = true,
+            Profiles = new List<PlcMlProfile> { profile }
+        };
+        var modelStore = new MemoryModelStore();
+        var governance = new MemoryGovernanceStore();
+        var engine = new PlcMlAnomalyEngine(
+            options,
+            new PlcFeatureWindowEngine(options),
+            modelStore,
+            new MemoryTrainingStore(training),
+            governance,
+            new EventBus());
+        await engine.InitializeAsync();
+
+        var result = await engine.TrainAsync("CV-MOTOR", null, "trainer");
+        Assert.False(result.Activated);
+        Assert.Equal(PlcMlApprovalStatus.Pending, result.ApprovalStatus);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            engine.ActivateModelAsync("CV-MOTOR", result.ModelVersion));
+
+        await governance.DecideModelAsync(
+            "CV-MOTOR",
+            result.ModelVersion,
+            PlcMlApprovalStatus.Approved,
+            "reviewer",
+            "approved",
+            DateTime.UtcNow);
+        var activated = await engine.ActivateModelAsync("CV-MOTOR", result.ModelVersion);
+        Assert.True(activated.IsActive);
+    }
+
+    private static EngineSetup CreateEngineSetup(
+        PlcMlDeploymentMode deploymentMode = PlcMlDeploymentMode.Active)
+    {
+        var profile = CreateProfile();
+        profile.DeploymentMode = deploymentMode;
+        profile.RequireModelApproval = false;
         profile.ConsecutiveAbnormalCount = 1;
         profile.ConsecutiveRecoveryCount = 1;
         profile.MinimumTrainingWindows = 100;
@@ -131,14 +199,16 @@ public sealed class PlcMachineLearningTests
             return Task.CompletedTask;
         });
         var modelStore = new MemoryModelStore(model);
+        var governance = new MemoryGovernanceStore();
         var engine = new PlcMlAnomalyEngine(
             options,
             new PlcFeatureWindowEngine(options),
             modelStore,
             new MemoryTrainingStore(training),
+            governance,
             eventBus);
         engine.InitializeAsync().GetAwaiter().GetResult();
-        return new EngineSetup(engine, modelStore, model, detected, recovered);
+        return new EngineSetup(engine, modelStore, governance, model, detected, recovered);
     }
 
     private static async Task PublishAnomalyWindow(PlcMlAnomalyEngine engine, DateTime start)
@@ -174,7 +244,12 @@ public sealed class PlcMachineLearningTests
         AlarmThreshold = 0.85,
         ConsecutiveAbnormalCount = 1,
         ConsecutiveRecoveryCount = 1,
+        DeploymentMode = PlcMlDeploymentMode.Active,
+        RequireModelApproval = false,
         RaiseAlarm = false,
+        DriftWindowSize = 20,
+        MinimumDriftSamples = 10,
+        DriftSnapshotIntervalSeconds = 1,
         Signals = new List<PlcMlSignalDefinition>
         {
             new() { Name = "Current", Pattern = "CV01_Current", Kind = PlcMlSignalKind.Numeric }
@@ -246,12 +321,15 @@ public sealed class PlcMachineLearningTests
         CalibrationSampleCount = source.CalibrationSampleCount,
         SubsampleSize = source.SubsampleSize,
         DecisionThreshold = source.DecisionThreshold,
-        Contamination = source.Contamination
+        Contamination = source.Contamination,
+        CalibrationMeanScore = source.CalibrationMeanScore,
+        CalibrationP95Score = source.CalibrationP95Score
     };
 
     private sealed record EngineSetup(
         PlcMlAnomalyEngine Engine,
         MemoryModelStore ModelStore,
+        MemoryGovernanceStore Governance,
         PlcIsolationForestModel Model,
         ConcurrentBag<PlcAnomalyDetectedEvent> Detected,
         ConcurrentBag<PlcAnomalyRecoveredEvent> Recovered);
@@ -261,10 +339,13 @@ public sealed class PlcMachineLearningTests
         private readonly Dictionary<string, PlcIsolationForestModel> _models = new(StringComparer.Ordinal);
         private PlcIsolationForestModel? _active;
 
-        public MemoryModelStore(PlcIsolationForestModel model)
+        public MemoryModelStore(PlcIsolationForestModel? model = null)
         {
-            Add(model);
-            _active = model;
+            if (model is not null)
+            {
+                Add(model);
+                _active = model;
+            }
         }
 
         public void Add(PlcIsolationForestModel model) => _models[model.Version] = model;
@@ -275,12 +356,21 @@ public sealed class PlcMachineLearningTests
         public Task<PlcIsolationForestModel?> LoadVersionAsync(string profileId, string version, CancellationToken cancellationToken = default) =>
             Task.FromResult(_models.TryGetValue(version, out var model) && model.ProfileId == profileId ? model : null);
 
-        public Task SaveAndActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default)
+        public Task SaveVersionAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default)
+        {
+            Add(model);
+            return Task.CompletedTask;
+        }
+
+        public Task ActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default)
         {
             Add(model);
             _active = model;
             return Task.CompletedTask;
         }
+
+        public Task SaveAndActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default) =>
+            ActivateAsync(model, cancellationToken);
 
         public Task<IReadOnlyList<PlcMlModelVersionInfo>> ListAsync(string profileId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PlcMlModelVersionInfo>>(_models.Values
@@ -303,6 +393,8 @@ public sealed class PlcMachineLearningTests
     private sealed class MemoryTrainingStore : IPlcMlTrainingStore
     {
         private readonly List<PlcFeatureVector> _vectors;
+        private readonly Dictionary<string, (PlcMlDatasetInfo Info, PlcFeatureVector[] Vectors)> _datasets = new(StringComparer.Ordinal);
+
         public MemoryTrainingStore(IEnumerable<PlcFeatureVector> vectors) => _vectors = vectors.ToList();
         public Task<int> CountAsync(string profileId, CancellationToken cancellationToken = default) => Task.FromResult(_vectors.Count);
         public Task AppendAsync(PlcFeatureVector vector, int maximumWindows, CancellationToken cancellationToken = default)
@@ -312,5 +404,90 @@ public sealed class PlcMachineLearningTests
         }
         public Task<IReadOnlyList<PlcFeatureVector>> ReadAsync(string profileId, int maximumWindows, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PlcFeatureVector>>(_vectors.TakeLast(maximumWindows).ToArray());
+        public Task<PlcMlDatasetInfo> CreateDatasetAsync(string profileId, int maximumWindows, string createdBy, string? description, CancellationToken cancellationToken = default)
+        {
+            var vectors = _vectors.TakeLast(maximumWindows).ToArray();
+            var info = new PlcMlDatasetInfo
+            {
+                ProfileId = profileId,
+                Version = Guid.NewGuid().ToString("N"),
+                CreatedUtc = DateTime.UtcNow,
+                WindowCount = vectors.Length,
+                FeatureHash = "memory",
+                CreatedBy = createdBy,
+                Description = description
+            };
+            _datasets[info.Version] = (info, vectors);
+            return Task.FromResult(info);
+        }
+        public Task<IReadOnlyList<PlcMlDatasetInfo>> ListDatasetsAsync(string profileId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PlcMlDatasetInfo>>(_datasets.Values.Select(value => value.Info).ToArray());
+        public Task<IReadOnlyList<PlcFeatureVector>> ReadDatasetAsync(string profileId, string datasetVersion, int maximumWindows, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PlcFeatureVector>>(_datasets[datasetVersion].Vectors.TakeLast(maximumWindows).ToArray());
+    }
+
+    private sealed class MemoryGovernanceStore : IPlcMlGovernanceStore
+    {
+        private readonly Dictionary<string, PlcMlCandidateRecord> _candidates = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, PlcMlModelGovernanceInfo> _models = new(StringComparer.Ordinal);
+        private PlcMlDriftSnapshot? _drift;
+        public IReadOnlyCollection<PlcMlCandidateRecord> Candidates => _candidates.Values;
+
+        public Task UpsertCandidateAsync(PlcMlCandidateRecord candidate, CancellationToken cancellationToken = default)
+        {
+            _candidates[candidate.CandidateId] = candidate;
+            return Task.CompletedTask;
+        }
+        public Task RecoverCandidateAsync(string candidateId, DateTime recoveredUtc, CancellationToken cancellationToken = default)
+        {
+            _candidates[candidateId] = _candidates[candidateId] with { IsActive = false, RecoveredUtc = recoveredUtc };
+            return Task.CompletedTask;
+        }
+        public Task<IReadOnlyList<PlcMlCandidateRecord>> QueryCandidatesAsync(string? profileId, PlcMlReviewDecision? decision, int maximumCount, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PlcMlCandidateRecord>>(_candidates.Values.Take(maximumCount).ToArray());
+        public Task<PlcMlCandidateRecord> ReviewCandidateAsync(string candidateId, PlcMlReviewDecision decision, string reviewedBy, string? comment, DateTime reviewedUtc, CancellationToken cancellationToken = default)
+        {
+            var value = _candidates[candidateId] with
+            {
+                ReviewDecision = decision,
+                ReviewedBy = reviewedBy,
+                ReviewedUtc = reviewedUtc,
+                ReviewComment = comment
+            };
+            _candidates[candidateId] = value;
+            return Task.FromResult(value);
+        }
+        public Task RegisterModelAsync(PlcMlModelGovernanceInfo model, CancellationToken cancellationToken = default)
+        {
+            _models[model.GovernanceId] = model;
+            return Task.CompletedTask;
+        }
+        public Task<PlcMlModelGovernanceInfo?> GetModelAsync(string profileId, string version, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_models.GetValueOrDefault($"{profileId}|{version}"));
+        public Task<IReadOnlyList<PlcMlModelGovernanceInfo>> ListModelsAsync(string profileId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PlcMlModelGovernanceInfo>>(_models.Values.Where(value => value.ProfileId == profileId).ToArray());
+        public Task<PlcMlModelGovernanceInfo> DecideModelAsync(string profileId, string version, PlcMlApprovalStatus status, string actor, string? comment, DateTime decidedUtc, CancellationToken cancellationToken = default)
+        {
+            var key = $"{profileId}|{version}";
+            var value = _models[key] with
+            {
+                ApprovalStatus = status,
+                DecidedBy = actor,
+                DecidedUtc = decidedUtc,
+                DecisionComment = comment
+            };
+            _models[key] = value;
+            return Task.FromResult(value);
+        }
+        public Task<bool> IsModelApprovedAsync(string profileId, string version, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_models.TryGetValue($"{profileId}|{version}", out var value) && value.ApprovalStatus == PlcMlApprovalStatus.Approved);
+        public Task SaveDriftSnapshotAsync(PlcMlDriftSnapshot snapshot, CancellationToken cancellationToken = default)
+        {
+            _drift = snapshot;
+            return Task.CompletedTask;
+        }
+        public Task<PlcMlDriftSnapshot?> GetLatestDriftAsync(string profileId, CancellationToken cancellationToken = default) => Task.FromResult(_drift);
+        public Task<PlcMlEvaluationSummary> GetEvaluationAsync(string profileId, string? modelVersion, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PlcMlEvaluationSummary { ProfileId = profileId });
     }
 }
