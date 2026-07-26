@@ -9,7 +9,8 @@ public static class PlcMlDependencyInjection
 {
     public static IServiceCollection AddPlcMachineLearning(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        string connectionString)
     {
         var options = configuration
             .GetSection("AnomalyDetection:MachineLearning")
@@ -60,6 +61,15 @@ public static class PlcMlDependencyInjection
                 1);
             profile.ConsecutiveAbnormalCount = Math.Clamp(profile.ConsecutiveAbnormalCount, 1, 1_000);
             profile.ConsecutiveRecoveryCount = Math.Clamp(profile.ConsecutiveRecoveryCount, 1, 10_000);
+            profile.CanaryPercentage = Math.Clamp(profile.CanaryPercentage, 0, 100);
+            profile.DriftWindowSize = Math.Clamp(profile.DriftWindowSize, 20, 100_000);
+            profile.MinimumDriftSamples = Math.Clamp(profile.MinimumDriftSamples, 10, profile.DriftWindowSize);
+            profile.DriftWarningRatio = Math.Clamp(profile.DriftWarningRatio, 0.01, 10);
+            profile.DriftCriticalRatio = Math.Clamp(
+                Math.Max(profile.DriftCriticalRatio, profile.DriftWarningRatio),
+                profile.DriftWarningRatio,
+                20);
+            profile.DriftSnapshotIntervalSeconds = Math.Clamp(profile.DriftSnapshotIntervalSeconds, 1, 86_400);
 
             var names = new HashSet<string>(StringComparer.Ordinal);
             foreach (var signal in profile.Signals)
@@ -80,8 +90,10 @@ public static class PlcMlDependencyInjection
         services.AddSingleton<PlcFeatureWindowEngine>();
         services.AddSingleton<IPlcMlModelStore, FilePlcMlModelStore>();
         services.AddSingleton<IPlcMlTrainingStore, FilePlcMlTrainingStore>();
+        services.AddSingleton<IPlcMlGovernanceStore>(_ => new SqlSugarPlcMlGovernanceStore(connectionString));
         services.AddSingleton<PlcMlAnomalyEngine>();
         services.AddSingleton<IPlcMlAnomalyEngine>(sp => sp.GetRequiredService<PlcMlAnomalyEngine>());
+        services.AddSingleton<IPlcMlGovernanceService, PlcMlGovernanceService>();
         services.AddHostedService<PlcMlAnomalyBackgroundService>();
         return services;
     }
