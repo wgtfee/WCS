@@ -80,7 +80,7 @@ public sealed class AnomalyFusionEngineTests
     }
 
     [Fact]
-    public void Alarm_recovery_requires_all_sources_clear_and_consecutive_low_evaluations()
+    public void Alarm_recovery_requires_all_sources_clear_and_timer_driven_low_evaluations()
     {
         var engine = new AnomalyFusionEngine(CreateOptions(
             consecutiveWarning: 1,
@@ -115,21 +115,60 @@ public sealed class AnomalyFusionEngineTests
         Assert.Equal(FusedHealthStatus.Alarm, engine.GetAsset("EMS-01")!.Status);
         Assert.Equal(1, engine.GetAsset("EMS-01")!.IndependentSourceCount);
 
-        var recoveredCycle = cycle with
+        engine.Process(cycle with
         {
             State = AnomalyEvidenceState.Recovered,
             ObservedAtUtc = now.AddSeconds(3)
-        };
-        engine.Process(recoveredCycle);
+        });
         Assert.Equal(FusedHealthStatus.Alarm, engine.GetAsset("EMS-01")!.Status);
         Assert.Equal(0, engine.GetAsset("EMS-01")!.IndependentSourceCount);
 
-        engine.Process(recoveredCycle with { ObservedAtUtc = now.AddSeconds(4) });
+        engine.Maintenance(now.AddSeconds(4));
         var normal = Assert.NotNull(engine.GetAsset("EMS-01"));
         Assert.Equal(FusedHealthStatus.Normal, normal.Status);
         Assert.Equal(0, normal.Score);
         Assert.Empty(normal.Evidence);
         Assert.Equal(1, engine.GetStatus().RecoveryTransitions);
+    }
+
+    [Fact]
+    public void Unknown_recovery_event_cannot_change_formal_health_state()
+    {
+        var engine = new AnomalyFusionEngine(CreateOptions(1, 1, 3));
+        var now = Utc(0);
+        engine.Process(Evidence(
+            "RULE-1",
+            AnomalyEvidenceSources.ConsistencyRule,
+            "RGV-UNKNOWN",
+            0.95,
+            0.98,
+            now,
+            severity: PlcAnomalySeverity.Error));
+        engine.Process(Evidence(
+            "ML-1",
+            AnomalyEvidenceSources.IsolationForest,
+            "RGV-UNKNOWN",
+            0.90,
+            0.90,
+            now.AddSeconds(1)));
+        Assert.Equal(FusedHealthStatus.Alarm, engine.GetAsset("RGV-UNKNOWN")!.Status);
+
+        for (var index = 0; index < 10; index++)
+        {
+            engine.Process(Evidence(
+                $"UNKNOWN-{index}",
+                AnomalyEvidenceSources.ThresholdRule,
+                "RGV-UNKNOWN",
+                0,
+                0,
+                now.AddSeconds(2 + index)) with
+            {
+                State = AnomalyEvidenceState.Recovered
+            });
+        }
+
+        Assert.Equal(FusedHealthStatus.Alarm, engine.GetAsset("RGV-UNKNOWN")!.Status);
+        Assert.Equal(0, engine.GetStatus().EvidenceRecovered);
     }
 
     [Fact]
