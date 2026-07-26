@@ -236,23 +236,34 @@ public sealed class TransportCycleAnalysisTests
         DateTime updatedAt,
         long feedback = -1,
         string destination = "DST-A",
-        string? lastError = null) => new()
+        string? lastError = null)
     {
-        RequestId = requestId,
-        AssignmentId = $"ASSIGN-{requestId}",
-        VehicleId = $"RGV-{requestId}",
-        LoadId = $"LOAD-{requestId}",
-        State = state,
-        CurrentNodeId = state >= TransportExecutionState.MovingToDestination ? "PICK" : "SRC",
-        CurrentNodeIndex = state >= TransportExecutionState.MovingToDestination ? 1 : 0,
-        PickupNodeIndex = 1,
-        LastFeedbackSequence = feedback,
-        FullNodePath = new[] { "SRC", "PICK", destination },
-        FullEdgePath = new[] { "E1", "E2" },
-        CreatedAtUtc = createdAt,
-        UpdatedAtUtc = updatedAt,
-        LastError = lastError
-    };
+        var afterPickup = IsAtOrAfterPickup(state);
+        return new TransportExecutionSnapshot
+        {
+            RequestId = requestId,
+            AssignmentId = $"ASSIGN-{requestId}",
+            VehicleId = $"RGV-{requestId}",
+            LoadId = $"LOAD-{requestId}",
+            State = state,
+            CurrentNodeId = afterPickup ? "PICK" : "SRC",
+            CurrentNodeIndex = afterPickup ? 1 : 0,
+            PickupNodeIndex = 1,
+            LastFeedbackSequence = feedback,
+            FullNodePath = new[] { "SRC", "PICK", destination },
+            FullEdgePath = new[] { "E1", "E2" },
+            CreatedAtUtc = createdAt,
+            UpdatedAtUtc = updatedAt,
+            LastError = lastError
+        };
+    }
+
+    private static bool IsAtOrAfterPickup(TransportExecutionState state) => state is
+        TransportExecutionState.Loading or
+        TransportExecutionState.MovingToDestination or
+        TransportExecutionState.Unloading or
+        TransportExecutionState.Completed or
+        TransportExecutionState.Faulted;
 
     private static DateTime Utc(int seconds) =>
         new DateTime(2026, 1, 1, 0, 0, seconds, DateTimeKind.Utc);
