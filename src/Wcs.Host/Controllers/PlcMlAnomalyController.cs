@@ -22,14 +22,15 @@ public sealed class PlcMlAnomalyController : ControllerBase
     [HttpPost("train/{profileId}")]
     public async Task<ActionResult<PlcMlTrainingResult>> Train(
         string profileId,
-        [FromBody] PlcMlTrainRequest? request,
+        [FromQuery] string? datasetVersion,
+        [FromQuery] string? requestedBy,
         CancellationToken cancellationToken)
     {
         if (!_options.ManagementApiEnabled) return NotFound();
         return await ExecuteAsync(() => _engine.TrainAsync(
             profileId,
-            request?.DatasetVersion,
-            request?.RequestedBy,
+            datasetVersion,
+            requestedBy,
             cancellationToken));
     }
 
@@ -71,10 +72,4 @@ public sealed class PlcMlAnomalyController : ControllerBase
             return new ConflictObjectResult(new { error = ex.Message });
         }
     }
-}
-
-public sealed class PlcMlTrainRequest
-{
-    public string? DatasetVersion { get; set; }
-    public string? RequestedBy { get; set; }
 }
