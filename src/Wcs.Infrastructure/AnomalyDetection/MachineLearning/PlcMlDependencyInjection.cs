@@ -98,7 +98,8 @@ public static class PlcMlDependencyInjection
         services.AddSingleton<PlcMlAnomalyEngine>();
         services.AddSingleton<IPlcMlAnomalyEngine>(sp => sp.GetRequiredService<PlcMlAnomalyEngine>());
         services.AddSingleton<IPlcMlGovernanceService, PlcMlGovernanceService>();
-        services.AddHostedService(_ => new PlcMlGovernanceSchemaService(connectionString));
+        if (options.Enabled || options.ManagementApiEnabled)
+            services.AddHostedService(_ => new PlcMlGovernanceSchemaService(connectionString));
         services.AddHostedService<PlcMlAnomalyBackgroundService>();
         return services;
     }
