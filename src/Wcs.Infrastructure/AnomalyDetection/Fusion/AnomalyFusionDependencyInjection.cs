@@ -76,6 +76,8 @@ public static class AnomalyFusionDependencyInjection
         services.AddSingleton<AnomalyEvidenceChannel>();
         services.AddSingleton<IAnomalyEvidenceSink>(sp =>
             sp.GetRequiredService<AnomalyEvidenceChannel>());
+        services.AddSingleton<IAnomalyEvidenceIngressStatus>(sp =>
+            sp.GetRequiredService<AnomalyEvidenceChannel>());
         services.AddHostedService<AnomalyFusionBackgroundService>();
         services.AddHostedService<PlcAnomalyFusionBridgeService>();
         services.AddHostedService<TransportCycleFusionBridgeService>();
