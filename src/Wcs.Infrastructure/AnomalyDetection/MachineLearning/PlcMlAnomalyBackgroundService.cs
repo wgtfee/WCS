@@ -11,17 +11,20 @@ public sealed class PlcMlAnomalyBackgroundService : BackgroundService
 {
     private readonly IEventBus _eventBus;
     private readonly IPlcMlAnomalyEngine _engine;
+    private readonly IPlcMlContextPeerRuntime _contextPeerRuntime;
     private readonly PlcMlAnomalyOptions _options;
     private readonly ILogger<PlcMlAnomalyBackgroundService> _logger;
 
     public PlcMlAnomalyBackgroundService(
         IEventBus eventBus,
         IPlcMlAnomalyEngine engine,
+        IPlcMlContextPeerRuntime contextPeerRuntime,
         PlcMlAnomalyOptions options,
         ILogger<PlcMlAnomalyBackgroundService> logger)
     {
         _eventBus = eventBus;
         _engine = engine;
+        _contextPeerRuntime = contextPeerRuntime;
         _options = options;
         _logger = logger;
     }
@@ -39,10 +42,11 @@ public sealed class PlcMlAnomalyBackgroundService : BackgroundService
         {
             var sample = PlcAnomalySampleFactory.FromRawSignal(evt);
             await _engine.ProcessAsync(sample, ct);
+            await _contextPeerRuntime.ProcessAsync(sample, ct);
         });
 
         _logger.LogInformation(
-            "PLC ML anomaly engine started: Profiles={ProfileCount}, ModelDirectory={ModelDirectory}, TrainingDirectory={TrainingDirectory}",
+            "PLC ML and contextual-peer anomaly engines started: Profiles={ProfileCount}, ModelDirectory={ModelDirectory}, TrainingDirectory={TrainingDirectory}",
             _options.Profiles.Count,
             _options.ModelDirectory,
             _options.TrainingDirectory);
@@ -52,7 +56,11 @@ public sealed class PlcMlAnomalyBackgroundService : BackgroundService
         try
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
-                await _engine.MaintenanceAsync(DateTime.UtcNow, stoppingToken);
+            {
+                var utcNow = DateTime.UtcNow;
+                await _engine.MaintenanceAsync(utcNow, stoppingToken);
+                await _contextPeerRuntime.MaintenanceAsync(utcNow, stoppingToken);
+            }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
