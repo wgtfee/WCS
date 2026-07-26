@@ -10,13 +10,16 @@ public sealed class ObservedTransportExecutionEngine :
 {
     private readonly CoordinatedTransportExecutionEngine _inner;
     private readonly ITransportCycleAnalysisService _analysis;
+    private readonly bool _enabled;
 
     public ObservedTransportExecutionEngine(
         CoordinatedTransportExecutionEngine inner,
-        ITransportCycleAnalysisService analysis)
+        ITransportCycleAnalysisService analysis,
+        TransportCycleAnalysisOptions options)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _analysis = analysis ?? throw new ArgumentNullException(nameof(analysis));
+        _enabled = options?.Enabled ?? throw new ArgumentNullException(nameof(options));
     }
 
     public TransportExecutionResult Create(string requestId) =>
@@ -28,6 +31,7 @@ public sealed class ObservedTransportExecutionEngine :
     public TransportExecutionResult ApplyPositionFeedback(TransportPositionFeedback feedback)
     {
         ArgumentNullException.ThrowIfNull(feedback);
+        if (!_enabled) return _inner.ApplyPositionFeedback(feedback);
         var before = FindActiveByVehicle(feedback.VehicleId);
         var result = _inner.ApplyPositionFeedback(feedback);
         ObserveResult(before, result, nameof(ApplyPositionFeedback));
@@ -71,6 +75,7 @@ public sealed class ObservedTransportExecutionEngine :
         string operation,
         Func<TransportExecutionResult> action)
     {
+        if (!_enabled) return action();
         _inner.TryGet(requestId, out var before);
         var result = action();
         ObserveResult(before, result, operation);
