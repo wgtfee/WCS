@@ -180,15 +180,16 @@ jobs:
             | tee artifacts/transport-cycle-cycles.json >/dev/null
           [[ "$(jq 'length' artifacts/transport-cycle-cycles.json)" == "150" ]]
           [[ "$(jq '[.[] | select(.isSuccessful == true)] | length' artifacts/transport-cycle-cycles.json)" == "130" ]]
-          [[ "$(jq '[.[] | select(.terminalState == 5 and .isSequenceValid == false)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
-          [[ "$(jq '[.[] | select(.terminalState == 8)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
+          [[ "$(jq '[.[] | select((.requestId | contains("-INVALID-")) and .isSequenceValid == false)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
+          [[ "$(jq '[.[] | select((.requestId | contains("-FAULT-")) and .isSuccessful == false)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
 
           curl --fail --silent "$ASPNETCORE_URLS/api/transport/cycle-analysis/anomalies?maxCount=500" \
             | tee artifacts/transport-cycle-anomalies.json >/dev/null
           [[ "$(jq 'length' artifacts/transport-cycle-anomalies.json)" == "50" ]]
-          [[ "$(jq '[.[] | select(.kind == 0)] | length' artifacts/transport-cycle-anomalies.json)" == "10" ]]
-          [[ "$(jq '[.[] | select(.kind == 1)] | length' artifacts/transport-cycle-anomalies.json)" == "20" ]]
-          [[ "$(jq '[.[] | select(.kind == 2)] | length' artifacts/transport-cycle-anomalies.json)" == "20" ]]
+          [[ "$(jq '[.[] | select(.requestId | contains("-INVALID-"))] | length' artifacts/transport-cycle-anomalies.json)" == "10" ]]
+          [[ "$(jq '[.[] | select((.requestId | contains("-SLOW-")) and .phase != null)] | length' artifacts/transport-cycle-anomalies.json)" == "20" ]]
+          [[ "$(jq '[.[] | select((.requestId | contains("-SLOW-")) and .phase == null)] | length' artifacts/transport-cycle-anomalies.json)" == "20" ]]
+          [[ "$(jq '[.[] | select(.requestId | contains("-ALT-"))] | length' artifacts/transport-cycle-anomalies.json)" == "0" ]]
 
           sleep 2
           rss_after_kb="$(ps -o rss= -p "$pid" | tr -d ' ')"
