@@ -326,7 +326,11 @@ public sealed class PlcMlAnomalyEngine : IPlcMlAnomalyEngine
 
         try
         {
-            if (profile.CollectTrainingData && runtime.TrainingCount < profile.MaximumTrainingWindows)
+            var hasActiveModel = _models.ContainsKey(profile.ProfileId);
+            var mayCollectWithCurrentModel = !hasActiveModel || profile.CollectTrainingDataWhileModelActive;
+            if (profile.CollectTrainingData &&
+                mayCollectWithCurrentModel &&
+                runtime.TrainingCount < profile.MaximumTrainingWindows)
             {
                 await _trainingStore.AppendAsync(vector, profile.MaximumTrainingWindows, cancellationToken);
                 runtime.IncrementTrainingCount();
