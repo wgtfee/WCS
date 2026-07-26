@@ -43,7 +43,10 @@ public sealed class AnomalyFusionBackgroundService : BackgroundService
         try
         {
             await foreach (var evidence in _channel.Reader.ReadAllAsync(stoppingToken))
+            {
                 _engine.Process(evidence);
+                _channel.RecordRead();
+            }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
