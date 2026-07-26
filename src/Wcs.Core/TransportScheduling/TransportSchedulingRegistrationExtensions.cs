@@ -68,7 +68,7 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton<ITransportExecutionEngine>(sp =>
             sp.GetRequiredService<ObservedTransportExecutionEngine>());
         services.TryAddSingleton<ITransportReassignmentExecutionControl>(sp =>
-            sp.GetRequiredService<CoordinatedTransportExecutionEngine>());
+            sp.GetRequiredService<ObservedTransportExecutionEngine>());
         services.TryAddSingleton<ITransportDeadlockService, TransportDeadlockService>();
 
         services.TryAddSingleton<ITransportStateStore, InMemoryTransportStateStore>();
