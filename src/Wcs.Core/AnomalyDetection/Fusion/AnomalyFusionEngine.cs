@@ -73,17 +73,18 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
             }
             else
             {
-                if (state.Evidence.TryGetValue(evidence.EvidenceId, out var existing))
+                if (!state.Evidence.TryGetValue(evidence.EvidenceId, out var existing) ||
+                    existing.State == AnomalyEvidenceState.Recovered)
+                    return;
+
+                state.Evidence[evidence.EvidenceId] = existing with
                 {
-                    state.Evidence[evidence.EvidenceId] = existing with
-                    {
-                        State = AnomalyEvidenceState.Recovered,
-                        ObservedAtUtc = evidence.ObservedAtUtc,
-                        ExpiresAtUtc = evidence.ExpiresAtUtc ??
-                            evidence.ObservedAtUtc.AddSeconds(_options.RecoveredEvidenceRetentionSeconds)
-                    };
-                    Interlocked.Increment(ref _evidenceRecovered);
-                }
+                    State = AnomalyEvidenceState.Recovered,
+                    ObservedAtUtc = evidence.ObservedAtUtc,
+                    ExpiresAtUtc = evidence.ExpiresAtUtc ??
+                        evidence.ObservedAtUtc.AddSeconds(_options.RecoveredEvidenceRetentionSeconds)
+                };
+                Interlocked.Increment(ref _evidenceRecovered);
             }
 
             transitionSnapshot = EvaluateLocked(state, evidence.ObservedAtUtc);
@@ -118,7 +119,11 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
                         Interlocked.Increment(ref _evidenceExpired);
                 }
 
-                if (changed) transitionSnapshot = EvaluateLocked(state, utcNow);
+                // 正式 Warning/Alarm 在所有证据恢复后仍需由维护周期推进连续恢复计数，
+                // 不依赖重复发送恢复事件。活动正式状态也会按维护节拍推进连续 Alarm 评估。
+                if (changed || state.Status >= FusedHealthStatus.Warning)
+                    transitionSnapshot = EvaluateLocked(state, utcNow);
+
                 removeAsset = state.Evidence.Count == 0 &&
                     state.Status == FusedHealthStatus.Normal &&
                     utcNow - state.LastEvaluatedAtUtc >
