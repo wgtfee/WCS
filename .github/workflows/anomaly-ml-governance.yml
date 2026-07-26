@@ -128,10 +128,14 @@ jobs:
             --request POST "$ASPNETCORE_URLS/api/anomaly/ml/train/ML-CV-CURRENT?datasetVersion=$dataset&requestedBy=governance-ci" \
             --max-time 900 | tee artifacts/governance-training-result.json
           [[ "$(jq -r '.datasetVersion' artifacts/governance-training-result.json)" == "$dataset" ]]
-          [[ "$(jq -r '.approvalStatus' artifacts/governance-training-result.json)" == "pending" ]]
+          [[ "$(jq -r '.approvalStatus' artifacts/governance-training-result.json)" == "0" ]]
           [[ "$(jq -r '.activated' artifacts/governance-training-result.json)" == "false" ]]
           version="$(jq -r '.modelVersion' artifacts/governance-training-result.json)"
           echo "$version" > artifacts/governance-model-version.txt
+
+          model_path="artifacts/governance-models/ML-CV-CURRENT/model-$version.json"
+          test -s "$model_path"
+          jq -e '.calibrationMeanScore > 0 and .calibrationP95Score > 0' "$model_path" >/dev/null
 
           curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/governance-pending-status.json
           [[ "$(jq -r '.[0].activeModelVersion' artifacts/governance-pending-status.json)" == "null" ]]
@@ -145,12 +149,12 @@ jobs:
             --header 'content-type: application/json' \
             --data '{"actor":"independent-reviewer","comment":"CI governance approval","activate":true}' \
             | tee artifacts/governance-approval.json
-          [[ "$(jq -r '.approvalStatus' artifacts/governance-approval.json)" == "approved" ]]
+          [[ "$(jq -r '.approvalStatus' artifacts/governance-approval.json)" == "1" ]]
           [[ "$(jq -r '.decidedBy' artifacts/governance-approval.json)" == "independent-reviewer" ]]
 
           curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/governance-approved-status.json
           [[ "$(jq -r '.[0].activeModelVersion' artifacts/governance-approved-status.json)" == "$version" ]]
-          [[ "$(jq -r '.[0].deploymentMode' artifacts/governance-approved-status.json)" == "shadow" ]]
+          [[ "$(jq -r '.[0].deploymentMode' artifacts/governance-approved-status.json)" == "1" ]]
 
       - name: Run Shadow candidates and human review
         shell: bash
@@ -179,11 +183,11 @@ jobs:
 
           mapfile -t ids < <(jq -r '.[].candidateId' artifacts/governance-candidates.json)
           for index in "${!ids[@]}"; do
-            if (( index < 60 )); then decision="TruePositive"; else decision="FalsePositive"; fi
+            if (( index < 60 )); then decision=1; else decision=2; fi
             curl --fail --silent --show-error \
               --request POST "$ASPNETCORE_URLS/api/anomaly/ml/governance/candidates/${ids[$index]}/review" \
               --header 'content-type: application/json' \
-              --data "{\"decision\":\"$decision\",\"reviewedBy\":\"operator-a\",\"comment\":\"governance CI\"}" \
+              --data "{\"decision\":$decision,\"reviewedBy\":\"operator-a\",\"comment\":\"governance CI\"}" \
               >/dev/null
           done
 
@@ -197,7 +201,8 @@ jobs:
 
           curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/governance/drift/ML-CV-CURRENT" \
             | tee artifacts/governance-drift.json
-          jq -e '.sampleCount >= 100 and .modelVersion != null' artifacts/governance-drift.json >/dev/null
+          jq -e '.sampleCount >= 100 and .modelVersion != null and .baselineMeanScore > 0 and .baselineP95Score > 0' \
+            artifacts/governance-drift.json >/dev/null
 
       - name: Verify Shadow SQL isolation
         shell: bash
@@ -244,7 +249,7 @@ jobs:
           for attempt in {1..90}; do
             if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
               curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/governance-canary-status.json
-              [[ "$(jq -r '.[0].deploymentMode' artifacts/governance-canary-status.json)" == "canary" ]]
+              [[ "$(jq -r '.[0].deploymentMode' artifacts/governance-canary-status.json)" == "2" ]]
               [[ "$(jq -r '.[0].canaryPercentage' artifacts/governance-canary-status.json)" == "25" ]]
               exit 0
             fi
@@ -282,7 +287,7 @@ jobs:
             sqlcmd=/opt/mssql-tools18/bin/sqlcmd
             if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
             "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_AnomalyGovernance -h -1 -W \
-              -Q "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE '''MLCV05%'''"
+              -Q "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE '\''MLCV05%'\''"
           ' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1)"
           [[ "$formal" == "$active" ]]
           printf 'active=%s\nshadow=%s\nformal=%s\n' "$active" "$shadow" "$formal" \
@@ -292,8 +297,9 @@ jobs:
         if: always()
         shell: bash
         run: |
+          test -s artifacts/governance-shadow-host.log
           for log in artifacts/governance-shadow-host.log artifacts/governance-canary-host.log; do
-            test -s "$log"
+            [[ -f "$log" ]] || continue
             if grep -Eqi 'OutOfMemory|Unhandled exception|duplicate key|Stack overflow|failed to load.*model|PLC anomaly persistence failed after retries' "$log"; then
               grep -Eni -C 5 'OutOfMemory|Unhandled exception|duplicate key|Stack overflow|failed to load.*model|PLC anomaly persistence failed after retries' "$log"
               exit 1
