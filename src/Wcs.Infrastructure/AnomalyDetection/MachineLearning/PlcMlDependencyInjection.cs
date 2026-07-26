@@ -9,6 +9,16 @@ public static class PlcMlDependencyInjection
 {
     public static IServiceCollection AddPlcMachineLearning(
         this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var configured = configuration.GetConnectionString("WcsDb");
+        if (string.IsNullOrWhiteSpace(configured))
+            throw new InvalidOperationException("WcsDb connection string is required.");
+        return AddPlcMachineLearning(services, configuration, configured);
+    }
+
+    public static IServiceCollection AddPlcMachineLearning(
+        this IServiceCollection services,
         IConfiguration configuration,
         string connectionString)
     {
@@ -51,14 +61,8 @@ public static class PlcMlDependencyInjection
             profile.SampleSize = Math.Clamp(profile.SampleSize, 16, 4_096);
             profile.Contamination = Math.Clamp(profile.Contamination, 0.0001, 0.49);
             profile.ObserveThreshold = Math.Clamp(profile.ObserveThreshold, 0, 1);
-            profile.WarningThreshold = Math.Clamp(
-                Math.Max(profile.WarningThreshold, profile.ObserveThreshold),
-                0,
-                1);
-            profile.AlarmThreshold = Math.Clamp(
-                Math.Max(profile.AlarmThreshold, profile.WarningThreshold),
-                0,
-                1);
+            profile.WarningThreshold = Math.Clamp(Math.Max(profile.WarningThreshold, profile.ObserveThreshold), 0, 1);
+            profile.AlarmThreshold = Math.Clamp(Math.Max(profile.AlarmThreshold, profile.WarningThreshold), 0, 1);
             profile.ConsecutiveAbnormalCount = Math.Clamp(profile.ConsecutiveAbnormalCount, 1, 1_000);
             profile.ConsecutiveRecoveryCount = Math.Clamp(profile.ConsecutiveRecoveryCount, 1, 10_000);
             profile.CanaryPercentage = Math.Clamp(profile.CanaryPercentage, 0, 100);
@@ -94,6 +98,7 @@ public static class PlcMlDependencyInjection
         services.AddSingleton<PlcMlAnomalyEngine>();
         services.AddSingleton<IPlcMlAnomalyEngine>(sp => sp.GetRequiredService<PlcMlAnomalyEngine>());
         services.AddSingleton<IPlcMlGovernanceService, PlcMlGovernanceService>();
+        services.AddHostedService(_ => new PlcMlGovernanceSchemaService(connectionString));
         services.AddHostedService<PlcMlAnomalyBackgroundService>();
         return services;
     }
