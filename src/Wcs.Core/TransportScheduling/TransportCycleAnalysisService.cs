@@ -60,6 +60,7 @@ public sealed class TransportCycleAnalysisService : ITransportCycleAnalysisServi
             var transitionAt = MaxUtc(tracker.StateEnteredAtUtc, after.UpdatedAtUtc);
             if (!IsAllowedTransition(tracker.CurrentState, after.State))
             {
+                tracker.IsSequenceValid = false;
                 sequenceAnomaly = new TransportCycleAnomalyRecord
                 {
                     AnomalyId = Guid.NewGuid().ToString("N"),
@@ -148,7 +149,8 @@ public sealed class TransportCycleAnalysisService : ITransportCycleAnalysisServi
             CurrentState = snapshot.State,
             StateEnteredAtUtc = MaxUtc(startedAt, snapshot.UpdatedAtUtc),
             LastObservedAtUtc = MaxUtc(startedAt, snapshot.UpdatedAtUtc),
-            LastError = snapshot.LastError
+            LastError = snapshot.LastError,
+            IsSequenceValid = true
         };
     }
 
@@ -182,6 +184,7 @@ public sealed class TransportCycleAnalysisService : ITransportCycleAnalysisServi
         TerminalState = snapshot.State,
         TotalDurationMilliseconds = Math.Max(0, (endedAtUtc - tracker.StartedAtUtc).TotalMilliseconds),
         Phases = tracker.Phases.ToArray(),
+        IsSequenceValid = tracker.IsSequenceValid,
         LastError = snapshot.LastError ?? tracker.LastError
     };
 
@@ -340,6 +343,7 @@ public sealed class TransportCycleAnalysisService : ITransportCycleAnalysisServi
         public required TransportExecutionState CurrentState { get; set; }
         public required DateTime StateEnteredAtUtc { get; set; }
         public required DateTime LastObservedAtUtc { get; set; }
+        public required bool IsSequenceValid { get; set; }
         public string? LastError { get; set; }
         public List<TransportCyclePhaseDuration> Phases { get; } = new();
         public Dictionary<TransportExecutionState, int> Occurrences { get; } = new();
