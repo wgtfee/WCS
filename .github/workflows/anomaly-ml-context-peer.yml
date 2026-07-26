@@ -1,0 +1,287 @@
+name: WCS PLC Anomaly ML Context Peer
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/anomaly-ml-context-peer.yml"
+      - "src/Wcs.Core/AnomalyDetection/MachineLearning/**"
+      - "src/Wcs.Core/AnomalyDetection/PlcAnomalyModels.cs"
+      - "src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/**"
+      - "src/Wcs.Host/Controllers/PlcMlContextPeer*.cs"
+      - "src/Wcs.Host/appsettings.MlLoadTest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-plc-anomaly-ml-context-peer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  raw-event-context-peer-sql:
+    name: RawSignal context, peer MAD, governance, and SQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_PeerTest!2026"
+        ports:
+          - 1433:1433
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: MlLoadTest
+      DOTNET_ENVIRONMENT: MlLoadTest
+      ASPNETCORE_URLS: http://127.0.0.1:5093
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_AnomalyPeer;User Id=sa;Password=Wcs_PeerTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0"
+      Storage__Telemetry__Provider: Disabled
+      AnomalyDetection__MachineLearning__ModelDirectory: "${{ github.workspace }}/artifacts/peer-models"
+      AnomalyDetection__MachineLearning__TrainingDirectory: "${{ github.workspace }}/artifacts/peer-training"
+      AnomalyDetection__MachineLearning__MaintenanceIntervalMs: "60000"
+      AnomalyDetection__MachineLearning__Profiles__0__CollectTrainingData: "false"
+      AnomalyDetection__MachineLearning__Profiles__0__PeerComparisonEnabled: "true"
+      AnomalyDetection__MachineLearning__Profiles__0__MinimumPeerDevices: "10"
+      AnomalyDetection__MachineLearning__Profiles__0__PeerBucketWaitMs: "0"
+      AnomalyDetection__MachineLearning__Profiles__0__ConsecutivePeerAbnormalCount: "1"
+      AnomalyDetection__MachineLearning__Profiles__0__ConsecutivePeerRecoveryCount: "1"
+      AnomalyDetection__MachineLearning__Profiles__0__PeerRaiseAlarm: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build Host
+        run: |
+          mkdir -p artifacts
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_AnomalyPeer]"
+          '
+
+      - name: Define Host helpers
+        shell: bash
+        run: |
+          cat > artifacts/peer-helpers.sh <<'EOF'
+          start_host() {
+            local mode="$1"
+            local canary="$2"
+            local log="$3"
+            pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+            env AnomalyDetection__MachineLearning__Profiles__0__DeploymentMode="$mode" \
+                AnomalyDetection__MachineLearning__Profiles__0__CanaryPercentage="$canary" \
+                nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/$log" 2>&1 &
+            echo "$!" > "$GITHUB_WORKSPACE/artifacts/peer-host.pid"
+            popd >/dev/null
+            for attempt in {1..90}; do
+              if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+                curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/context-peer/status" \
+                  | tee "artifacts/${log%.log}-status.json"
+                return 0
+              fi
+              if ! kill -0 "$(cat artifacts/peer-host.pid)" 2>/dev/null; then
+                cat "artifacts/$log"
+                return 1
+              fi
+              sleep 2
+            done
+            cat "artifacts/$log"
+            return 1
+          }
+
+          stop_host() {
+            if [[ ! -f artifacts/peer-host.pid ]]; then return 0; fi
+            local pid
+            pid="$(cat artifacts/peer-host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..30}; do
+              if ! kill -0 "$pid" 2>/dev/null; then return 0; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          }
+
+          query_sql() {
+            local sql_container="${{ job.services.sqlserver.id }}"
+            docker exec "$sql_container" bash -lc "
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x \"\$sqlcmd\" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              \"\$sqlcmd\" -S localhost -U sa -P \"\$MSSQL_SA_PASSWORD\" -C -d WCS_AnomalyPeer -h -1 -W -Q \"$1\"
+            " | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1
+          }
+          EOF
+
+      - name: Verify Shadow candidate isolation
+        shell: bash
+        run: |
+          source artifacts/peer-helpers.sh
+          start_host Shadow 0 peer-shadow-host.log
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/context-peer/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"anomaly","groups":20,"devicesPerGroup":10,"windows":1,"outlierIndex":9,"deviceOffset":500000,"startOffsetSeconds":100000,"contextPrefix":"SHADOW","concurrency":8}' \
+            --max-time 600 | tee artifacts/peer-shadow-anomaly.json
+          [[ "$(jq -r '.bucketDelta' artifacts/peer-shadow-anomaly.json)" == "20" ]]
+          [[ "$(jq -r '.deviceEvaluationDelta' artifacts/peer-shadow-anomaly.json)" == "200" ]]
+          [[ "$(jq -r '.raisedDelta' artifacts/peer-shadow-anomaly.json)" == "20" ]]
+          [[ "$(jq -r '.shadowRaisedDelta' artifacts/peer-shadow-anomaly.json)" == "20" ]]
+          [[ "$(jq -r '.activeRaisedDelta' artifacts/peer-shadow-anomaly.json)" == "0" ]]
+          [[ "$(jq -r '.failureDelta' artifacts/peer-shadow-anomaly.json)" == "0" ]]
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/context-peer/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"recovery","groups":20,"devicesPerGroup":10,"windows":1,"outlierIndex":9,"deviceOffset":500000,"startOffsetSeconds":100001,"contextPrefix":"SHADOW","concurrency":8}' \
+            --max-time 600 | tee artifacts/peer-shadow-recovery.json
+          [[ "$(jq -r '.recoveredDelta' artifacts/peer-shadow-recovery.json)" == "20" ]]
+          [[ "$(jq -r '.failureDelta' artifacts/peer-shadow-recovery.json)" == "0" ]]
+
+          for attempt in {1..60}; do
+            candidates="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate WHERE ModelVersion='peer-mad-v1' AND DeviceId >= 'MLCV500000' AND DeviceId <= 'MLCV500199'")"
+            recovered="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate WHERE ModelVersion='peer-mad-v1' AND DeviceId >= 'MLCV500000' AND DeviceId <= 'MLCV500199' AND IsActive=0")"
+            formal="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type=6 AND DeviceId >= 'MLCV500000' AND DeviceId <= 'MLCV500199'")"
+            if [[ "$candidates" == "20" && "$recovered" == "20" && "$formal" == "0" ]]; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then exit 1; fi
+            sleep 1
+          done
+          printf 'candidates=%s\nrecovered=%s\nformal=%s\n' "$candidates" "$recovered" "$formal" \
+            | tee artifacts/peer-shadow-sql.txt
+          stop_host
+
+      - name: Verify Active formal lifecycle
+        shell: bash
+        run: |
+          source artifacts/peer-helpers.sh
+          start_host Active 100 peer-active-host.log
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/context-peer/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"anomaly","groups":20,"devicesPerGroup":10,"windows":1,"outlierIndex":9,"deviceOffset":600000,"startOffsetSeconds":200000,"contextPrefix":"ACTIVE","concurrency":8}' \
+            --max-time 600 | tee artifacts/peer-active-anomaly.json
+          [[ "$(jq -r '.raisedDelta' artifacts/peer-active-anomaly.json)" == "20" ]]
+          [[ "$(jq -r '.activeRaisedDelta' artifacts/peer-active-anomaly.json)" == "20" ]]
+          [[ "$(jq -r '.shadowRaisedDelta' artifacts/peer-active-anomaly.json)" == "0" ]]
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/context-peer/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"recovery","groups":20,"devicesPerGroup":10,"windows":1,"outlierIndex":9,"deviceOffset":600000,"startOffsetSeconds":200001,"contextPrefix":"ACTIVE","concurrency":8}' \
+            --max-time 600 | tee artifacts/peer-active-recovery.json
+          [[ "$(jq -r '.recoveredDelta' artifacts/peer-active-recovery.json)" == "20" ]]
+
+          for attempt in {1..60}; do
+            candidates="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate WHERE ModelVersion='peer-mad-v1' AND DeviceId >= 'MLCV600000' AND DeviceId <= 'MLCV600199'")"
+            routed="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate WHERE ModelVersion='peer-mad-v1' AND DeviceId >= 'MLCV600000' AND DeviceId <= 'MLCV600199' AND RoutedToActiveLifecycle=1")"
+            formal="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type=6 AND DeviceId >= 'MLCV600000' AND DeviceId <= 'MLCV600199'")"
+            recovered="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type=6 AND DeviceId >= 'MLCV600000' AND DeviceId <= 'MLCV600199' AND Status=1")"
+            active="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type=6 AND DeviceId >= 'MLCV600000' AND DeviceId <= 'MLCV600199' AND Status=0")"
+            if [[ "$candidates" == "20" && "$routed" == "20" && "$formal" == "20" && "$recovered" == "20" && "$active" == "0" ]]; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then exit 1; fi
+            sleep 1
+          done
+          printf 'candidates=%s\nrouted=%s\nformal=%s\nrecovered=%s\nactive=%s\n' \
+            "$candidates" "$routed" "$formal" "$recovered" "$active" | tee artifacts/peer-active-sql.txt
+          stop_host
+
+      - name: Verify 25 percent Canary split
+        shell: bash
+        run: |
+          source artifacts/peer-helpers.sh
+          start_host Canary 25 peer-canary-host.log
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/context-peer/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"anomaly","groups":40,"devicesPerGroup":10,"windows":1,"outlierIndex":9,"deviceOffset":700000,"startOffsetSeconds":300000,"contextPrefix":"CANARY","concurrency":8}' \
+            --max-time 600 | tee artifacts/peer-canary-anomaly.json
+          [[ "$(jq -r '.raisedDelta' artifacts/peer-canary-anomaly.json)" == "40" ]]
+          [[ "$(jq -r '.failureDelta' artifacts/peer-canary-anomaly.json)" == "0" ]]
+          active_delta="$(jq -r '.activeRaisedDelta' artifacts/peer-canary-anomaly.json)"
+          shadow_delta="$(jq -r '.shadowRaisedDelta' artifacts/peer-canary-anomaly.json)"
+          (( active_delta > 0 && active_delta < 40 ))
+          (( active_delta + shadow_delta == 40 ))
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/context-peer/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"recovery","groups":40,"devicesPerGroup":10,"windows":1,"outlierIndex":9,"deviceOffset":700000,"startOffsetSeconds":300001,"contextPrefix":"CANARY","concurrency":8}' \
+            --max-time 600 | tee artifacts/peer-canary-recovery.json
+          [[ "$(jq -r '.recoveredDelta' artifacts/peer-canary-recovery.json)" == "40" ]]
+
+          for attempt in {1..60}; do
+            candidates="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate WHERE ModelVersion='peer-mad-v1' AND DeviceId >= 'MLCV700000' AND DeviceId <= 'MLCV700399'")"
+            routed="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate WHERE ModelVersion='peer-mad-v1' AND DeviceId >= 'MLCV700000' AND DeviceId <= 'MLCV700399' AND RoutedToActiveLifecycle=1")"
+            candidate_recovered="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate WHERE ModelVersion='peer-mad-v1' AND DeviceId >= 'MLCV700000' AND DeviceId <= 'MLCV700399' AND IsActive=0")"
+            formal="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type=6 AND DeviceId >= 'MLCV700000' AND DeviceId <= 'MLCV700399'")"
+            formal_recovered="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type=6 AND DeviceId >= 'MLCV700000' AND DeviceId <= 'MLCV700399' AND Status=1")"
+            if [[ "$candidates" == "40" && "$candidate_recovered" == "40" && "$formal" == "$routed" && "$formal_recovered" == "$routed" ]]; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then exit 1; fi
+            sleep 1
+          done
+          (( routed > 0 && routed < 40 ))
+          [[ "$routed" == "$active_delta" ]]
+          printf 'candidates=%s\nrouted=%s\nformal=%s\ncandidate_recovered=%s\nformal_recovered=%s\n' \
+            "$candidates" "$routed" "$formal" "$candidate_recovered" "$formal_recovered" \
+            | tee artifacts/peer-canary-sql.txt
+          stop_host
+
+      - name: Validate logs
+        if: always()
+        shell: bash
+        run: |
+          failed=0
+          for log in artifacts/peer-*-host.log; do
+            [[ -f "$log" ]] || continue
+            if grep -Eqi 'Unhandled exception|fail:|Stack overflow|OutOfMemoryException|fatal' "$log"; then
+              echo "Unexpected error in $log"
+              grep -Ein 'Unhandled exception|fail:|Stack overflow|OutOfMemoryException|fatal' "$log" || true
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/peer-helpers.sh ]]; then
+            source artifacts/peer-helpers.sh
+            stop_host
+          fi
+
+      - name: Upload contextual peer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-anomaly-ml-context-peer-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 30
