@@ -15,6 +15,15 @@ public sealed class PlcMlSignalDefinition
     public PlcMlSignalKind Kind { get; set; }
 }
 
+/// <summary>不进入 Isolation Forest 特征，只用于区分运行模式、产品、负载等上下文。</summary>
+public sealed class PlcMlContextSignalDefinition
+{
+    public string Name { get; set; } = string.Empty;
+    public string Pattern { get; set; } = string.Empty;
+    public string DefaultValue { get; set; } = "UNKNOWN";
+    public int MaximumAgeSeconds { get; set; } = 300;
+}
+
 /// <summary>一类设备的训练和推理配置，一个 Profile 可匹配多台同构设备。</summary>
 public sealed class PlcMlProfile
 {
@@ -60,6 +69,19 @@ public sealed class PlcMlProfile
     public int DriftSnapshotIntervalSeconds { get; set; } = 60;
 
     public List<PlcMlSignalDefinition> Signals { get; set; } = new();
+    public List<PlcMlContextSignalDefinition> ContextSignals { get; set; } = new();
+
+    /// <summary>同一上下文、同一窗口内的同类设备 Robust Median/MAD 横向对比。</summary>
+    public bool PeerComparisonEnabled { get; set; }
+    public int MinimumPeerDevices { get; set; } = 5;
+    public int PeerBucketWaitMs { get; set; } = 1_000;
+    public int PeerBucketRetentionSeconds { get; set; } = 120;
+    public double PeerMadMultiplier { get; set; } = 6.0;
+    public double MinimumPeerMad { get; set; } = 0.01;
+    public int ConsecutivePeerAbnormalCount { get; set; } = 2;
+    public int ConsecutivePeerRecoveryCount { get; set; } = 3;
+    public PlcAnomalySeverity PeerSeverity { get; set; } = PlcAnomalySeverity.Warning;
+    public bool PeerRaiseAlarm { get; set; } = true;
 }
 
 public sealed class PlcMlAnomalyOptions
@@ -85,6 +107,7 @@ public sealed record PlcFeatureVector
     public required string[] FeatureNames { get; init; }
     public required double[] Values { get; init; }
     public int SourceSampleCount { get; init; }
+    public string ContextKey { get; init; } = "default";
 }
 
 public sealed class IsolationForestNode
@@ -170,11 +193,35 @@ public sealed record PlcMlProfileStatus
     public int ActiveAnomalies { get; init; }
     public int TrackedWindows { get; init; }
     public int TrackedInferenceStates { get; init; }
+    public int TrackedContextDevices { get; init; }
+    public long PeerBucketsEvaluated { get; init; }
+    public long PeerDevicesEvaluated { get; init; }
+    public long PeerRaised { get; init; }
+    public long PeerRecovered { get; init; }
+    public long PeerShadowRaised { get; init; }
+    public long PeerActiveRaised { get; init; }
+    public long PeerSkippedBuckets { get; init; }
+    public int TrackedPeerBuckets { get; init; }
+    public int TrackedPeerStates { get; init; }
     public PlcMlDriftStatus DriftStatus { get; init; }
     public double DriftRatio { get; init; }
     public int DriftSampleCount { get; init; }
     public long Failures { get; init; }
     public string? LastError { get; init; }
+}
+
+public sealed record PlcMlPeerStatus
+{
+    public long BucketsEvaluated { get; init; }
+    public long DevicesEvaluated { get; init; }
+    public long Raised { get; init; }
+    public long Recovered { get; init; }
+    public long ShadowRaised { get; init; }
+    public long ActiveRaised { get; init; }
+    public long SkippedBuckets { get; init; }
+    public long Failures { get; init; }
+    public int TrackedBuckets { get; init; }
+    public int TrackedStates { get; init; }
 }
 
 public interface IPlcMlModelStore
