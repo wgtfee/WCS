@@ -75,9 +75,31 @@ public static class DependencyInjection
                 100,
                 50000)
         };
+        var cycleOptions = configuration
+            .GetSection("TransportCycleAnalysis")
+            .Get<TransportCycleAnalysisOptions>() ?? new TransportCycleAnalysisOptions();
+        cycleOptions.MinimumBaselineCycles = Math.Clamp(cycleOptions.MinimumBaselineCycles, 3, 100_000);
+        cycleOptions.MaximumBaselineCyclesPerContext = Math.Clamp(
+            Math.Max(cycleOptions.MaximumBaselineCyclesPerContext, cycleOptions.MinimumBaselineCycles),
+            cycleOptions.MinimumBaselineCycles,
+            1_000_000);
+        cycleOptions.MaximumTrackedExecutions = Math.Clamp(cycleOptions.MaximumTrackedExecutions, 100, 1_000_000);
+        cycleOptions.MaximumCompletedCycles = Math.Clamp(cycleOptions.MaximumCompletedCycles, 100, 1_000_000);
+        cycleOptions.MaximumAnomalies = Math.Clamp(cycleOptions.MaximumAnomalies, 100, 1_000_000);
+        cycleOptions.MadMultiplier = Math.Clamp(cycleOptions.MadMultiplier, 1, 100);
+        cycleOptions.MinimumMadMilliseconds = Math.Clamp(cycleOptions.MinimumMadMilliseconds, 0.001, 86_400_000);
+        cycleOptions.MinimumTotalDurationMilliseconds = Math.Clamp(
+            cycleOptions.MinimumTotalDurationMilliseconds,
+            0,
+            86_400_000);
+        cycleOptions.MinimumPhaseDurationMilliseconds = Math.Clamp(
+            cycleOptions.MinimumPhaseDurationMilliseconds,
+            0,
+            86_400_000);
 
         services.Replace(ServiceDescriptor.Singleton<TransportResilienceOptions>(resilienceOptions));
         services.Replace(ServiceDescriptor.Singleton<TransportSimulationOptions>(simulationOptions));
+        services.Replace(ServiceDescriptor.Singleton<TransportCycleAnalysisOptions>(cycleOptions));
         services.AddSingleton<IDatabaseInitializer>(sp =>
             new DatabaseInitializer(
                 connectionString,

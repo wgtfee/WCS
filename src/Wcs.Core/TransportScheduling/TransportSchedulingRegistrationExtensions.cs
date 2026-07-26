@@ -19,6 +19,10 @@ public static class TransportSchedulingRegistrationExtensions
         services.TryAddSingleton(new TransportObservabilityOptions());
         services.TryAddSingleton(new TransportResilienceOptions());
         services.TryAddSingleton(new TransportSimulationOptions());
+        services.TryAddSingleton(new TransportCycleAnalysisOptions());
+        services.TryAddSingleton<TransportCycleAnalysisService>();
+        services.TryAddSingleton<ITransportCycleAnalysisService>(sp =>
+            sp.GetRequiredService<TransportCycleAnalysisService>());
         services.TryAddSingleton<TransportTelemetryService>();
         services.TryAddSingleton<ITransportTelemetryService>(sp =>
             sp.GetRequiredService<TransportTelemetryService>());
@@ -60,10 +64,11 @@ public static class TransportSchedulingRegistrationExtensions
             sp.GetRequiredService<ObservableTransportProductionDispatchService>());
         services.TryAddSingleton<InMemoryTransportExecutionEngine>();
         services.TryAddSingleton<CoordinatedTransportExecutionEngine>();
+        services.TryAddSingleton<ObservedTransportExecutionEngine>();
         services.TryAddSingleton<ITransportExecutionEngine>(sp =>
-            sp.GetRequiredService<CoordinatedTransportExecutionEngine>());
+            sp.GetRequiredService<ObservedTransportExecutionEngine>());
         services.TryAddSingleton<ITransportReassignmentExecutionControl>(sp =>
-            sp.GetRequiredService<CoordinatedTransportExecutionEngine>());
+            sp.GetRequiredService<ObservedTransportExecutionEngine>());
         services.TryAddSingleton<ITransportDeadlockService, TransportDeadlockService>();
 
         services.TryAddSingleton<ITransportStateStore, InMemoryTransportStateStore>();
