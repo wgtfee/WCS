@@ -180,7 +180,7 @@ jobs:
             | tee artifacts/transport-cycle-cycles.json >/dev/null
           [[ "$(jq 'length' artifacts/transport-cycle-cycles.json)" == "150" ]]
           [[ "$(jq '[.[] | select(.isSuccessful == true)] | length' artifacts/transport-cycle-cycles.json)" == "130" ]]
-          [[ "$(jq '[.[] | select(.terminalState == 2 and .isSequenceValid == false)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
+          [[ "$(jq '[.[] | select(.terminalState == 5 and .isSequenceValid == false)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
           [[ "$(jq '[.[] | select(.terminalState == 8)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
 
           curl --fail --silent "$ASPNETCORE_URLS/api/transport/cycle-analysis/anomalies?maxCount=500" \
