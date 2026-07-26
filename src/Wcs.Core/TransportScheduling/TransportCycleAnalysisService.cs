@@ -36,14 +36,22 @@ public sealed class TransportCycleAnalysisService : ITransportCycleAnalysisServi
         ArgumentNullException.ThrowIfNull(after);
         if (!_options.Enabled || string.IsNullOrWhiteSpace(after.RequestId)) return;
 
-        var existed = _trackers.TryGetValue(after.RequestId, out var tracker);
-        if (!existed && _trackers.Count >= _options.MaximumTrackedExecutions)
+        if (!_trackers.TryGetValue(after.RequestId, out var tracker))
         {
-            Interlocked.Increment(ref _droppedExecutions);
-            return;
+            // 已经完成一次周期后，后续对 Faulted/Completed/Cancelled 的重复操作不应创建第二条周期。
+            if (before is not null && IsCycleTerminal(before.State)) return;
+            // 功能在终态之后才启用时没有完整轨迹，宁可忽略，也不能制造零时长正常基线。
+            if (before is null && IsCycleTerminal(after.State)) return;
+            if (_trackers.Count >= _options.MaximumTrackedExecutions)
+            {
+                Interlocked.Increment(ref _droppedExecutions);
+                return;
+            }
+
+            var seed = before ?? after;
+            tracker = _trackers.GetOrAdd(after.RequestId, _ => CreateTracker(seed));
         }
 
-        tracker ??= _trackers.GetOrAdd(after.RequestId, _ => CreateTracker(after));
         TransportCycleRecord? completed = null;
         TransportCycleAnomalyRecord? sequenceAnomaly = null;
 
@@ -297,8 +305,8 @@ public sealed class TransportCycleAnalysisService : ITransportCycleAnalysisServi
     {
         TransportExecutionState.Assigned => to is
             TransportExecutionState.MovingToPickup or TransportExecutionState.Loading or
-            TransportExecutionState.Unloading or TransportExecutionState.Faulted or
-            TransportExecutionState.Cancelled,
+            TransportExecutionState.Unloading or TransportExecutionState.Paused or
+            TransportExecutionState.Faulted or TransportExecutionState.Cancelled,
         TransportExecutionState.MovingToPickup => to is
             TransportExecutionState.Loading or TransportExecutionState.WaitingForRoute or
             TransportExecutionState.Paused or TransportExecutionState.Faulted or
