@@ -37,17 +37,28 @@ public sealed class FilePlcMlModelStore : IPlcMlModelStore
         return model;
     }
 
-    public async Task SaveAndActivateAsync(
+    public async Task SaveVersionAsync(
         PlcIsolationForestModel model,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(model);
-        var directory = GetProfileDirectory(model.ProfileId);
-        Directory.CreateDirectory(directory);
-        var versionPath = GetVersionPath(model.ProfileId, model.Version);
-        await WriteAtomicAsync(versionPath, model, cancellationToken);
+        Directory.CreateDirectory(GetProfileDirectory(model.ProfileId));
+        await WriteAtomicAsync(GetVersionPath(model.ProfileId, model.Version), model, cancellationToken);
+    }
+
+    public async Task ActivateAsync(
+        PlcIsolationForestModel model,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        await SaveVersionAsync(model, cancellationToken);
         await WriteAtomicAsync(GetActivePath(model.ProfileId), model, cancellationToken);
     }
+
+    public async Task SaveAndActivateAsync(
+        PlcIsolationForestModel model,
+        CancellationToken cancellationToken = default) =>
+        await ActivateAsync(model, cancellationToken);
 
     public async Task<IReadOnlyList<PlcMlModelVersionInfo>> ListAsync(
         string profileId,
