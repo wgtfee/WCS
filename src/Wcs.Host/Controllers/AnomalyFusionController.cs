@@ -8,14 +8,22 @@ using Wcs.Core.AnomalyDetection.Fusion;
 public sealed class AnomalyFusionController : ControllerBase
 {
     private readonly IAnomalyFusionEngine _engine;
+    private readonly IAnomalyEvidenceIngressStatus _ingress;
 
-    public AnomalyFusionController(IAnomalyFusionEngine engine)
+    public AnomalyFusionController(
+        IAnomalyFusionEngine engine,
+        IAnomalyEvidenceIngressStatus ingress)
     {
         _engine = engine;
+        _ingress = ingress;
     }
 
     [HttpGet("status")]
-    public ActionResult<AnomalyFusionStatus> GetStatus() => Ok(_engine.GetStatus());
+    public ActionResult GetStatus() => Ok(new
+    {
+        Fusion = _engine.GetStatus(),
+        Ingress = _ingress.GetStatus()
+    });
 
     [HttpGet("assets")]
     public ActionResult<IReadOnlyList<FusedHealthSnapshot>> GetAssets(
