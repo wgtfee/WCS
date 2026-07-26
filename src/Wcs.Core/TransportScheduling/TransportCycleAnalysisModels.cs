@@ -41,8 +41,10 @@ public sealed record TransportCycleRecord
     public required TransportExecutionState TerminalState { get; init; }
     public required double TotalDurationMilliseconds { get; init; }
     public required IReadOnlyList<TransportCyclePhaseDuration> Phases { get; init; }
+    public required bool IsSequenceValid { get; init; }
     public string? LastError { get; init; }
-    public bool IsSuccessful => TerminalState == TransportExecutionState.Completed;
+    public bool IsSuccessful =>
+        TerminalState == TransportExecutionState.Completed && IsSequenceValid;
 }
 
 public sealed record TransportCycleAnomalyRecord
