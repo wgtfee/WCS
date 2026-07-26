@@ -22,10 +22,15 @@ public sealed class PlcMlAnomalyController : ControllerBase
     [HttpPost("train/{profileId}")]
     public async Task<ActionResult<PlcMlTrainingResult>> Train(
         string profileId,
+        [FromBody] PlcMlTrainRequest? request,
         CancellationToken cancellationToken)
     {
         if (!_options.ManagementApiEnabled) return NotFound();
-        return await ExecuteAsync(() => _engine.TrainAsync(profileId, cancellationToken));
+        return await ExecuteAsync(() => _engine.TrainAsync(
+            profileId,
+            request?.DatasetVersion,
+            request?.RequestedBy,
+            cancellationToken));
     }
 
     [HttpGet("models/{profileId}")]
@@ -47,23 +52,29 @@ public sealed class PlcMlAnomalyController : ControllerBase
         return await ExecuteAsync(() => _engine.ActivateModelAsync(profileId, version, cancellationToken));
     }
 
-    private async Task<ActionResult<T>> ExecuteAsync<T>(Func<Task<T>> action)
+    private static async Task<ActionResult<T>> ExecuteAsync<T>(Func<Task<T>> action)
     {
         try
         {
-            return Ok(await action());
+            return new OkObjectResult(await action());
         }
         catch (KeyNotFoundException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return new NotFoundObjectResult(new { error = ex.Message });
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return new BadRequestObjectResult(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return new ConflictObjectResult(new { error = ex.Message });
         }
     }
+}
+
+public sealed class PlcMlTrainRequest
+{
+    public string? DatasetVersion { get; set; }
+    public string? RequestedBy { get; set; }
 }
