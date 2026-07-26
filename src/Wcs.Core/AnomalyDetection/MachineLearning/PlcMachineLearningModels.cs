@@ -43,13 +43,24 @@ public sealed class PlcMlProfile
     public PlcAnomalySeverity Severity { get; set; } = PlcAnomalySeverity.Warning;
     public bool RaiseAlarm { get; set; } = true;
 
+    /// <summary>默认影子运行，只有 Active 或命中 Canary 的设备才进入正式异常生命周期。</summary>
+    public PlcMlDeploymentMode DeploymentMode { get; set; } = PlcMlDeploymentMode.Shadow;
+    public int CanaryPercentage { get; set; }
+    public bool RequireModelApproval { get; set; } = true;
+
+    public int DriftWindowSize { get; set; } = 500;
+    public int MinimumDriftSamples { get; set; } = 100;
+    public double DriftWarningRatio { get; set; } = 0.15;
+    public double DriftCriticalRatio { get; set; } = 0.30;
+    public int DriftSnapshotIntervalSeconds { get; set; } = 60;
+
     public List<PlcMlSignalDefinition> Signals { get; set; } = new();
 }
 
 public sealed class PlcMlAnomalyOptions
 {
     public bool Enabled { get; set; }
-    /// <summary>训练、版本列表和激活 API 的独立开关。默认关闭。</summary>
+    /// <summary>训练、数据集、人工复核、审批、版本列表和激活 API 的独立开关。默认关闭。</summary>
     public bool ManagementApiEnabled { get; set; }
     public string ModelDirectory { get; set; } = "data/anomaly-models";
     public string TrainingDirectory { get; set; } = "data/anomaly-training";
@@ -95,6 +106,8 @@ public sealed class PlcIsolationForestModel
     public int SubsampleSize { get; set; }
     public double DecisionThreshold { get; set; }
     public double Contamination { get; set; }
+    public double CalibrationMeanScore { get; set; }
+    public double CalibrationP95Score { get; set; }
 }
 
 public sealed record PlcMlModelVersionInfo
@@ -123,17 +136,22 @@ public sealed record PlcMlTrainingResult
 {
     public required string ProfileId { get; init; }
     public required string ModelVersion { get; init; }
+    public string? DatasetVersion { get; init; }
     public required int TrainingSampleCount { get; init; }
     public required int CalibrationSampleCount { get; init; }
     public required int TreeCount { get; init; }
     public required double DecisionThreshold { get; init; }
     public required DateTime CreatedUtc { get; init; }
+    public PlcMlApprovalStatus ApprovalStatus { get; init; }
+    public bool Activated { get; init; }
 }
 
 public sealed record PlcMlProfileStatus
 {
     public required string ProfileId { get; init; }
     public bool Enabled { get; init; }
+    public PlcMlDeploymentMode DeploymentMode { get; init; }
+    public int CanaryPercentage { get; init; }
     public string? ActiveModelVersion { get; init; }
     public int TrainingWindowCount { get; init; }
     public long CompletedWindows { get; init; }
@@ -142,9 +160,14 @@ public sealed record PlcMlProfileStatus
     public long AnomalyObservations { get; init; }
     public long Raised { get; init; }
     public long Recovered { get; init; }
+    public long ShadowRaised { get; init; }
+    public long ActiveRaised { get; init; }
     public int ActiveAnomalies { get; init; }
     public int TrackedWindows { get; init; }
     public int TrackedInferenceStates { get; init; }
+    public PlcMlDriftStatus DriftStatus { get; init; }
+    public double DriftRatio { get; init; }
+    public int DriftSampleCount { get; init; }
     public long Failures { get; init; }
     public string? LastError { get; init; }
 }
@@ -153,6 +176,8 @@ public interface IPlcMlModelStore
 {
     Task<PlcIsolationForestModel?> LoadActiveAsync(string profileId, CancellationToken cancellationToken = default);
     Task<PlcIsolationForestModel?> LoadVersionAsync(string profileId, string version, CancellationToken cancellationToken = default);
+    Task SaveVersionAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default);
+    Task ActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default);
     Task SaveAndActivateAsync(PlcIsolationForestModel model, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PlcMlModelVersionInfo>> ListAsync(string profileId, CancellationToken cancellationToken = default);
 }
@@ -162,6 +187,18 @@ public interface IPlcMlTrainingStore
     Task<int> CountAsync(string profileId, CancellationToken cancellationToken = default);
     Task AppendAsync(PlcFeatureVector vector, int maximumWindows, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PlcFeatureVector>> ReadAsync(string profileId, int maximumWindows, CancellationToken cancellationToken = default);
+    Task<PlcMlDatasetInfo> CreateDatasetAsync(
+        string profileId,
+        int maximumWindows,
+        string createdBy,
+        string? description,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlcMlDatasetInfo>> ListDatasetsAsync(string profileId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlcFeatureVector>> ReadDatasetAsync(
+        string profileId,
+        string datasetVersion,
+        int maximumWindows,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IPlcMlAnomalyEngine
@@ -170,6 +207,11 @@ public interface IPlcMlAnomalyEngine
     ValueTask ProcessAsync(PlcAnomalySample sample, CancellationToken cancellationToken = default);
     Task MaintenanceAsync(DateTime utcNow, CancellationToken cancellationToken = default);
     Task<PlcMlTrainingResult> TrainAsync(string profileId, CancellationToken cancellationToken = default);
+    Task<PlcMlTrainingResult> TrainAsync(
+        string profileId,
+        string? datasetVersion,
+        string? requestedBy,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PlcMlModelVersionInfo>> ListModelsAsync(string profileId, CancellationToken cancellationToken = default);
     Task<PlcMlModelVersionInfo> ActivateModelAsync(string profileId, string version, CancellationToken cancellationToken = default);
     IReadOnlyList<PlcMlProfileStatus> GetStatus();
