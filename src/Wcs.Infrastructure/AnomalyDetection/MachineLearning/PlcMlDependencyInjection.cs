@@ -75,6 +75,14 @@ public static class PlcMlDependencyInjection
                 20);
             profile.DriftSnapshotIntervalSeconds = Math.Clamp(profile.DriftSnapshotIntervalSeconds, 1, 86_400);
 
+            profile.MinimumPeerDevices = Math.Clamp(profile.MinimumPeerDevices, 3, 10_000);
+            profile.PeerBucketWaitMs = Math.Clamp(profile.PeerBucketWaitMs, 0, 60_000);
+            profile.PeerBucketRetentionSeconds = Math.Clamp(profile.PeerBucketRetentionSeconds, 1, 86_400);
+            profile.PeerMadMultiplier = Math.Clamp(profile.PeerMadMultiplier, 1, 100);
+            profile.MinimumPeerMad = Math.Clamp(profile.MinimumPeerMad, 1e-9, 1_000_000);
+            profile.ConsecutivePeerAbnormalCount = Math.Clamp(profile.ConsecutivePeerAbnormalCount, 1, 1_000);
+            profile.ConsecutivePeerRecoveryCount = Math.Clamp(profile.ConsecutivePeerRecoveryCount, 1, 10_000);
+
             var names = new HashSet<string>(StringComparer.Ordinal);
             foreach (var signal in profile.Signals)
             {
@@ -86,6 +94,21 @@ public static class PlcMlDependencyInjection
                     throw new InvalidOperationException($"PLC ML Profile {profile.ProfileId} 的信号名称重复：{signal.Name}。");
             }
 
+            var contextNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var context in profile.ContextSignals)
+            {
+                context.Name = context.Name?.Trim() ?? string.Empty;
+                context.Pattern = context.Pattern?.Trim() ?? string.Empty;
+                context.DefaultValue = string.IsNullOrWhiteSpace(context.DefaultValue)
+                    ? "UNKNOWN"
+                    : context.DefaultValue.Trim();
+                context.MaximumAgeSeconds = Math.Clamp(context.MaximumAgeSeconds, 1, 86_400);
+                if (profile.Enabled && (string.IsNullOrWhiteSpace(context.Name) || string.IsNullOrWhiteSpace(context.Pattern)))
+                    throw new InvalidOperationException($"PLC ML Profile {profile.ProfileId} 的上下文 Name/Pattern 不能为空。");
+                if (!contextNames.Add(context.Name))
+                    throw new InvalidOperationException($"PLC ML Profile {profile.ProfileId} 的上下文名称重复：{context.Name}。");
+            }
+
             if (profile.Enabled && profile.Signals.Count == 0)
                 throw new InvalidOperationException($"PLC ML Profile {profile.ProfileId} 至少需要一个信号定义。");
         }
@@ -95,6 +118,9 @@ public static class PlcMlDependencyInjection
         services.AddSingleton<IPlcMlModelStore, FilePlcMlModelStore>();
         services.AddSingleton<IPlcMlTrainingStore, FilePlcMlTrainingStore>();
         services.AddSingleton<IPlcMlGovernanceStore>(_ => new SqlSugarPlcMlGovernanceStore(connectionString));
+        services.AddSingleton<PlcMlOperatingContextCenter>();
+        services.AddSingleton<PlcMlPeerComparisonEngine>();
+        services.AddSingleton<IPlcMlContextPeerRuntime, PlcMlContextPeerRuntime>();
         services.AddSingleton<PlcMlAnomalyEngine>();
         services.AddSingleton<IPlcMlAnomalyEngine>(sp => sp.GetRequiredService<PlcMlAnomalyEngine>());
         services.AddSingleton<IPlcMlGovernanceService, PlcMlGovernanceService>();
