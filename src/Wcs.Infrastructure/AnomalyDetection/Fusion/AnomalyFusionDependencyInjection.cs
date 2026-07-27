@@ -3,6 +3,7 @@ namespace Wcs.Infrastructure.AnomalyDetection.Fusion;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wcs.Core.AnomalyDetection.Fusion;
+using Wcs.Core.AnomalyDetection.HealthScoring;
 
 public static class AnomalyFusionDependencyInjection
 {
@@ -69,10 +70,26 @@ public static class AnomalyFusionDependencyInjection
             source.DefaultConfidence = Math.Clamp(source.DefaultConfidence, 0, 1);
         }
 
+        var healthOptions = configuration
+            .GetSection("AnomalyHealthScoring")
+            .Get<AssetHealthScoringOptions>() ?? new AssetHealthScoringOptions();
+        healthOptions.HealthyMinimumScore = Math.Clamp(healthOptions.HealthyMinimumScore, 1, 100);
+        healthOptions.AttentionMinimumScore = Math.Clamp(
+            Math.Min(healthOptions.AttentionMinimumScore, healthOptions.HealthyMinimumScore),
+            0,
+            100);
+        healthOptions.DegradedMinimumScore = Math.Clamp(
+            Math.Min(healthOptions.DegradedMinimumScore, healthOptions.AttentionMinimumScore),
+            0,
+            100);
+        healthOptions.MaximumFactors = Math.Clamp(healthOptions.MaximumFactors, 1, 100);
+
         services.AddSingleton(options);
+        services.AddSingleton(healthOptions);
         services.AddSingleton<AnomalyFusionEngine>();
         services.AddSingleton<IAnomalyFusionEngine>(sp =>
             sp.GetRequiredService<AnomalyFusionEngine>());
+        services.AddSingleton<IAssetHealthScoringService, AssetHealthScoringService>();
         services.AddSingleton<AnomalyEvidenceChannel>();
         services.AddSingleton<IAnomalyEvidenceSink>(sp =>
             sp.GetRequiredService<AnomalyEvidenceChannel>());
