@@ -29,7 +29,7 @@ public sealed class AssetHealthScoringOptions
     public double MinimumScoreChangeToRecord { get; set; } = 1;
     public int MaximumUnchangedIntervalSeconds { get; set; } = 300;
     public int MaximumHistoryPerAsset { get; set; } = 720;
-    public int MaximumTrackedHistoryAssets { get; set; } = 20_000;
+    public int MaximumTrackedHistoryAssets { get; set; } = 10_000;
     public int HistoryRetentionHours { get; set; } = 24;
     public int TrendWindowSize { get; set; } = 12;
     public double TrendChangeThreshold { get; set; } = 2;
