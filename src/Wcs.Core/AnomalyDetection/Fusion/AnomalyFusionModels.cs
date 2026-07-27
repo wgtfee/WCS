@@ -113,6 +113,7 @@ public sealed record AnomalyFusionStatus
     public long EvidenceRecovered { get; init; }
     public long EvidenceExpired { get; init; }
     public long EvidenceDropped { get; init; }
+    public long EvictedAssets { get; init; }
     public long Evaluations { get; init; }
     public long WarningTransitions { get; init; }
     public long AlarmTransitions { get; init; }
