@@ -52,7 +52,30 @@ public sealed class AnomalyHealthController : ControllerBase
         var result = await _history.GetHistoryAsync(
             assetId.Trim(),
             fromUtc,
-            maxCount,
+            Math.Clamp(maxCount, 1, 10_000),
+            cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("assets/{assetId}/history/page")]
+    public async Task<ActionResult<AssetHealthHistoryPage>> GetHistoryPage(
+        string assetId,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toUtc = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int maxCount = 200,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(assetId)) return BadRequest();
+        if (fromUtc is not null && toUtc is not null && fromUtc > toUtc)
+            return BadRequest("fromUtc cannot be later than toUtc.");
+
+        var result = await _history.GetHistoryPageAsync(
+            assetId.Trim(),
+            fromUtc,
+            toUtc,
+            Math.Max(0, skip),
+            Math.Clamp(maxCount, 1, 10_000),
             cancellationToken);
         return Ok(result);
     }
@@ -66,6 +89,27 @@ public sealed class AnomalyHealthController : ControllerBase
         if (string.IsNullOrWhiteSpace(assetId)) return BadRequest();
         var trend = await _history.GetTrendAsync(
             assetId.Trim(),
+            windowSize,
+            cancellationToken);
+        return trend is null ? NotFound() : Ok(trend);
+    }
+
+    [HttpGet("assets/{assetId}/trend/range")]
+    public async Task<ActionResult<AssetHealthTrendSnapshot>> GetTrendRange(
+        string assetId,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toUtc = null,
+        [FromQuery] int? windowSize = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(assetId)) return BadRequest();
+        if (fromUtc is not null && toUtc is not null && fromUtc > toUtc)
+            return BadRequest("fromUtc cannot be later than toUtc.");
+
+        var trend = await _history.GetTrendRangeAsync(
+            assetId.Trim(),
+            fromUtc,
+            toUtc,
             windowSize,
             cancellationToken);
         return trend is null ? NotFound() : Ok(trend);
