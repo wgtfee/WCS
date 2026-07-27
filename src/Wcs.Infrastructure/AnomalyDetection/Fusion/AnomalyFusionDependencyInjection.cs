@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wcs.Core.AnomalyDetection.Fusion;
 using Wcs.Core.AnomalyDetection.HealthScoring;
+using Wcs.Infrastructure.AnomalyDetection.HealthScoring;
 
 public static class AnomalyFusionDependencyInjection
 {
@@ -83,6 +84,44 @@ public static class AnomalyFusionDependencyInjection
             0,
             100);
         healthOptions.MaximumFactors = Math.Clamp(healthOptions.MaximumFactors, 1, 100);
+        healthOptions.SamplingIntervalSeconds = Math.Clamp(
+            healthOptions.SamplingIntervalSeconds,
+            1,
+            3_600);
+        healthOptions.MinimumScoreChangeToRecord = Math.Clamp(
+            healthOptions.MinimumScoreChangeToRecord,
+            0,
+            100);
+        healthOptions.MaximumUnchangedIntervalSeconds = Math.Clamp(
+            Math.Max(
+                healthOptions.MaximumUnchangedIntervalSeconds,
+                healthOptions.SamplingIntervalSeconds),
+            healthOptions.SamplingIntervalSeconds,
+            86_400);
+        healthOptions.MaximumHistoryPerAsset = Math.Clamp(
+            healthOptions.MaximumHistoryPerAsset,
+            2,
+            100_000);
+        healthOptions.MaximumTrackedHistoryAssets = Math.Clamp(
+            healthOptions.MaximumTrackedHistoryAssets,
+            100,
+            10_000);
+        healthOptions.HistoryRetentionHours = Math.Clamp(
+            healthOptions.HistoryRetentionHours,
+            1,
+            8_760);
+        healthOptions.TrendWindowSize = Math.Clamp(
+            healthOptions.TrendWindowSize,
+            2,
+            healthOptions.MaximumHistoryPerAsset);
+        healthOptions.TrendChangeThreshold = Math.Clamp(
+            healthOptions.TrendChangeThreshold,
+            0,
+            100);
+        healthOptions.MaximumHistoryQueryCount = Math.Clamp(
+            healthOptions.MaximumHistoryQueryCount,
+            1,
+            healthOptions.MaximumHistoryPerAsset);
 
         services.AddSingleton(options);
         services.AddSingleton(healthOptions);
@@ -90,6 +129,7 @@ public static class AnomalyFusionDependencyInjection
         services.AddSingleton<IAnomalyFusionEngine>(sp =>
             sp.GetRequiredService<AnomalyFusionEngine>());
         services.AddSingleton<IAssetHealthScoringService, AssetHealthScoringService>();
+        services.AddSingleton<IAssetHealthScoreHistoryStore, InMemoryAssetHealthScoreHistoryStore>();
         services.AddSingleton<AnomalyEvidenceChannel>();
         services.AddSingleton<IAnomalyEvidenceSink>(sp =>
             sp.GetRequiredService<AnomalyEvidenceChannel>());
@@ -98,6 +138,8 @@ public static class AnomalyFusionDependencyInjection
         services.AddHostedService<AnomalyFusionBackgroundService>();
         services.AddHostedService<PlcAnomalyFusionBridgeService>();
         services.AddHostedService<TransportCycleFusionBridgeService>();
+        if (healthOptions.Enabled)
+            services.AddHostedService<AssetHealthScoreSamplingService>();
         return services;
     }
 }
