@@ -194,7 +194,13 @@ jobs:
           [[ "$(jq -r '.evictedRuleStates' artifacts/anomaly-final-status.json)" == "3100" ]]
           [[ "$(jq -r '.evictedRelatedSamples' artifacts/anomaly-final-status.json)" == "2000" ]]
           [[ "$(jq -r '.evictedDeviceSnapshots' artifacts/anomaly-final-status.json)" == "1000" ]]
+
           sleep 2
+          ps -o rss= -p "$(cat artifacts/anomaly-host.pid)" | tr -d ' ' > artifacts/anomaly-pre-gc-rss-kb.txt
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/load/collect-gc" \
+            | tee artifacts/anomaly-gc.json
+          sleep 1
           ps -o rss= -p "$(cat artifacts/anomaly-host.pid)" | tr -d ' ' > artifacts/anomaly-final-rss-kb.txt
 
       - name: Validate memory and logs
@@ -203,12 +209,18 @@ jobs:
         run: |
           if [[ -f artifacts/anomaly-initial-rss-kb.txt && -f artifacts/anomaly-final-rss-kb.txt ]]; then
             initial="$(cat artifacts/anomaly-initial-rss-kb.txt)"
+            pre_gc="$(cat artifacts/anomaly-pre-gc-rss-kb.txt)"
             final="$(cat artifacts/anomaly-final-rss-kb.txt)"
-            growth_mb="$(( (final-initial) / 1024 ))"
-            printf 'initial_rss_kb=%s\nfinal_rss_kb=%s\ngrowth_mb=%s\n' "$initial" "$final" "$growth_mb" | tee artifacts/anomaly-memory.txt
-            (( growth_mb <= 250 ))
+            pre_gc_growth_mb="$(( (pre_gc-initial) / 1024 ))"
+            final_growth_mb="$(( (final-initial) / 1024 ))"
+            printf 'initial_rss_kb=%s\npre_gc_rss_kb=%s\nfinal_rss_kb=%s\npre_gc_growth_mb=%s\nfinal_growth_mb=%s\n' \
+              "$initial" "$pre_gc" "$final" "$pre_gc_growth_mb" "$final_growth_mb" \
+              | tee artifacts/anomaly-memory.txt
+            (( final_growth_mb <= 250 ))
           fi
 
+          test -s artifacts/anomaly-gc.json
+          (( $(jq -r '.managedAfterBytes' artifacts/anomaly-gc.json) < 268435456 ))
           test -s artifacts/anomaly-host.log
           if grep -Eqi 'OutOfMemory|Unhandled exception|PLC anomaly persistence failed after retries|PK_Wcs_PlcAnomaly|duplicate key|Stack overflow' artifacts/anomaly-host.log; then
             grep -Eni -C 5 'OutOfMemory|Unhandled exception|PLC anomaly persistence failed after retries|PK_Wcs_PlcAnomaly|duplicate key|Stack overflow' artifacts/anomaly-host.log
