@@ -59,25 +59,46 @@ public sealed class PlcAnomalyFusionBridgeService : BackgroundService
 
     private static AnomalyEvidence ToEvidence(PlcAnomalyRecord anomaly, AnomalyEvidenceState state)
     {
-        var observed = state == AnomalyEvidenceState.Recovered
+        var sourceTimestamp = state == AnomalyEvidenceState.Recovered
             ? anomaly.EndTimeUtc ?? anomaly.LastSeenUtc
             : anomaly.LastSeenUtc;
+        var observed = NormalizeObservedUtc(sourceTimestamp);
 
         return new AnomalyEvidence
         {
             EvidenceId = $"PLC|{anomaly.AnomalyId}",
-            Source = anomaly.Type.ToString(),
+            Source = ResolveSource(anomaly.Type),
             AssetId = string.IsNullOrWhiteSpace(anomaly.DeviceId) ? anomaly.PlcName : anomaly.DeviceId,
             RelatedEntityId = anomaly.RuleId,
             Category = anomaly.Type.ToString(),
             State = state,
-            ObservedAtUtc = observed == default ? DateTime.UtcNow : observed,
+            ObservedAtUtc = observed,
             Score = NormalizeScore(anomaly),
             Confidence = 0,
             Severity = anomaly.Severity,
             Reason = anomaly.Reason,
             ContextJson = anomaly.ContextJson
         };
+    }
+
+    private static string ResolveSource(PlcAnomalyType type) => type switch
+    {
+        PlcAnomalyType.Threshold => AnomalyEvidenceSources.ThresholdRule,
+        PlcAnomalyType.RateOfChange => AnomalyEvidenceSources.RateRule,
+        PlcAnomalyType.Duration => AnomalyEvidenceSources.DurationRule,
+        PlcAnomalyType.StatisticalBaseline => AnomalyEvidenceSources.StatisticalRule,
+        PlcAnomalyType.Consistency => AnomalyEvidenceSources.ConsistencyRule,
+        PlcAnomalyType.MachineLearning => AnomalyEvidenceSources.IsolationForest,
+        PlcAnomalyType.ContextualPeerComparison => AnomalyEvidenceSources.PeerMedianMad,
+        _ => $"PLC_{type.ToString().ToUpperInvariant()}"
+    };
+
+    private static DateTime NormalizeObservedUtc(DateTime value)
+    {
+        var now = DateTime.UtcNow;
+        if (value == default) return now;
+        var utc = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
+        return utc > now.AddMinutes(1) ? now : utc;
     }
 
     private static double NormalizeScore(PlcAnomalyRecord anomaly)
