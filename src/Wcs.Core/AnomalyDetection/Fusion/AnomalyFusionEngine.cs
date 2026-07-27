@@ -18,6 +18,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
     private long _evidenceRecovered;
     private long _evidenceExpired;
     private long _evidenceDropped;
+    private long _evictedAssets;
     private long _evaluations;
     private long _warningTransitions;
     private long _alarmTransitions;
@@ -49,6 +50,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
                 Interlocked.Increment(ref _evidenceDropped);
                 return;
             }
+
             state = _assets.GetOrAdd(evidence.AssetId, static assetId => new AssetState(assetId));
         }
 
@@ -96,11 +98,13 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
     public void Maintenance(DateTime utcNow)
     {
         if (!_options.Enabled) return;
+
         foreach (var pair in _assets)
         {
             var state = pair.Value;
             FusedHealthSnapshot? transitionSnapshot = null;
             var removeAsset = false;
+
             lock (state.Gate)
             {
                 var changed = false;
@@ -113,15 +117,16 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
                                 ? _options.EvidenceRetentionSeconds
                                 : _options.RecoveredEvidenceRetentionSeconds);
                     if (expiry > utcNow) continue;
+
                     state.Evidence.Remove(evidencePair.Key);
                     changed = true;
                     if (evidence.State == AnomalyEvidenceState.Active)
                         Interlocked.Increment(ref _evidenceExpired);
                 }
 
-                // 正式 Warning/Alarm 在所有证据恢复后仍需由维护周期推进连续恢复计数，
-                // 不依赖重复发送恢复事件。活动正式状态也会按维护节拍推进连续 Alarm 评估。
-                if (changed || state.Status >= FusedHealthStatus.Warning)
+                // 正式 Warning/Alarm 在所有证据恢复后由维护周期推进恢复计数，
+                // 不要求上游重复发送恢复事件。
+                if (changed || IsAtLeast(state.Status, FusedHealthStatus.Warning))
                     transitionSnapshot = EvaluateLocked(state, utcNow);
 
                 removeAsset = state.Evidence.Count == 0 &&
@@ -131,8 +136,11 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
             }
 
             if (transitionSnapshot is not null) AddHistory(transitionSnapshot);
-            if (removeAsset)
-                ((ICollection<KeyValuePair<string, AssetState>>)_assets).Remove(pair);
+            if (removeAsset &&
+                ((ICollection<KeyValuePair<string, AssetState>>)_assets).Remove(pair))
+            {
+                Interlocked.Increment(ref _evictedAssets);
+            }
         }
     }
 
@@ -153,10 +161,13 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
             lock (state.Gate)
             {
                 var snapshot = BuildSnapshotLocked(state);
-                if (minimumStatus is not null && snapshot.Status < minimumStatus) continue;
+                if (minimumStatus is not null &&
+                    (int)snapshot.Status < (int)minimumStatus.Value)
+                    continue;
                 snapshots.Add(snapshot);
             }
         }
+
         return snapshots
             .OrderByDescending(static snapshot => snapshot.Status)
             .ThenByDescending(static snapshot => snapshot.Score)
@@ -171,12 +182,15 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
         foreach (var state in _assets.Values)
         {
             lock (state.Gate)
+            {
                 activeEvidence += state.Evidence.Values.Count(static evidence =>
                     evidence.State == AnomalyEvidenceState.Active);
+            }
         }
 
         int historyCount;
         lock (_historyGate) historyCount = _history.Count;
+
         return new AnomalyFusionStatus
         {
             Enabled = _options.Enabled,
@@ -187,6 +201,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
             EvidenceRecovered = Interlocked.Read(ref _evidenceRecovered),
             EvidenceExpired = Interlocked.Read(ref _evidenceExpired),
             EvidenceDropped = Interlocked.Read(ref _evidenceDropped),
+            EvictedAssets = Interlocked.Read(ref _evictedAssets),
             Evaluations = Interlocked.Read(ref _evaluations),
             WarningTransitions = Interlocked.Read(ref _warningTransitions),
             AlarmTransitions = Interlocked.Read(ref _alarmTransitions),
@@ -197,6 +212,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
     private FusedHealthSnapshot? EvaluateLocked(AssetState state, DateTime utcNow)
     {
         Interlocked.Increment(ref _evaluations);
+
         var activeBySource = state.Evidence.Values
             .Where(static evidence => evidence.State == AnomalyEvidenceState.Active)
             .GroupBy(static evidence => evidence.Source, StringComparer.Ordinal)
@@ -211,6 +227,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
         var product = 1.0;
         foreach (var evidence in activeBySource)
             product *= 1.0 - GetContribution(evidence);
+
         var score = 1.0 - product;
         if (independentSources > 1)
         {
@@ -222,6 +239,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
 
         var requested = ResolveRequestedStatus(score, independentSources);
         var oldStatus = state.Status;
+
         if (requested == FusedHealthStatus.Alarm)
         {
             state.AlarmCount++;
@@ -229,7 +247,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
             state.RecoveryCount = 0;
             if (state.AlarmCount >= _options.ConsecutiveAlarmEvaluations)
                 state.Status = FusedHealthStatus.Alarm;
-            else if (state.Status < FusedHealthStatus.Warning &&
+            else if (IsBelow(state.Status, FusedHealthStatus.Warning) &&
                      state.WarningCount >= _options.ConsecutiveWarningEvaluations)
                 state.Status = FusedHealthStatus.Warning;
         }
@@ -238,7 +256,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
             state.WarningCount++;
             state.AlarmCount = 0;
             state.RecoveryCount = 0;
-            if (state.Status < FusedHealthStatus.Warning &&
+            if (IsBelow(state.Status, FusedHealthStatus.Warning) &&
                 state.WarningCount >= _options.ConsecutiveWarningEvaluations)
                 state.Status = FusedHealthStatus.Warning;
         }
@@ -246,7 +264,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
         {
             state.WarningCount = 0;
             state.AlarmCount = 0;
-            if (state.Status >= FusedHealthStatus.Warning)
+            if (IsAtLeast(state.Status, FusedHealthStatus.Warning))
             {
                 state.RecoveryCount++;
                 if (state.RecoveryCount >= _options.ConsecutiveRecoveryEvaluations)
@@ -267,7 +285,7 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
             state.WarningCount = 0;
             state.AlarmCount = 0;
             state.RecoveryCount = 0;
-            if (state.Status < FusedHealthStatus.Warning)
+            if (IsBelow(state.Status, FusedHealthStatus.Warning))
                 state.Status = requested;
         }
 
@@ -280,8 +298,10 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
             Interlocked.Increment(ref _warningTransitions);
         else if (state.Status == FusedHealthStatus.Alarm)
             Interlocked.Increment(ref _alarmTransitions);
-        else if (oldStatus >= FusedHealthStatus.Warning && state.Status == FusedHealthStatus.Normal)
+        else if (IsAtLeast(oldStatus, FusedHealthStatus.Warning) &&
+                 state.Status == FusedHealthStatus.Normal)
             Interlocked.Increment(ref _recoveryTransitions);
+
         return BuildSnapshotLocked(state);
     }
 
@@ -312,12 +332,16 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
                 Reason = item.Reason
             })
             .ToArray();
+
         return new FusedHealthSnapshot
         {
             AssetId = state.AssetId,
             Status = state.Status,
             Score = state.Score,
-            IndependentSourceCount = evidence.Select(static item => item.Source).Distinct(StringComparer.Ordinal).Count(),
+            IndependentSourceCount = evidence
+                .Select(static item => item.Source)
+                .Distinct(StringComparer.Ordinal)
+                .Count(),
             FirstObservedAtUtc = state.FirstObservedAtUtc == default
                 ? state.LastEvaluatedAtUtc
                 : state.FirstObservedAtUtc,
@@ -407,7 +431,10 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
         yield return Policy(AnomalyEvidenceSources.CycleTotalDuration, 0.9, 0.85);
     }
 
-    private static AnomalyFusionSourcePolicy Policy(string source, double weight, double confidence) => new()
+    private static AnomalyFusionSourcePolicy Policy(
+        string source,
+        double weight,
+        double confidence) => new()
     {
         Source = source,
         Weight = weight,
@@ -428,9 +455,16 @@ public sealed class AnomalyFusionEngine : IAnomalyFusionEngine
         lock (_historyGate)
         {
             _history.Enqueue(snapshot);
-            while (_history.Count > _options.MaximumSnapshots) _history.Dequeue();
+            while (_history.Count > _options.MaximumSnapshots)
+                _history.Dequeue();
         }
     }
+
+    private static bool IsAtLeast(FusedHealthStatus value, FusedHealthStatus threshold) =>
+        (int)value >= (int)threshold;
+
+    private static bool IsBelow(FusedHealthStatus value, FusedHealthStatus threshold) =>
+        (int)value < (int)threshold;
 
     private static DateTime MinUtc(DateTime left, DateTime right)
     {
