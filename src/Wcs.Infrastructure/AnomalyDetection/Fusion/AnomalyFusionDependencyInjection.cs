@@ -2,6 +2,7 @@ namespace Wcs.Infrastructure.AnomalyDetection.Fusion;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Wcs.Core.AnomalyDetection.Fusion;
 using Wcs.Core.AnomalyDetection.HealthScoring;
 using Wcs.Infrastructure.AnomalyDetection.HealthScoring;
@@ -11,6 +12,17 @@ public static class AnomalyFusionDependencyInjection
     public static IServiceCollection AddAnomalyEvidenceFusion(
         this IServiceCollection services,
         IConfiguration configuration)
+    {
+        var connectionString = configuration.GetConnectionString("WcsDb");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException("WcsDb connection string is required.");
+        return AddAnomalyEvidenceFusion(services, configuration, connectionString);
+    }
+
+    public static IServiceCollection AddAnomalyEvidenceFusion(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string connectionString)
     {
         var options = configuration
             .GetSection("AnomalyFusion")
@@ -84,44 +96,47 @@ public static class AnomalyFusionDependencyInjection
             0,
             100);
         healthOptions.MaximumFactors = Math.Clamp(healthOptions.MaximumFactors, 1, 100);
-        healthOptions.SamplingIntervalSeconds = Math.Clamp(
-            healthOptions.SamplingIntervalSeconds,
-            1,
-            3_600);
-        healthOptions.MinimumScoreChangeToRecord = Math.Clamp(
-            healthOptions.MinimumScoreChangeToRecord,
-            0,
-            100);
+        healthOptions.SamplingIntervalSeconds = Math.Clamp(healthOptions.SamplingIntervalSeconds, 1, 3_600);
+        healthOptions.MinimumScoreChangeToRecord = Math.Clamp(healthOptions.MinimumScoreChangeToRecord, 0, 100);
         healthOptions.MaximumUnchangedIntervalSeconds = Math.Clamp(
-            Math.Max(
-                healthOptions.MaximumUnchangedIntervalSeconds,
-                healthOptions.SamplingIntervalSeconds),
+            Math.Max(healthOptions.MaximumUnchangedIntervalSeconds, healthOptions.SamplingIntervalSeconds),
             healthOptions.SamplingIntervalSeconds,
             86_400);
-        healthOptions.MaximumHistoryPerAsset = Math.Clamp(
-            healthOptions.MaximumHistoryPerAsset,
-            2,
-            100_000);
+        healthOptions.MaximumHistoryPerAsset = Math.Clamp(healthOptions.MaximumHistoryPerAsset, 2, 100_000);
         healthOptions.MaximumTrackedHistoryAssets = Math.Clamp(
             healthOptions.MaximumTrackedHistoryAssets,
             100,
-            10_000);
-        healthOptions.HistoryRetentionHours = Math.Clamp(
-            healthOptions.HistoryRetentionHours,
-            1,
-            8_760);
+            100_000);
+        healthOptions.HistoryRetentionHours = Math.Clamp(healthOptions.HistoryRetentionHours, 1, 87_600);
         healthOptions.TrendWindowSize = Math.Clamp(
             healthOptions.TrendWindowSize,
             2,
             healthOptions.MaximumHistoryPerAsset);
-        healthOptions.TrendChangeThreshold = Math.Clamp(
-            healthOptions.TrendChangeThreshold,
-            0,
-            100);
+        healthOptions.TrendChangeThreshold = Math.Clamp(healthOptions.TrendChangeThreshold, 0, 100);
         healthOptions.MaximumHistoryQueryCount = Math.Clamp(
             healthOptions.MaximumHistoryQueryCount,
             1,
-            healthOptions.MaximumHistoryPerAsset);
+            Math.Min(10_000, healthOptions.MaximumHistoryPerAsset));
+        healthOptions.HistoryWriteChannelCapacity = Math.Clamp(
+            healthOptions.HistoryWriteChannelCapacity,
+            100,
+            1_000_000);
+        healthOptions.HistoryWriteBatchSize = Math.Clamp(
+            healthOptions.HistoryWriteBatchSize,
+            1,
+            Math.Min(10_000, healthOptions.HistoryWriteChannelCapacity));
+        healthOptions.HistoryWriteRetryDelayMs = Math.Clamp(
+            healthOptions.HistoryWriteRetryDelayMs,
+            100,
+            60_000);
+        healthOptions.HistoryMaintenanceIntervalSeconds = Math.Clamp(
+            healthOptions.HistoryMaintenanceIntervalSeconds,
+            1,
+            86_400);
+        healthOptions.HistoryMaintenanceBatchSize = Math.Clamp(
+            healthOptions.HistoryMaintenanceBatchSize,
+            100,
+            100_000);
 
         services.AddSingleton(options);
         services.AddSingleton(healthOptions);
@@ -129,7 +144,23 @@ public static class AnomalyFusionDependencyInjection
         services.AddSingleton<IAnomalyFusionEngine>(sp =>
             sp.GetRequiredService<AnomalyFusionEngine>());
         services.AddSingleton<IAssetHealthScoringService, AssetHealthScoringService>();
-        services.AddSingleton<IAssetHealthScoreHistoryStore, InMemoryAssetHealthScoreHistoryStore>();
+
+        if (healthOptions.HistoryProvider == AssetHealthHistoryProvider.SqlServer)
+        {
+            services.AddSingleton<SqlSugarAssetHealthScoreHistoryStore>(sp => new(
+                connectionString,
+                healthOptions,
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SqlSugarAssetHealthScoreHistoryStore>>()));
+            services.AddSingleton<IAssetHealthScoreHistoryStore>(sp =>
+                sp.GetRequiredService<SqlSugarAssetHealthScoreHistoryStore>());
+            services.AddSingleton<IHostedService>(sp =>
+                sp.GetRequiredService<SqlSugarAssetHealthScoreHistoryStore>());
+        }
+        else
+        {
+            services.AddSingleton<IAssetHealthScoreHistoryStore, InMemoryAssetHealthScoreHistoryStore>();
+        }
+
         services.AddSingleton<AnomalyEvidenceChannel>();
         services.AddSingleton<IAnomalyEvidenceSink>(sp =>
             sp.GetRequiredService<AnomalyEvidenceChannel>());
