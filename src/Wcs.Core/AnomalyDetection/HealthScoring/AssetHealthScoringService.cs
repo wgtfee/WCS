@@ -91,7 +91,8 @@ public sealed class AssetHealthScoringService : IAssetHealthScoringService
             .Select(Evaluate)
             .Where(static snapshot => snapshot is not null)
             .Select(static snapshot => snapshot!)
-            .Where(snapshot => minimumGrade is null || snapshot.Grade >= minimumGrade.Value)
+            .Where(snapshot => minimumGrade is null ||
+                (int)snapshot.Grade >= (int)minimumGrade.Value)
             .OrderByDescending(static snapshot => snapshot.Grade)
             .ThenBy(static snapshot => snapshot.HealthScore)
             .ThenBy(static snapshot => snapshot.AssetId, StringComparer.Ordinal)
