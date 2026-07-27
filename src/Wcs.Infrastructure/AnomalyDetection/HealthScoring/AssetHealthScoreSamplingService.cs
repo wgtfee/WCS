@@ -51,7 +51,9 @@ public sealed class AssetHealthScoreSamplingService : BackgroundService
         {
             var utcNow = DateTime.UtcNow;
             var maximumAssets = Math.Min(_options.MaximumTrackedHistoryAssets, 10_000);
-            var snapshots = _scoring.GetAssets(minimumGrade: null, maximumAssets);
+            var snapshots = _scoring.GetAssets(
+                minimumGrade: null,
+                maximumCount: maximumAssets);
             foreach (var snapshot in snapshots)
                 await _history.RecordAsync(snapshot, utcNow, cancellationToken);
 
