@@ -1,6 +1,7 @@
 namespace Wcs.Host.Controllers;
 
 using System.Diagnostics;
+using System.Runtime;
 using Microsoft.AspNetCore.Mvc;
 using Wcs.Core.AnomalyDetection;
 using Wcs.Core.EventBus.Events;
@@ -115,6 +116,53 @@ public sealed class PlcAnomalyController : ControllerBase
             suppressedDelta = after.Suppressed - before.Suppressed,
             activeDelta = after.ActiveAnomalies - before.ActiveAnomalies,
             status = after
+        });
+    }
+
+    /// <summary>
+    /// 仅 LoadTest 环境启用。状态清零后执行完整 GC 与 LOH 单次压缩，
+    /// 用于区分已提交堆峰值和仍被引用的真实内存。
+    /// </summary>
+    [HttpPost("load/collect-gc")]
+    public ActionResult CollectLoadTestGarbage()
+    {
+        if (!_environment.IsEnvironment("LoadTest")) return NotFound();
+
+        var process = Process.GetCurrentProcess();
+        process.Refresh();
+        var managedBeforeBytes = GC.GetTotalMemory(forceFullCollection: false);
+        var rssBeforeBytes = process.WorkingSet64;
+        var totalAllocatedBytes = GC.GetTotalAllocatedBytes(precise: true);
+
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(
+            GC.MaxGeneration,
+            GCCollectionMode.Forced,
+            blocking: true,
+            compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(
+            GC.MaxGeneration,
+            GCCollectionMode.Forced,
+            blocking: true,
+            compacting: true);
+
+        process.Refresh();
+        var managedAfterBytes = GC.GetTotalMemory(forceFullCollection: false);
+        var rssAfterBytes = process.WorkingSet64;
+
+        return Ok(new
+        {
+            managedBeforeBytes,
+            managedAfterBytes,
+            managedReleasedBytes = Math.Max(0, managedBeforeBytes - managedAfterBytes),
+            rssBeforeBytes,
+            rssAfterBytes,
+            rssReleasedBytes = Math.Max(0, rssBeforeBytes - rssAfterBytes),
+            totalAllocatedBytes,
+            gen0Collections = GC.CollectionCount(0),
+            gen1Collections = GC.CollectionCount(1),
+            gen2Collections = GC.CollectionCount(2)
         });
     }
 

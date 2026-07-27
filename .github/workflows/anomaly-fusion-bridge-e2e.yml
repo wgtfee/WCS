@@ -1,0 +1,312 @@
+name: WCS Anomaly Fusion Bridge E2E
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/anomaly-fusion-bridge-e2e.yml'
+      - 'src/Wcs.Core/AnomalyDetection/Fusion/**'
+      - 'src/Wcs.Core/AnomalyDetection/PlcAnomalyModels.cs'
+      - 'src/Wcs.Core/EventBus/Events/PlcAnomalyEvents.cs'
+      - 'src/Wcs.Core/TransportScheduling/TransportCycleAnalysis*.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Fusion/**'
+      - 'src/Wcs.Host/Controllers/AnomalyFusion*.cs'
+      - 'src/Wcs.Host/Controllers/TransportCycleAnalysisLoadController.cs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  ASPNETCORE_ENVIRONMENT: LoadTest
+  DOTNET_ENVIRONMENT: LoadTest
+  ASPNETCORE_URLS: http://127.0.0.1:5097
+  ConnectionStrings__WcsDb: 'Server=127.0.0.1,1433;Database=WCS_FusionBridge;User Id=sa;Password=Wcs_FusionBridge!2026;Encrypt=False;TrustServerCertificate=True;'
+  Simulator__Enabled: 'true'
+  SIMULATOR_CHANGE_PROBABILITY: '0'
+  Storage__Telemetry__Provider: Disabled
+  AnomalyDetection__Enabled: 'false'
+  AnomalyDetection__MachineLearning__Enabled: 'false'
+  TransportCycleAnalysis__Enabled: 'true'
+  TransportCycleAnalysis__MinimumBaselineCycles: '20'
+  TransportCycleAnalysis__MaximumBaselineCyclesPerContext: '100'
+  TransportCycleAnalysis__MaximumTrackedExecutions: '1000'
+  TransportCycleAnalysis__MaximumCompletedCycles: '1000'
+  TransportCycleAnalysis__MaximumAnomalies: '1000'
+  TransportCycleAnalysis__MadMultiplier: '6'
+  TransportCycleAnalysis__MinimumMadMilliseconds: '10'
+  TransportCycleAnalysis__MinimumTotalDurationMilliseconds: '0'
+  TransportCycleAnalysis__MinimumPhaseDurationMilliseconds: '0'
+  TransportObservability__Enabled: 'false'
+  TransportResilience__Enabled: 'false'
+  TransportResilience__AutomaticBackupEnabled: 'false'
+  AnomalyFusion__Enabled: 'true'
+  AnomalyFusion__ChannelCapacity: '1000'
+  AnomalyFusion__EvidenceRetentionSeconds: '3'
+  AnomalyFusion__RecoveredEvidenceRetentionSeconds: '2'
+  AnomalyFusion__InactiveStateRetentionSeconds: '2'
+  AnomalyFusion__MaximumTrackedAssets: '1000'
+  AnomalyFusion__MaximumEvidencePerAsset: '20'
+  AnomalyFusion__MaximumSnapshots: '1000'
+  AnomalyFusion__ObserveThreshold: '0.35'
+  AnomalyFusion__WarningThreshold: '0.65'
+  AnomalyFusion__AlarmThreshold: '0.85'
+  AnomalyFusion__RecoveryThreshold: '0.25'
+  AnomalyFusion__MinimumIndependentSourcesForAlarm: '2'
+  AnomalyFusion__ConsecutiveWarningEvaluations: '1'
+  AnomalyFusion__ConsecutiveAlarmEvaluations: '1'
+  AnomalyFusion__ConsecutiveRecoveryEvaluations: '1'
+  AnomalyFusion__SourceDiversityBonus: '0.05'
+  AnomalyFusion__MaximumSourceDiversityBonus: '0.15'
+
+jobs:
+  fusion-bridge-e2e:
+    name: plc lifecycle, cycle anomaly, ttl, and readonly api
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: 'Wcs_FusionBridge!2026'
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build fusion host
+        shell: bash
+        run: |
+          mkdir -p artifacts/TestResults
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~AnomalyFusionEngineTests' \
+            --logger 'trx;LogFileName=anomaly-fusion-bridge-unit.trx' \
+            --results-directory artifacts/TestResults
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_FusionBridge]"
+          '
+
+      - name: Start Host and verify bridge subscriptions
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/fusion-bridge-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/fusion-bridge-host.pid"
+          popd >/dev/null
+
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/fusion/status" \
+                | tee artifacts/fusion-bridge-initial-status.json
+              jq -e '
+                .fusion.enabled == true and
+                .fusion.trackedAssets == 0 and
+                .fusion.activeEvidence == 0 and
+                .ingress.enabled == true and
+                .ingress.pending == 0 and
+                .ingress.dropped == 0
+              ' artifacts/fusion-bridge-initial-status.json >/dev/null
+              grep -q 'PLC anomaly fusion bridge subscribed' artifacts/fusion-bridge-host.log
+              grep -q 'Transport cycle fusion bridge started' artifacts/fusion-bridge-host.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/fusion-bridge-host.pid)" 2>/dev/null; then
+              cat artifacts/fusion-bridge-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/fusion-bridge-host.log
+          exit 1
+
+      - name: Validate real PLC event bridge lifecycle
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/fusion/load/plc-lifecycle" \
+            --header 'content-type: application/json' \
+            --data '{"assetId":"FUSION-PLC-E2E","timeoutSeconds":15}' \
+            --max-time 30 | tee artifacts/fusion-plc-lifecycle.json
+
+          jq -e '
+            .pipeline == "PlcAnomalyDetectedEvent/RecoveredEvent->EventBus->PlcAnomalyFusionBridge->EvidenceChannel->FusionEngine->ReadOnlyAPI" and
+            .assetId == "FUSION-PLC-E2E" and
+            .alarm.status == "Alarm" and
+            .alarm.independentSourceCount == 2 and
+            (.alarm.sources | sort) == (["ISOLATION_FOREST", "RULE_THRESHOLD"] | sort) and
+            .recovery.status == "Normal" and
+            .recovery.independentSourceCount == 0 and
+            .evidenceAcceptedDelta == 2 and
+            .evidenceRecoveredDelta == 2 and
+            .alarmTransitionDelta == 1 and
+            .recoveryTransitionDelta == 1 and
+            .ingressWrittenDelta == 4 and
+            .ingressReadDelta == 4 and
+            .ingressDroppedDelta == 0 and
+            .ingressPending == 0
+          ' artifacts/fusion-plc-lifecycle.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/fusion/assets/FUSION-PLC-E2E" \
+            | tee artifacts/fusion-plc-recovered-asset.json
+          jq -e '.status == 0 and .independentSourceCount == 0 and (.evidence | length) == 0' \
+            artifacts/fusion-plc-recovered-asset.json >/dev/null
+
+          for attempt in {1..20}; do
+            code="$(curl --silent --output artifacts/fusion-plc-eviction-probe.json --write-out '%{http_code}' \
+              "$ASPNETCORE_URLS/api/anomaly/fusion/assets/FUSION-PLC-E2E")"
+            if [[ "$code" == "404" ]]; then break; fi
+            if [[ "$attempt" -eq 20 ]]; then cat artifacts/fusion-plc-eviction-probe.json; exit 1; fi
+            sleep 1
+          done
+
+      - name: Validate real transport cycle bridge and TTL cleanup
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/transport/cycle-analysis/load/scenario" \
+            --header 'content-type: application/json' \
+            --data '{"requestPrefix":"FUSION-BRIDGE-CYCLE","baselineCycles":20,"slowCycles":1,"invalidCycles":1,"faultedCycles":1,"alternateContextCycles":1}' \
+            --max-time 60 | tee artifacts/fusion-cycle-scenario.json
+
+          jq -e '
+            .cycleDelta == 24 and
+            .invalidSequenceDelta == 1 and
+            .durationAnomalyDelta == 2 and
+            .retainedAnomalyDelta == 3 and
+            .slowTotalAnomalies == 1 and
+            .slowPhaseAnomalies == 1 and
+            .invalidSequenceAnomalies == 1 and
+            .alternateContextAnomalies == 0
+          ' artifacts/fusion-cycle-scenario.json >/dev/null
+
+          slow_asset='RGV-FUSION-BRIDGE-CYCLE-SLOW-000000'
+          invalid_asset='RGV-FUSION-BRIDGE-CYCLE-INVALID-000000'
+          for attempt in {1..20}; do
+            code="$(curl --silent --output artifacts/fusion-cycle-slow-asset.json --write-out '%{http_code}' \
+              "$ASPNETCORE_URLS/api/anomaly/fusion/assets/$slow_asset")"
+            if [[ "$code" == "200" ]] && jq -e '
+              .status == 3 and
+              .independentSourceCount == 2 and
+              ([.evidence[].source] | sort) == (["CYCLE_PHASE_DURATION", "CYCLE_TOTAL_DURATION"] | sort)
+            ' artifacts/fusion-cycle-slow-asset.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 20 ]]; then cat artifacts/fusion-cycle-slow-asset.json; exit 1; fi
+            sleep 0.5
+          done
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/fusion/assets/$invalid_asset" \
+            | tee artifacts/fusion-cycle-invalid-asset.json
+          jq -e '
+            .status == 2 and
+            .independentSourceCount == 1 and
+            .evidence[0].source == "CYCLE_SEQUENCE"
+          ' artifacts/fusion-cycle-invalid-asset.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/fusion/assets?minimumStatus=2&maxCount=20" \
+            | tee artifacts/fusion-cycle-warning-assets.json
+          jq -e '
+            ([.[].assetId] | index("RGV-FUSION-BRIDGE-CYCLE-SLOW-000000")) != null and
+            ([.[].assetId] | index("RGV-FUSION-BRIDGE-CYCLE-INVALID-000000")) != null
+          ' artifacts/fusion-cycle-warning-assets.json >/dev/null
+
+          for asset in "$slow_asset" "$invalid_asset"; do
+            for attempt in {1..20}; do
+              code="$(curl --silent --output "artifacts/fusion-cycle-eviction-${attempt}.json" --write-out '%{http_code}' \
+                "$ASPNETCORE_URLS/api/anomaly/fusion/assets/$asset")"
+              if [[ "$code" == "404" ]]; then break; fi
+              if [[ "$attempt" -eq 20 ]]; then cat "artifacts/fusion-cycle-eviction-${attempt}.json"; exit 1; fi
+              sleep 1
+            done
+          done
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/fusion/status" \
+            | tee artifacts/fusion-bridge-final-status.json
+          jq -e '
+            .fusion.enabled == true and
+            .fusion.trackedAssets == 0 and
+            .fusion.activeEvidence == 0 and
+            .fusion.evidenceAccepted == 5 and
+            .fusion.evidenceRecovered == 2 and
+            .fusion.evidenceExpired == 3 and
+            .fusion.evidenceDropped == 0 and
+            .fusion.evictedAssets >= 3 and
+            .fusion.alarmTransitions >= 2 and
+            .fusion.recoveryTransitions >= 2 and
+            .ingress.written == 7 and
+            .ingress.read == 7 and
+            .ingress.pending == 0 and
+            .ingress.dropped == 0
+          ' artifacts/fusion-bridge-final-status.json >/dev/null
+
+      - name: Validate Host log
+        if: always()
+        shell: bash
+        run: |
+          [[ -f artifacts/fusion-bridge-host.log ]] || exit 0
+          if grep -Eqi 'Unhandled exception|fail:|Stack overflow|OutOfMemoryException|fatal|ChannelClosedException' \
+            artifacts/fusion-bridge-host.log; then
+            grep -Ein -C 5 'Unhandled exception|fail:|Stack overflow|OutOfMemoryException|fatal|ChannelClosedException' \
+              artifacts/fusion-bridge-host.log || true
+            exit 1
+          fi
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/fusion-bridge-host.pid ]]; then
+            pid="$(cat artifacts/fusion-bridge-host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..30}; do
+              if ! kill -0 "$pid" 2>/dev/null; then exit 0; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload bridge E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-anomaly-fusion-bridge-e2e-${{ github.run_number }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30

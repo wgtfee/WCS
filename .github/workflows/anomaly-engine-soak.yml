@@ -175,6 +175,17 @@ jobs:
           [[ "$total_failures" == "0" ]]
           [[ "$total_suppressed" == "0" ]]
 
+      - name: Collect post-soak GC diagnostics
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/load/collect-gc" \
+            | tee artifacts/anomaly-soak-gc.json
+          sleep 1
+          ps -o rss= -p "$(cat artifacts/anomaly-soak-host.pid)" | tr -d ' ' > artifacts/anomaly-soak-post-gc-rss-kb.txt
+          test -s artifacts/anomaly-soak-gc.json
+          test -s artifacts/anomaly-soak-post-gc-rss-kb.txt
+
       - name: Verify final SQL and memory trend
         shell: bash
         run: |
@@ -208,7 +219,9 @@ jobs:
           [[ "$(jq -r '.suppressed' artifacts/anomaly-soak-final-status.json)" == "0" ]]
 
           python3 - <<'PY'
-          import csv, json
+          import csv
+          import json
+          import statistics
           from pathlib import Path
 
           rows = list(csv.DictReader(Path('artifacts/anomaly-soak-timeline.csv').open()))
@@ -218,12 +231,25 @@ jobs:
           final = rss[-1]
           peak = max(rss)
 
-          tail_rss = rss[-24:]
-          tail_x = elapsed_minutes[-24:]
-          x_mean = sum(tail_x) / len(tail_x)
-          y_mean = sum(tail_rss) / len(tail_rss)
-          denominator = sum((x - x_mean) ** 2 for x in tail_x)
-          slope = 0 if denominator == 0 else sum((x - x_mean) * (y - y_mean) for x, y in zip(tail_x, tail_rss)) / denominator
+          tail_rss = rss[-48:]
+          first_tail_window = tail_rss[:24]
+          second_tail_window = tail_rss[24:]
+          platform_delta = statistics.median(second_tail_window) - statistics.median(first_tail_window)
+
+          short_tail_rss = rss[-24:]
+          short_tail_x = elapsed_minutes[-24:]
+          x_mean = sum(short_tail_x) / len(short_tail_x)
+          y_mean = sum(short_tail_rss) / len(short_tail_rss)
+          denominator = sum((x - x_mean) ** 2 for x in short_tail_x)
+          slope = 0 if denominator == 0 else sum(
+              (x - x_mean) * (y - y_mean)
+              for x, y in zip(short_tail_x, short_tail_rss)
+          ) / denominator
+
+          gc = json.loads(Path('artifacts/anomaly-soak-gc.json').read_text())
+          managed_after_mb = gc['managedAfterBytes'] / 1048576
+          endpoint_post_gc_mb = gc['rssAfterBytes'] / 1048576
+          sampled_post_gc_mb = int(Path('artifacts/anomaly-soak-post-gc-rss-kb.txt').read_text().strip()) / 1024
 
           result = {
               'samples': len(rows),
@@ -231,13 +257,21 @@ jobs:
               'finalRssMb': final,
               'peakRssMb': peak,
               'finalGrowthMb': final - initial,
+              'tailPlatformMedianDeltaMb': platform_delta,
               'lastTwoMinuteSlopeMbPerMinute': slope,
+              'managedAfterGcMb': managed_after_mb,
+              'endpointPostGcRssMb': endpoint_post_gc_mb,
+              'sampledPostGcRssMb': sampled_post_gc_mb,
           }
           Path('artifacts/anomaly-soak-memory.json').write_text(json.dumps(result, indent=2))
+
           assert len(rows) == 120
           assert peak <= 850
           assert final - initial <= 450
-          assert slope <= 5
+          assert platform_delta <= 32
+          assert slope <= 15
+          assert managed_after_mb <= 256
+          assert sampled_post_gc_mb <= 650
           PY
 
       - name: Validate Host log

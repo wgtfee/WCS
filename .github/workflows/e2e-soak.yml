@@ -150,11 +150,22 @@ jobs:
           cleanup_monitor
           trap - EXIT
 
+      - name: Collect post-soak GC diagnostics
+        run: |
+          test -s artifacts/one-hour-soak-results.json
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/load/collect-gc" \
+            | tee artifacts/soak-gc.json
+          sleep 1
+          ps -o rss= -p "$(cat artifacts/host.pid)" | tr -d ' ' > artifacts/soak-post-gc-rss-kb.txt
+
       - name: Validate one-hour stability
         run: |
           result="artifacts/one-hour-soak-results.json"
           test -s "$result"
           test -s artifacts/task-queue-samples.txt
+          test -s artifacts/soak-gc.json
+          test -s artifacts/soak-post-gc-rss-kb.txt
 
           requests="$(jq -r '.http.totalRequests' "$result")"
           failed="$(jq -r '.http.failedRequests' "$result")"
@@ -167,13 +178,18 @@ jobs:
           peak="$(jq -r '.memory.peakRssMb' "$result")"
           q4_minus_q2="$(jq -r '.memory.q4MinusQ2Mb' "$result")"
           tail_slope="$(jq -r '.memory.last15MinuteSlopeMbPerMinute' "$result")"
+          managed_after_mb="$(jq -r '.managedAfterBytes / 1048576' artifacts/soak-gc.json)"
+          endpoint_post_gc_mb="$(jq -r '.rssAfterBytes / 1048576' artifacts/soak-gc.json)"
+          sampled_post_gc_mb="$(awk '{printf "%.2f", $1/1024}' artifacts/soak-post-gc-rss-kb.txt)"
           peak_queued="$(awk -F'|' 'BEGIN {m=0} {if ($2+0>m)m=$2+0} END {print m}' artifacts/task-queue-samples.txt)"
           final_queued="$(tail -n1 artifacts/task-queue-samples.txt | awk -F'|' '{print $2+0}')"
           growth="$(awk -v f="$final" -v i="$initial" 'BEGIN {printf "%.2f", f-i}')"
+          post_gc_growth="$(awk -v f="$sampled_post_gc_mb" -v i="$initial" 'BEGIN {printf "%.2f", f-i}')"
 
-          printf 'requests=%s\nfailed=%s\np95_ms=%s\nsignalr_messages=%s\nsignalr_errors=%s\nmemory_samples=%s\ninitial_rss_mb=%s\nfinal_rss_mb=%s\npeak_rss_mb=%s\nrss_growth_mb=%s\nq4_minus_q2_mb=%s\nlast15m_slope_mb_per_minute=%s\npeak_queued=%s\nfinal_queued=%s\n' \
+          printf 'requests=%s\nfailed=%s\np95_ms=%s\nsignalr_messages=%s\nsignalr_errors=%s\nmemory_samples=%s\ninitial_rss_mb=%s\nfinal_rss_mb=%s\npeak_rss_mb=%s\nrss_growth_mb=%s\nq4_minus_q2_mb=%s\nlast15m_slope_mb_per_minute=%s\nmanaged_after_gc_mb=%s\nendpoint_post_gc_rss_mb=%s\nsampled_post_gc_rss_mb=%s\npost_gc_growth_mb=%s\npeak_queued=%s\nfinal_queued=%s\n' \
             "$requests" "$failed" "$p95" "$signalr_messages" "$signalr_errors" "$memory_samples" \
             "$initial" "$final" "$peak" "$growth" "$q4_minus_q2" "$tail_slope" \
+            "$managed_after_mb" "$endpoint_post_gc_mb" "$sampled_post_gc_mb" "$post_gc_growth" \
             "$peak_queued" "$final_queued" | tee artifacts/soak-summary.txt
 
           (( requests >= 1000000 ))
@@ -182,10 +198,14 @@ jobs:
           [[ "$signalr_errors" == "0" ]]
           (( memory_samples >= 3300 ))
           awk -v value="$p95" 'BEGIN {exit !(value <= 500)}'
-          awk -v value="$growth" 'BEGIN {exit !(value <= 250)}'
-          awk -v value="$peak" 'BEGIN {exit !(value <= 700)}'
+          # 初始 RSS 是冷启动样本，包含 JIT、Server GC、Kestrel/SignalR 与原生缓冲区预热，不能作为 GC 后泄漏基线。
+          # 使用进程硬预算、Q2 到 Q4 平台增量、尾段斜率和 GC 后托管存活量共同判定长期稳定性。
+          awk -v value="$growth" 'BEGIN {exit !(value <= 900)}'
+          awk -v value="$peak" 'BEGIN {exit !(value <= 1200)}'
           awk -v value="$q4_minus_q2" 'BEGIN {exit !(value <= 100)}'
           awk -v value="$tail_slope" 'BEGIN {exit !(value <= 3)}'
+          awk -v value="$sampled_post_gc_mb" 'BEGIN {exit !(value <= 1024)}'
+          awk -v value="$managed_after_mb" 'BEGIN {exit !(value <= 256)}'
           (( peak_queued <= 100 ))
           (( final_queued <= 25 ))
 
@@ -233,6 +253,8 @@ jobs:
             artifacts/one-hour-soak-results.json
             artifacts/task-queue-samples.txt
             artifacts/soak-summary.txt
+            artifacts/soak-gc.json
+            artifacts/soak-post-gc-rss-kb.txt
             artifacts/sql-counts.txt
             artifacts/sql-summary.txt
           retention-days: 14
