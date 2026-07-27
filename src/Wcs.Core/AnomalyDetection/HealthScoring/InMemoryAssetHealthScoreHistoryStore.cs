@@ -13,6 +13,7 @@ public sealed class InMemoryAssetHealthScoreHistoryStore : IAssetHealthScoreHist
     private long _deduplicatedPoints;
     private long _evictedPoints;
     private long _evictedAssets;
+    private DateTime? _lastSuccessfulWriteUtc;
 
     public InMemoryAssetHealthScoreHistoryStore(AssetHealthScoringOptions options) =>
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -58,61 +59,89 @@ public sealed class InMemoryAssetHealthScoreHistoryStore : IAssetHealthScoreHist
                 return ValueTask.FromResult(false);
             }
 
-            var point = new AssetHealthScorePoint
-            {
-                Sequence = ++_sequence,
-                AssetId = assetId,
-                HealthScore = snapshot.HealthScore,
-                PreviousHealthScore = previous?.HealthScore ?? snapshot.HealthScore,
-                ScoreDelta = Math.Round(delta, 2, MidpointRounding.AwayFromZero),
-                Grade = snapshot.Grade,
-                PreviousGrade = previous?.Grade ?? snapshot.Grade,
-                GradeChanged = gradeChanged,
-                Direction = ResolveDirection(delta, _options.MinimumScoreChangeToRecord),
-                FusionRiskScore = snapshot.FusionRiskScore,
-                FusionStatus = snapshot.FusionStatus,
-                IndependentSourceCount = snapshot.IndependentSourceCount,
-                CalculatedAtUtc = snapshot.CalculatedAtUtc,
-                RecordedAtUtc = timestamp,
-                Summary = snapshot.Summary
-            };
-
+            var point = CreatePoint(++_sequence, assetId, snapshot, previous, timestamp, _options);
             state.Points.AddLast(point);
             state.LastRecordedAtUtc = timestamp;
             _recordedPoints++;
+            _lastSuccessfulWriteUtc = timestamp;
             TrimAssetCapacityLocked(state);
             return ValueTask.FromResult(true);
         }
     }
 
-    public ValueTask<IReadOnlyList<AssetHealthScorePoint>> GetHistoryAsync(
+    public async ValueTask<IReadOnlyList<AssetHealthScorePoint>> GetHistoryAsync(
         string assetId,
         DateTime? fromUtc = null,
         int maximumCount = 200,
         CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(assetId))
-            return ValueTask.FromResult<IReadOnlyList<AssetHealthScorePoint>>(
-                Array.Empty<AssetHealthScorePoint>());
+        var page = await GetHistoryPageAsync(
+            assetId,
+            fromUtc,
+            toUtc: null,
+            skip: 0,
+            maximumCount,
+            cancellationToken);
+        return page.Items;
+    }
 
+    public ValueTask<AssetHealthHistoryPage> GetHistoryPageAsync(
+        string assetId,
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
+        int skip = 0,
+        int maximumCount = 200,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalizedAssetId = assetId?.Trim() ?? string.Empty;
+        skip = Math.Max(0, skip);
         maximumCount = Math.Clamp(maximumCount, 1, _options.MaximumHistoryQueryCount);
+
+        if (!_options.Enabled || normalizedAssetId.Length == 0)
+            return ValueTask.FromResult(EmptyPage(normalizedAssetId, fromUtc, toUtc, skip));
+
         lock (_gate)
         {
-            if (!_assets.TryGetValue(assetId.Trim(), out var state))
-                return ValueTask.FromResult<IReadOnlyList<AssetHealthScorePoint>>(
-                    Array.Empty<AssetHealthScorePoint>());
+            if (!_assets.TryGetValue(normalizedAssetId, out var state))
+                return ValueTask.FromResult(EmptyPage(normalizedAssetId, fromUtc, toUtc, skip));
 
-            var result = state.Points
+            var newestFirst = state.Points
                 .Where(point => fromUtc is null || point.RecordedAtUtc >= fromUtc.Value)
-                .TakeLast(maximumCount)
+                .Where(point => toUtc is null || point.RecordedAtUtc <= toUtc.Value)
+                .Reverse()
+                .Skip(skip)
+                .Take(maximumCount + 1)
                 .ToArray();
-            return ValueTask.FromResult<IReadOnlyList<AssetHealthScorePoint>>(result);
+            var hasMore = newestFirst.Length > maximumCount;
+            var items = newestFirst
+                .Take(maximumCount)
+                .Reverse()
+                .ToArray();
+
+            return ValueTask.FromResult(new AssetHealthHistoryPage
+            {
+                AssetId = normalizedAssetId,
+                FromUtc = fromUtc,
+                ToUtc = toUtc,
+                Skip = skip,
+                Count = items.Length,
+                HasMore = hasMore,
+                Items = items
+            });
         }
     }
 
     public ValueTask<AssetHealthTrendSnapshot?> GetTrendAsync(
         string assetId,
+        int? windowSize = null,
+        CancellationToken cancellationToken = default) =>
+        GetTrendRangeAsync(assetId, fromUtc: null, toUtc: null, windowSize, cancellationToken);
+
+    public ValueTask<AssetHealthTrendSnapshot?> GetTrendRangeAsync(
+        string assetId,
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
         int? windowSize = null,
         CancellationToken cancellationToken = default)
     {
@@ -130,33 +159,12 @@ public sealed class InMemoryAssetHealthScoreHistoryStore : IAssetHealthScoreHist
             if (!_assets.TryGetValue(assetId.Trim(), out var state) || state.Points.Count == 0)
                 return ValueTask.FromResult<AssetHealthTrendSnapshot?>(null);
 
-            var points = state.Points.TakeLast(effectiveWindow).ToArray();
-            var first = points[0];
-            var last = points[^1];
-            var delta = last.HealthScore - first.HealthScore;
-            var durationHours = (last.RecordedAtUtc - first.RecordedAtUtc).TotalHours;
-            var slope = durationHours <= 0 ? 0 : delta / durationHours;
-            var direction = ResolveDirection(delta, _options.TrendChangeThreshold);
-
-            var trend = new AssetHealthTrendSnapshot
-            {
-                AssetId = state.AssetId,
-                Direction = direction,
-                CurrentHealthScore = last.HealthScore,
-                ScoreDelta = Math.Round(delta, 2, MidpointRounding.AwayFromZero),
-                AverageHealthScore = Math.Round(
-                    points.Average(static point => point.HealthScore),
-                    2,
-                    MidpointRounding.AwayFromZero),
-                MinimumHealthScore = points.Min(static point => point.HealthScore),
-                MaximumHealthScore = points.Max(static point => point.HealthScore),
-                HealthScoreSlopePerHour = Math.Round(slope, 2, MidpointRounding.AwayFromZero),
-                SampleCount = points.Length,
-                CurrentGrade = last.Grade,
-                WindowStartUtc = first.RecordedAtUtc,
-                WindowEndUtc = last.RecordedAtUtc
-            };
-            return ValueTask.FromResult<AssetHealthTrendSnapshot?>(trend);
+            var points = state.Points
+                .Where(point => fromUtc is null || point.RecordedAtUtc >= fromUtc.Value)
+                .Where(point => toUtc is null || point.RecordedAtUtc <= toUtc.Value)
+                .TakeLast(effectiveWindow)
+                .ToArray();
+            return ValueTask.FromResult(CalculateTrend(state.AssetId, points, _options.TrendChangeThreshold));
         }
     }
 
@@ -166,20 +174,29 @@ public sealed class InMemoryAssetHealthScoreHistoryStore : IAssetHealthScoreHist
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
+            var retained = _assets.Values.Sum(static state => state.Points.Count);
             return ValueTask.FromResult(new AssetHealthHistoryStoreStatus
             {
                 Enabled = _options.Enabled,
                 Provider = Provider,
+                IsAvailable = true,
                 TrackedAssets = _assets.Count,
-                RetainedPoints = _assets.Values.Sum(static state => state.Points.Count),
+                RetainedPoints = retained,
                 RecordedPoints = _recordedPoints,
+                PersistedPoints = retained,
                 DeduplicatedPoints = _deduplicatedPoints,
+                IdempotentDuplicatePoints = 0,
+                DroppedWrites = 0,
+                FailedWriteBatches = 0,
+                PendingWrites = 0,
                 EvictedPoints = _evictedPoints,
                 EvictedAssets = _evictedAssets,
                 MaximumHistoryPerAsset = _options.MaximumHistoryPerAsset,
                 MaximumTrackedHistoryAssets = _options.MaximumTrackedHistoryAssets,
                 HistoryRetentionHours = _options.HistoryRetentionHours,
-                SamplingIntervalSeconds = _options.SamplingIntervalSeconds
+                SamplingIntervalSeconds = _options.SamplingIntervalSeconds,
+                LastSuccessfulWriteUtc = _lastSuccessfulWriteUtc,
+                LastError = null
             });
         }
     }
@@ -212,6 +229,86 @@ public sealed class InMemoryAssetHealthScoreHistoryStore : IAssetHealthScoreHist
         return ValueTask.CompletedTask;
     }
 
+    internal static AssetHealthScorePoint CreatePoint(
+        long sequence,
+        string assetId,
+        AssetHealthScoreSnapshot snapshot,
+        AssetHealthScorePoint? previous,
+        DateTime timestamp,
+        AssetHealthScoringOptions options)
+    {
+        var delta = previous is null ? 0 : snapshot.HealthScore - previous.HealthScore;
+        var gradeChanged = previous is not null && previous.Grade != snapshot.Grade;
+        return new AssetHealthScorePoint
+        {
+            Sequence = sequence,
+            AssetId = assetId,
+            HealthScore = snapshot.HealthScore,
+            PreviousHealthScore = previous?.HealthScore ?? snapshot.HealthScore,
+            ScoreDelta = Math.Round(delta, 2, MidpointRounding.AwayFromZero),
+            Grade = snapshot.Grade,
+            PreviousGrade = previous?.Grade ?? snapshot.Grade,
+            GradeChanged = gradeChanged,
+            Direction = ResolveDirection(delta, options.MinimumScoreChangeToRecord),
+            FusionRiskScore = snapshot.FusionRiskScore,
+            FusionStatus = snapshot.FusionStatus,
+            IndependentSourceCount = snapshot.IndependentSourceCount,
+            CalculatedAtUtc = snapshot.CalculatedAtUtc,
+            RecordedAtUtc = timestamp,
+            Summary = snapshot.Summary
+        };
+    }
+
+    internal static AssetHealthTrendSnapshot? CalculateTrend(
+        string assetId,
+        IReadOnlyList<AssetHealthScorePoint> points,
+        double changeThreshold)
+    {
+        if (points.Count == 0) return null;
+        var first = points[0];
+        var last = points[^1];
+        var delta = last.HealthScore - first.HealthScore;
+        var durationHours = (last.RecordedAtUtc - first.RecordedAtUtc).TotalHours;
+        var slope = durationHours <= 0 ? 0 : delta / durationHours;
+        return new AssetHealthTrendSnapshot
+        {
+            AssetId = assetId,
+            Direction = ResolveDirection(delta, changeThreshold),
+            CurrentHealthScore = last.HealthScore,
+            ScoreDelta = Math.Round(delta, 2, MidpointRounding.AwayFromZero),
+            AverageHealthScore = Math.Round(points.Average(static point => point.HealthScore), 2, MidpointRounding.AwayFromZero),
+            MinimumHealthScore = points.Min(static point => point.HealthScore),
+            MaximumHealthScore = points.Max(static point => point.HealthScore),
+            HealthScoreSlopePerHour = Math.Round(slope, 2, MidpointRounding.AwayFromZero),
+            SampleCount = points.Count,
+            CurrentGrade = last.Grade,
+            WindowStartUtc = first.RecordedAtUtc,
+            WindowEndUtc = last.RecordedAtUtc
+        };
+    }
+
+    internal static AssetHealthTrendDirection ResolveDirection(double delta, double threshold)
+    {
+        if (delta >= threshold) return AssetHealthTrendDirection.Improving;
+        if (delta <= -threshold) return AssetHealthTrendDirection.Deteriorating;
+        return AssetHealthTrendDirection.Stable;
+    }
+
+    private static AssetHealthHistoryPage EmptyPage(
+        string assetId,
+        DateTime? fromUtc,
+        DateTime? toUtc,
+        int skip) => new()
+    {
+        AssetId = assetId,
+        FromUtc = fromUtc,
+        ToUtc = toUtc,
+        Skip = skip,
+        Count = 0,
+        HasMore = false,
+        Items = Array.Empty<AssetHealthScorePoint>()
+    };
+
     private void EnsureAssetCapacityLocked()
     {
         if (_assets.Count < _options.MaximumTrackedHistoryAssets) return;
@@ -232,13 +329,6 @@ public sealed class InMemoryAssetHealthScoreHistoryStore : IAssetHealthScoreHist
             state.Points.RemoveFirst();
             _evictedPoints++;
         }
-    }
-
-    private static AssetHealthTrendDirection ResolveDirection(double delta, double threshold)
-    {
-        if (delta >= threshold) return AssetHealthTrendDirection.Improving;
-        if (delta <= -threshold) return AssetHealthTrendDirection.Deteriorating;
-        return AssetHealthTrendDirection.Stable;
     }
 
     private sealed class AssetHistoryState
