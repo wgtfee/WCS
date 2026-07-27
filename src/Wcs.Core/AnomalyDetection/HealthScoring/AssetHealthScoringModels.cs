@@ -17,6 +17,12 @@ public enum AssetHealthTrendDirection
     Deteriorating = 2
 }
 
+public enum AssetHealthHistoryProvider
+{
+    Memory = 0,
+    SqlServer = 1
+}
+
 public sealed class AssetHealthScoringOptions
 {
     public bool Enabled { get; set; }
@@ -25,6 +31,7 @@ public sealed class AssetHealthScoringOptions
     public double DegradedMinimumScore { get; set; } = 40;
     public int MaximumFactors { get; set; } = 10;
 
+    public AssetHealthHistoryProvider HistoryProvider { get; set; } = AssetHealthHistoryProvider.Memory;
     public int SamplingIntervalSeconds { get; set; } = 10;
     public double MinimumScoreChangeToRecord { get; set; } = 1;
     public int MaximumUnchangedIntervalSeconds { get; set; } = 300;
@@ -34,6 +41,12 @@ public sealed class AssetHealthScoringOptions
     public int TrendWindowSize { get; set; } = 12;
     public double TrendChangeThreshold { get; set; } = 2;
     public int MaximumHistoryQueryCount { get; set; } = 1_000;
+
+    public int HistoryWriteChannelCapacity { get; set; } = 20_000;
+    public int HistoryWriteBatchSize { get; set; } = 200;
+    public int HistoryWriteRetryDelayMs { get; set; } = 2_000;
+    public int HistoryMaintenanceIntervalSeconds { get; set; } = 3_600;
+    public int HistoryMaintenanceBatchSize { get; set; } = 2_000;
 }
 
 public sealed record AssetHealthFactor
@@ -77,6 +90,17 @@ public sealed record AssetHealthScorePoint
     public required string Summary { get; init; }
 }
 
+public sealed record AssetHealthHistoryPage
+{
+    public required string AssetId { get; init; }
+    public DateTime? FromUtc { get; init; }
+    public DateTime? ToUtc { get; init; }
+    public required int Skip { get; init; }
+    public required int Count { get; init; }
+    public required bool HasMore { get; init; }
+    public required IReadOnlyList<AssetHealthScorePoint> Items { get; init; }
+}
+
 public sealed record AssetHealthTrendSnapshot
 {
     public required string AssetId { get; init; }
@@ -108,16 +132,24 @@ public sealed record AssetHealthHistoryStoreStatus
 {
     public required bool Enabled { get; init; }
     public required string Provider { get; init; }
+    public required bool IsAvailable { get; init; }
     public required int TrackedAssets { get; init; }
     public required int RetainedPoints { get; init; }
     public required long RecordedPoints { get; init; }
+    public required long PersistedPoints { get; init; }
     public required long DeduplicatedPoints { get; init; }
+    public required long IdempotentDuplicatePoints { get; init; }
+    public required long DroppedWrites { get; init; }
+    public required long FailedWriteBatches { get; init; }
+    public required long PendingWrites { get; init; }
     public required long EvictedPoints { get; init; }
     public required long EvictedAssets { get; init; }
     public required int MaximumHistoryPerAsset { get; init; }
     public required int MaximumTrackedHistoryAssets { get; init; }
     public required int HistoryRetentionHours { get; init; }
     public required int SamplingIntervalSeconds { get; init; }
+    public DateTime? LastSuccessfulWriteUtc { get; init; }
+    public string? LastError { get; init; }
 }
 
 public interface IAssetHealthScoringService
@@ -131,7 +163,7 @@ public interface IAssetHealthScoringService
 }
 
 /// <summary>
-/// 健康分历史持久化边界。默认实现为有界内存仓储，后续可替换为 SQL 或时序库实现。
+/// 健康分历史持久化边界。实现必须保持只读查询与控制链路隔离，数据库异常不得阻塞 PLC、Fusion 或调度。
 /// </summary>
 public interface IAssetHealthScoreHistoryStore
 {
@@ -148,8 +180,23 @@ public interface IAssetHealthScoreHistoryStore
         int maximumCount = 200,
         CancellationToken cancellationToken = default);
 
+    ValueTask<AssetHealthHistoryPage> GetHistoryPageAsync(
+        string assetId,
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
+        int skip = 0,
+        int maximumCount = 200,
+        CancellationToken cancellationToken = default);
+
     ValueTask<AssetHealthTrendSnapshot?> GetTrendAsync(
         string assetId,
+        int? windowSize = null,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<AssetHealthTrendSnapshot?> GetTrendRangeAsync(
+        string assetId,
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
         int? windowSize = null,
         CancellationToken cancellationToken = default);
 
