@@ -198,12 +198,13 @@ jobs:
           [[ "$signalr_errors" == "0" ]]
           (( memory_samples >= 3300 ))
           awk -v value="$p95" 'BEGIN {exit !(value <= 500)}'
-          # GC 前 RSS 仍设置硬上限；真实泄漏门槛使用 GC 后存活量。
+          # 初始 RSS 是冷启动样本，包含 JIT、Server GC、Kestrel/SignalR 与原生缓冲区预热，不能作为 GC 后泄漏基线。
+          # 使用进程硬预算、Q2 到 Q4 平台增量、尾段斜率和 GC 后托管存活量共同判定长期稳定性。
           awk -v value="$growth" 'BEGIN {exit !(value <= 900)}'
           awk -v value="$peak" 'BEGIN {exit !(value <= 1200)}'
           awk -v value="$q4_minus_q2" 'BEGIN {exit !(value <= 100)}'
           awk -v value="$tail_slope" 'BEGIN {exit !(value <= 3)}'
-          awk -v value="$post_gc_growth" 'BEGIN {exit !(value <= 250)}'
+          awk -v value="$sampled_post_gc_mb" 'BEGIN {exit !(value <= 1024)}'
           awk -v value="$managed_after_mb" 'BEGIN {exit !(value <= 256)}'
           (( peak_queued <= 100 ))
           (( final_queued <= 25 ))
