@@ -82,7 +82,12 @@ jobs:
         run: |
           test -s artifacts/fusion-load.log
           test -s artifacts/TestResults/anomaly-fusion-load.trx
-          grep -q 'Passed!' artifacts/fusion-load.log
+          grep -q 'Test Run Successful.' artifacts/fusion-load.log
+          grep -Eq 'events=1000000' artifacts/fusion-load.log
+          grep -Eq 'assets=10000' artifacts/fusion-load.log
+          grep -Eq 'evicted_assets=10000' artifacts/fusion-load.log
+          grep -Eq 'managed_growth_mb=' artifacts/fusion-load.log
+          grep -Eq 'rss_growth_mb=' artifacts/fusion-load.log
           if grep -Eqi 'OutOfMemory|Stack overflow|Unhandled exception|Test Run Failed' artifacts/fusion-build-tests.log artifacts/fusion-build-host.log artifacts/fusion-unit.log artifacts/fusion-load.log; then
             grep -Eni -C 5 'OutOfMemory|Stack overflow|Unhandled exception|Test Run Failed' artifacts/*.log || true
             exit 1
