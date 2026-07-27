@@ -29,8 +29,9 @@ public sealed class AnomalyFusionEngineTests
             confidence: 0.95,
             observedAtUtc: now.AddSeconds(1)));
 
-        var snapshot = Assert.NotNull(engine.GetAsset("CV-01"));
-        Assert.Equal(FusedHealthStatus.Warning, snapshot.Status);
+        var snapshot = engine.GetAsset("CV-01");
+        Assert.NotNull(snapshot);
+        Assert.Equal(FusedHealthStatus.Warning, snapshot!.Status);
         Assert.Equal(1, snapshot.IndependentSourceCount);
         Assert.Single(snapshot.Evidence);
         Assert.Equal("RULE-2", snapshot.Evidence[0].EvidenceId);
@@ -67,14 +68,16 @@ public sealed class AnomalyFusionEngineTests
             observedAtUtc: now.AddSeconds(1));
         engine.Process(ml);
 
-        var firstAlarmEvaluation = Assert.NotNull(engine.GetAsset("RGV-01"));
-        Assert.Equal(FusedHealthStatus.Warning, firstAlarmEvaluation.Status);
+        var firstAlarmEvaluation = engine.GetAsset("RGV-01");
+        Assert.NotNull(firstAlarmEvaluation);
+        Assert.Equal(FusedHealthStatus.Warning, firstAlarmEvaluation!.Status);
         Assert.Equal(2, firstAlarmEvaluation.IndependentSourceCount);
         Assert.True(firstAlarmEvaluation.Score >= 0.85);
 
         engine.Process(ml with { ObservedAtUtc = now.AddSeconds(2) });
-        var alarm = Assert.NotNull(engine.GetAsset("RGV-01"));
-        Assert.Equal(FusedHealthStatus.Alarm, alarm.Status);
+        var alarm = engine.GetAsset("RGV-01");
+        Assert.NotNull(alarm);
+        Assert.Equal(FusedHealthStatus.Alarm, alarm!.Status);
         Assert.Equal(2, alarm.IndependentSourceCount);
         Assert.Equal(1, engine.GetStatus().AlarmTransitions);
     }
@@ -124,8 +127,9 @@ public sealed class AnomalyFusionEngineTests
         Assert.Equal(0, engine.GetAsset("EMS-01")!.IndependentSourceCount);
 
         engine.Maintenance(now.AddSeconds(4));
-        var normal = Assert.NotNull(engine.GetAsset("EMS-01"));
-        Assert.Equal(FusedHealthStatus.Normal, normal.Status);
+        var normal = engine.GetAsset("EMS-01");
+        Assert.NotNull(normal);
+        Assert.Equal(FusedHealthStatus.Normal, normal!.Status);
         Assert.Equal(0, normal.Score);
         Assert.Empty(normal.Evidence);
         Assert.Equal(1, engine.GetStatus().RecoveryTransitions);
@@ -194,14 +198,16 @@ public sealed class AnomalyFusionEngineTests
         Assert.NotNull(engine.GetAsset("CV-02"));
 
         engine.Maintenance(now.AddSeconds(2));
-        var recovered = Assert.NotNull(engine.GetAsset("CV-02"));
-        Assert.Equal(FusedHealthStatus.Normal, recovered.Status);
+        var recovered = engine.GetAsset("CV-02");
+        Assert.NotNull(recovered);
+        Assert.Equal(FusedHealthStatus.Normal, recovered!.Status);
         Assert.Empty(recovered.Evidence);
         Assert.Equal(1, engine.GetStatus().EvidenceExpired);
 
         engine.Maintenance(now.AddSeconds(5));
         Assert.Null(engine.GetAsset("CV-02"));
         Assert.Equal(0, engine.GetStatus().TrackedAssets);
+        Assert.Equal(1, engine.GetStatus().EvictedAssets);
     }
 
     [Fact]
