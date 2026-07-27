@@ -6,12 +6,14 @@ on:
       - develop
     paths:
       - '.github/workflows/anomaly-health-scoring.yml'
+      - '.github/workflows/anomaly-health-scoring-sql.yml'
       - 'src/Wcs.Core/AnomalyDetection/HealthScoring/**'
-      - 'src/Wcs.Core.Tests/AssetHealthScoringServiceTests.cs'
-      - 'src/Wcs.Core.Tests/AssetHealthScoreHistoryStoreTests.cs'
+      - 'src/Wcs.Core.Tests/AssetHealth*.cs'
       - 'src/Wcs.Infrastructure/AnomalyDetection/HealthScoring/**'
       - 'src/Wcs.Infrastructure/AnomalyDetection/Fusion/AnomalyFusionDependencyInjection.cs'
-      - 'src/Wcs.Host/Controllers/AnomalyHealthController.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/PlcMlDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Host/Controllers/AnomalyHealth*.cs'
       - 'src/Wcs.Host/appsettings*.json'
   workflow_dispatch:
 
@@ -29,7 +31,7 @@ env:
 
 jobs:
   health-scoring:
-    name: score mapping, bounded history, trend, and host build
+    name: score mapping, bounded history, paging, trend, and host build
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -57,7 +59,7 @@ jobs:
           dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
             --configuration Release \
             --no-build \
-            --filter 'FullyQualifiedName~AssetHealthScoringServiceTests|FullyQualifiedName~AssetHealthScoreHistoryStoreTests' \
+            --filter 'FullyQualifiedName~AssetHealthScoringServiceTests|FullyQualifiedName~AssetHealthScoreHistoryStoreTests|FullyQualifiedName~AssetHealthHistoryPagingTests' \
             --logger 'trx;LogFileName=anomaly-health-scoring.trx' \
             --results-directory artifacts/TestResults
 
