@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.AnomalyDetection;
 using Wcs.Core.AnomalyDetection.Fusion;
+using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Publisher;
 
 public sealed class PlcAnomalyFusionBridgeService : BackgroundService
@@ -38,6 +39,7 @@ public sealed class PlcAnomalyFusionBridgeService : BackgroundService
             _sink.TryWrite(ToEvidence(evt.Anomaly, AnomalyEvidenceState.Active));
             return Task.CompletedTask;
         });
+
         _eventBus.Subscribe<PlcAnomalyRecoveredEvent>((evt, _) =>
         {
             _sink.TryWrite(ToEvidence(evt.Anomaly, AnomalyEvidenceState.Recovered));
@@ -45,30 +47,27 @@ public sealed class PlcAnomalyFusionBridgeService : BackgroundService
         });
 
         _logger.LogInformation("PLC anomaly fusion bridge subscribed");
+
         try
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // Normal Host shutdown.
         }
     }
 
-    private static AnomalyEvidence ToEvidence(
-        PlcAnomalyRecord anomaly,
-        AnomalyEvidenceState state)
+    private static AnomalyEvidence ToEvidence(PlcAnomalyRecord anomaly, AnomalyEvidenceState state)
     {
         var observed = state == AnomalyEvidenceState.Recovered
             ? anomaly.EndTimeUtc ?? anomaly.LastSeenUtc
             : anomaly.LastSeenUtc;
+
         return new AnomalyEvidence
         {
             EvidenceId = $"PLC|{anomaly.AnomalyId}",
-            Source = ResolveSource(anomaly.Type),
-            AssetId = string.IsNullOrWhiteSpace(anomaly.DeviceId)
-                ? anomaly.PlcName
-                : anomaly.DeviceId,
+            Source = anomaly.Type.ToString(),
+            AssetId = string.IsNullOrWhiteSpace(anomaly.DeviceId) ? anomaly.PlcName : anomaly.DeviceId,
             RelatedEntityId = anomaly.RuleId,
             Category = anomaly.Type.ToString(),
             State = state,
@@ -81,18 +80,6 @@ public sealed class PlcAnomalyFusionBridgeService : BackgroundService
         };
     }
 
-    private static string ResolveSource(PlcAnomalyType type) => type switch
-    {
-        PlcAnomalyType.Threshold => AnomalyEvidenceSources.ThresholdRule,
-        PlcAnomalyType.RateOfChange => AnomalyEvidenceSources.RateRule,
-        PlcAnomalyType.Duration => AnomalyEvidenceSources.DurationRule,
-        PlcAnomalyType.StatisticalBaseline => AnomalyEvidenceSources.StatisticalRule,
-        PlcAnomalyType.Consistency => AnomalyEvidenceSources.ConsistencyRule,
-        PlcAnomalyType.MachineLearning => AnomalyEvidenceSources.IsolationForest,
-        PlcAnomalyType.ContextualPeerComparison => AnomalyEvidenceSources.PeerMedianMad,
-        _ => $"PLC_{type.ToString().ToUpperInvariant()}"
-    };
-
     private static double NormalizeScore(PlcAnomalyRecord anomaly)
     {
         var severityFloor = anomaly.Severity switch
@@ -103,11 +90,10 @@ public sealed class PlcAnomalyFusionBridgeService : BackgroundService
             PlcAnomalySeverity.Critical => 0.96,
             _ => 0.50
         };
+
         if (!double.IsFinite(anomaly.Score) || anomaly.Score <= 0) return severityFloor;
         if (anomaly.Score <= 1) return Math.Max(severityFloor, anomaly.Score);
 
-        // MAD、变化率等检测器可能输出无上限偏离值，将其压缩到 0～1。
-        var compressed = 1.0 - Math.Exp(-anomaly.Score / 6.0);
-        return Math.Clamp(Math.Max(severityFloor, compressed), 0, 1);
+        return Math.Clamp(Math.Max(severityFloor, 1.0 - Math.Exp(-anomaly.Score / 6.0)), 0, 1);
     }
 }
