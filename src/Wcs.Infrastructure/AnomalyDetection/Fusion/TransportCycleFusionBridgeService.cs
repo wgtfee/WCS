@@ -71,29 +71,42 @@ public sealed class TransportCycleFusionBridgeService : BackgroundService
         }
     }
 
-    private static AnomalyEvidence ToEvidence(TransportCycleAnomalyRecord anomaly) => new()
+    private AnomalyEvidence ToEvidence(TransportCycleAnomalyRecord anomaly)
     {
-        EvidenceId = $"CYCLE|{anomaly.AnomalyId}",
-        Source = anomaly.Kind switch
+        var observed = NormalizeObservedUtc(anomaly.DetectedAtUtc);
+        return new AnomalyEvidence
         {
-            TransportCycleAnomalyKind.InvalidSequence => AnomalyEvidenceSources.CycleSequence,
-            TransportCycleAnomalyKind.PhaseDuration => AnomalyEvidenceSources.CyclePhaseDuration,
-            TransportCycleAnomalyKind.TotalDuration => AnomalyEvidenceSources.CycleTotalDuration,
-            _ => $"CYCLE_{anomaly.Kind.ToString().ToUpperInvariant()}"
-        },
-        AssetId = anomaly.VehicleId,
-        RelatedEntityId = anomaly.RequestId,
-        Category = anomaly.Kind.ToString(),
-        State = AnomalyEvidenceState.Active,
-        ObservedAtUtc = anomaly.DetectedAtUtc,
-        Score = NormalizeScore(anomaly),
-        Confidence = 0,
-        Severity = anomaly.Kind == TransportCycleAnomalyKind.InvalidSequence
-            ? PlcAnomalySeverity.Error
-            : PlcAnomalySeverity.Warning,
-        Reason = anomaly.Reason,
-        ContextJson = null
-    };
+            EvidenceId = $"CYCLE|{anomaly.AnomalyId}",
+            Source = anomaly.Kind switch
+            {
+                TransportCycleAnomalyKind.InvalidSequence => AnomalyEvidenceSources.CycleSequence,
+                TransportCycleAnomalyKind.PhaseDuration => AnomalyEvidenceSources.CyclePhaseDuration,
+                TransportCycleAnomalyKind.TotalDuration => AnomalyEvidenceSources.CycleTotalDuration,
+                _ => $"CYCLE_{anomaly.Kind.ToString().ToUpperInvariant()}"
+            },
+            AssetId = anomaly.VehicleId,
+            RelatedEntityId = anomaly.RequestId,
+            Category = anomaly.Kind.ToString(),
+            State = AnomalyEvidenceState.Active,
+            ObservedAtUtc = observed,
+            ExpiresAtUtc = DateTime.UtcNow.AddSeconds(_options.EvidenceRetentionSeconds),
+            Score = NormalizeScore(anomaly),
+            Confidence = 0,
+            Severity = anomaly.Kind == TransportCycleAnomalyKind.InvalidSequence
+                ? PlcAnomalySeverity.Error
+                : PlcAnomalySeverity.Warning,
+            Reason = anomaly.Reason,
+            ContextJson = null
+        };
+    }
+
+    private static DateTime NormalizeObservedUtc(DateTime value)
+    {
+        var now = DateTime.UtcNow;
+        if (value == default) return now;
+        var utc = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
+        return utc > now.AddMinutes(1) ? now : utc;
+    }
 
     private static double NormalizeScore(TransportCycleAnomalyRecord anomaly)
     {
