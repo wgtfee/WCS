@@ -1,0 +1,401 @@
+name: WCS Asset Health Governance
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/anomaly-health-governance.yml'
+      - 'src/Wcs.Core/AnomalyDetection/HealthGovernance/**'
+      - 'src/Wcs.Core.Tests/AssetHealthGovernanceServiceTests.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/HealthGovernance/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Fusion/AnomalyFusionDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Host/Controllers/AnomalyHealthGovernance*.cs'
+      - 'src/Wcs.Host/appsettings*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  ASPNETCORE_ENVIRONMENT: LoadTest
+  DOTNET_ENVIRONMENT: LoadTest
+  ASPNETCORE_URLS: http://127.0.0.1:5110
+  ConnectionStrings__WcsDb: 'Server=127.0.0.1,1433;Database=WCS_HealthGovernance;User Id=sa;Password=Wcs_HealthGov!2026;Encrypt=False;TrustServerCertificate=True;'
+  Simulator__Enabled: 'false'
+  Storage__Telemetry__Provider: Disabled
+  AnomalyDetection__Enabled: 'false'
+  AnomalyDetection__MachineLearning__Enabled: 'false'
+  TransportCycleAnalysis__Enabled: 'false'
+  AnomalyFusion__Enabled: 'false'
+  AnomalyHealthScoring__Enabled: 'false'
+  AssetHealthGovernance__Enabled: 'true'
+  AssetHealthGovernance__MinimumEventGrade: Degraded
+  AssetHealthGovernance__ConsecutiveUnhealthyEvaluations: '2'
+  AssetHealthGovernance__ConsecutiveRecoveryEvaluations: '2'
+  AssetHealthGovernance__EvaluationIntervalSeconds: '3600'
+  AssetHealthGovernance__MaximumUnchangedEventIntervalSeconds: '3600'
+  AssetHealthGovernance__EventRetentionHours: '24'
+  AssetHealthGovernance__MaintenanceIntervalSeconds: '3600'
+  AssetHealthGovernance__MesPushEnabled: 'true'
+  AssetHealthGovernance__MesBaseUrl: http://127.0.0.1:5120/
+  AssetHealthGovernance__MesEndpointPath: /events
+  AssetHealthGovernance__MesTimeoutSeconds: '2'
+  AssetHealthGovernance__MesPollIntervalSeconds: '1'
+  AssetHealthGovernance__MesBatchSize: '20'
+  AssetHealthGovernance__MesMaximumAttempts: '3'
+  AssetHealthGovernance__MesInitialRetrySeconds: '1'
+  AssetHealthGovernance__MesMaximumRetrySeconds: '2'
+
+jobs:
+  governance:
+    name: lifecycle, sql journal, mes retry, and restart recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: 'Wcs_HealthGov!2026'
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Host and focused tests
+        shell: bash
+        run: |
+          mkdir -p artifacts/TestResults
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~AssetHealthGovernanceServiceTests' \
+            --logger 'trx;LogFileName=asset-health-governance.trx' \
+            --results-directory artifacts/TestResults
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          echo "$sql_container" > artifacts/sql-container-id.txt
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_HealthGovernance]"
+          '
+
+      - name: Start deterministic MES receiver
+        shell: bash
+        run: |
+          cat > artifacts/mes_receiver.py <<'PY'
+          import json
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+          from pathlib import Path
+
+          root = Path('artifacts')
+          mode = root / 'mes-mode.txt'
+          log = root / 'mes-received.jsonl'
+          mode.write_text('200')
+
+          class Handler(BaseHTTPRequestHandler):
+              def do_POST(self):
+                  length = int(self.headers.get('Content-Length', '0'))
+                  body = self.rfile.read(length).decode('utf-8')
+                  try:
+                      payload = json.loads(body)
+                  except Exception:
+                      payload = {'raw': body}
+                  record = {
+                      'path': self.path,
+                      'idempotencyKey': self.headers.get('Idempotency-Key'),
+                      'eventId': self.headers.get('X-WCS-Event-Id'),
+                      'eventVersion': self.headers.get('X-WCS-Event-Version'),
+                      'payload': payload,
+                  }
+                  with log.open('a', encoding='utf-8') as stream:
+                      stream.write(json.dumps(record, ensure_ascii=False) + '\n')
+                  status = int(mode.read_text().strip())
+                  self.send_response(status)
+                  self.send_header('Content-Type', 'application/json')
+                  self.end_headers()
+                  self.wfile.write(json.dumps({'status': status}).encode('utf-8'))
+
+              def log_message(self, format, *args):
+                  return
+
+          ThreadingHTTPServer(('127.0.0.1', 5120), Handler).serve_forever()
+          PY
+          nohup python3 artifacts/mes_receiver.py > artifacts/mes-receiver.log 2>&1 &
+          echo "$!" > artifacts/mes-receiver.pid
+          for attempt in {1..30}; do
+            if curl --silent --max-time 1 http://127.0.0.1:5120/ >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 30 ]]; then cat artifacts/mes-receiver.log; exit 1; fi
+            sleep 1
+          done
+
+      - name: Start Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/health-governance-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/health-governance-host.pid"
+          popd >/dev/null
+
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health-governance/status" \
+                | tee artifacts/health-governance-initial-status.json
+              jq -e '.governance.enabled == true and .journal.isAvailable == true' \
+                artifacts/health-governance-initial-status.json >/dev/null
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/health-governance-host.pid)" 2>/dev/null; then
+              cat artifacts/health-governance-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/health-governance-host.log
+          exit 1
+
+      - name: Verify raised, acknowledge, suppress, and unsuppress
+        shell: bash
+        run: |
+          cat > artifacts/degraded.json <<'JSON'
+          {
+            "assetId": "HEALTH-GOV-E2E",
+            "points": [
+              {"healthScore": 60, "grade": "Degraded", "reason": "motor current deviation"},
+              {"healthScore": 58, "grade": "Degraded", "reason": "motor current deviation"}
+            ]
+          }
+          JSON
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/degraded.json \
+            "$ASPNETCORE_URLS/api/anomaly/health-governance/load/evaluations" \
+            | tee artifacts/governance-raised.json
+          jq -e '.transitions | length == 1' artifacts/governance-raised.json >/dev/null
+          event_id="$(jq -r '.transitions[0].event.eventId' artifacts/governance-raised.json)"
+          echo "$event_id" > artifacts/event-id.txt
+
+          for attempt in {1..30}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health-governance/status" \
+              > artifacts/governance-status.json
+            if jq -e '.journal.deliveredMessages == 1 and .journal.pendingDeliveries == 0' \
+              artifacts/governance-status.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 30 ]]; then cat artifacts/governance-status.json; exit 1; fi
+            sleep 1
+          done
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data '{"actor":"operator-a","note":"checked"}' \
+            "$ASPNETCORE_URLS/api/anomaly/health-governance/events/$event_id/acknowledge" \
+            | tee artifacts/governance-ack.json
+          jq -e '.acknowledged == true and .version == 2' artifacts/governance-ack.json >/dev/null
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data '{"actor":"operator-b","reason":"planned maintenance","untilUtc":"2099-01-01T00:00:00Z"}' \
+            "$ASPNETCORE_URLS/api/anomaly/health-governance/events/$event_id/suppress" \
+            | tee artifacts/governance-suppress.json
+          jq -e '.isSuppressed == true and .version == 3' artifacts/governance-suppress.json >/dev/null
+
+          for attempt in {1..30}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health-governance/status" \
+              > artifacts/governance-status.json
+            if jq -e '.journal.deliveredMessages == 3 and .journal.pendingDeliveries == 0' \
+              artifacts/governance-status.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 30 ]]; then cat artifacts/governance-status.json; exit 1; fi
+            sleep 1
+          done
+
+          cat > artifacts/critical.json <<'JSON'
+          {
+            "assetId": "HEALTH-GOV-E2E",
+            "points": [
+              {"healthScore": 20, "grade": "Critical", "reason": "critical motor current deviation"}
+            ]
+          }
+          JSON
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/critical.json \
+            "$ASPNETCORE_URLS/api/anomaly/health-governance/load/evaluations" \
+            | tee artifacts/governance-critical.json
+          jq -e '.transitions[0].deliveryStatus == 4' artifacts/governance-critical.json >/dev/null
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data '{"actor":"operator-b","note":"maintenance complete"}' \
+            "$ASPNETCORE_URLS/api/anomaly/health-governance/events/$event_id/unsuppress" \
+            | tee artifacts/governance-unsuppress.json
+          jq -e '.isSuppressed == false and .version == 5' artifacts/governance-unsuppress.json >/dev/null
+
+          for attempt in {1..30}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health-governance/status" \
+              > artifacts/governance-status.json
+            if jq -e '.journal.deliveredMessages == 4 and .journal.pendingDeliveries == 0' \
+              artifacts/governance-status.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 30 ]]; then cat artifacts/governance-status.json; exit 1; fi
+            sleep 1
+          done
+
+      - name: Verify retry, dead letter, manual replay, and recovery
+        shell: bash
+        run: |
+          echo '500' > artifacts/mes-mode.txt
+          cat > artifacts/healthy.json <<'JSON'
+          {
+            "assetId": "HEALTH-GOV-E2E",
+            "points": [
+              {"healthScore": 90, "grade": "Healthy", "reason": "recovered"},
+              {"healthScore": 92, "grade": "Healthy", "reason": "recovered"}
+            ]
+          }
+          JSON
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/healthy.json \
+            "$ASPNETCORE_URLS/api/anomaly/health-governance/load/evaluations" \
+            | tee artifacts/governance-recovered.json
+          jq -e '.transitions[0].transitionType == 6' artifacts/governance-recovered.json >/dev/null
+          message_id="$(jq -r '.transitions[0].messageId' artifacts/governance-recovered.json)"
+          echo "$message_id" > artifacts/recovery-message-id.txt
+
+          for attempt in {1..30}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health-governance/status" \
+              > artifacts/governance-deadletter-status.json
+            if jq -e '.journal.deadLetterMessages == 1 and .journal.pendingDeliveries == 0 and .journal.retryingDeliveries == 0' \
+              artifacts/governance-deadletter-status.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 30 ]]; then cat artifacts/governance-deadletter-status.json; exit 1; fi
+            sleep 1
+          done
+          curl --fail --silent "$ASPNETCORE_URLS/health/live" >/dev/null
+
+          echo '200' > artifacts/mes-mode.txt
+          curl --fail --silent --show-error -X POST \
+            "$ASPNETCORE_URLS/api/anomaly/health-governance/deliveries/$message_id/retry" \
+            -o /dev/null
+
+          for attempt in {1..30}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health-governance/status" \
+              > artifacts/governance-replayed-status.json
+            if jq -e '.journal.deliveredMessages == 5 and .journal.deadLetterMessages == 0 and .journal.pendingDeliveries == 0' \
+              artifacts/governance-replayed-status.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 30 ]]; then cat artifacts/governance-replayed-status.json; exit 1; fi
+            sleep 1
+          done
+
+      - name: Verify SQL versions, idempotency, and receiver contract
+        shell: bash
+        run: |
+          event_id="$(cat artifacts/event-id.txt)"
+          curl --fail --silent \
+            "$ASPNETCORE_URLS/api/anomaly/health-governance/events/$event_id/history?maxCount=20" \
+            | tee artifacts/governance-history.json
+          jq -e 'length == 6 and .[0].event.version == 1 and .[5].event.version == 6' \
+            artifacts/governance-history.json >/dev/null
+          jq -e '[.[].messageId] | length == (unique | length)' artifacts/governance-history.json >/dev/null
+          jq -e '[.[].deliveryStatus] | map(select(. == 4)) | length == 1' artifacts/governance-history.json >/dev/null
+
+          sql_container="$(cat artifacts/sql-container-id.txt)"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_HealthGovernance -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM Wcs_AssetHealthEventJournal; SELECT COUNT(*)-COUNT(DISTINCT MessageId) FROM Wcs_AssetHealthEventJournal; SELECT COUNT(*)-COUNT(DISTINCT CONCAT(EventId, CHAR(124), EventVersion)) FROM Wcs_AssetHealthEventJournal;"
+          ' | tee artifacts/governance-sql-counts.txt
+          mapfile -t counts < <(grep -E '^[0-9]+$' artifacts/governance-sql-counts.txt)
+          [[ "${counts[0]}" == "6" ]]
+          [[ "${counts[1]}" == "0" ]]
+          [[ "${counts[2]}" == "0" ]]
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          rows = [json.loads(line) for line in Path('artifacts/mes-received.jsonl').read_text().splitlines() if line.strip()]
+          successful = [row for row in rows if row['payload'].get('transition') in {'Raised','Acknowledged','Suppressed','Unsuppressed','Recovered'}]
+          assert successful, rows
+          for row in rows:
+              payload = row['payload']
+              assert row['idempotencyKey'] == payload['messageId']
+              assert row['eventId'] == payload['eventId']
+              assert int(row['eventVersion']) == payload['eventVersion']
+          assert not any(row['payload'].get('transition') == 'GradeChanged' for row in rows)
+          PY
+
+      - name: Verify Host restart recovery
+        shell: bash
+        run: |
+          kill "$(cat artifacts/health-governance-host.pid)"
+          wait "$(cat artifacts/health-governance-host.pid)" 2>/dev/null || true
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll >> "$GITHUB_WORKSPACE/artifacts/health-governance-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/health-governance-host.pid"
+          popd >/dev/null
+
+          for attempt in {1..60}; do
+            if curl --fail --silent "$ASPNETCORE_URLS/health/live" >/dev/null; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then cat artifacts/health-governance-host.log; exit 1; fi
+            sleep 1
+          done
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health-governance/events?maxCount=20" \
+            | tee artifacts/governance-after-restart.json
+          jq -e 'length == 1 and .[0].lifecycleStatus == 1 and .[0].version == 6' \
+            artifacts/governance-after-restart.json >/dev/null
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health-governance/status" \
+            | tee artifacts/governance-final-status.json
+          jq -e '.governance.activeEvents == 0 and .journal.deliveredMessages == 5 and .journal.pendingDeliveries == 0 and .journal.deadLetterMessages == 0' \
+            artifacts/governance-final-status.json >/dev/null
+
+      - name: Stop services
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/health-governance-host.pid ]]; then
+            kill "$(cat artifacts/health-governance-host.pid)" 2>/dev/null || true
+          fi
+          if [[ -f artifacts/mes-receiver.pid ]]; then
+            kill "$(cat artifacts/mes-receiver.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload governance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-asset-health-governance-${{ github.run_number }}
+          path: |
+            artifacts
+          if-no-files-found: warn
+          retention-days: 14
