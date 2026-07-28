@@ -4,7 +4,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Wcs.Core.AnomalyDetection.Fusion;
+using Wcs.Core.AnomalyDetection.HealthGovernance;
 using Wcs.Core.AnomalyDetection.HealthScoring;
+using Wcs.Infrastructure.AnomalyDetection.HealthGovernance;
 using Wcs.Infrastructure.AnomalyDetection.HealthScoring;
 
 public static class AnomalyFusionDependencyInjection
@@ -138,8 +140,86 @@ public static class AnomalyFusionDependencyInjection
             100,
             100_000);
 
+        var governanceOptions = configuration
+            .GetSection("AssetHealthGovernance")
+            .Get<AssetHealthGovernanceOptions>() ?? new AssetHealthGovernanceOptions();
+        if (!Enum.IsDefined(governanceOptions.MinimumEventGrade))
+            governanceOptions.MinimumEventGrade = AssetHealthGrade.Degraded;
+        governanceOptions.EvaluationIntervalSeconds = Math.Clamp(
+            governanceOptions.EvaluationIntervalSeconds,
+            1,
+            3_600);
+        governanceOptions.ConsecutiveUnhealthyEvaluations = Math.Clamp(
+            governanceOptions.ConsecutiveUnhealthyEvaluations,
+            1,
+            10_000);
+        governanceOptions.ConsecutiveRecoveryEvaluations = Math.Clamp(
+            governanceOptions.ConsecutiveRecoveryEvaluations,
+            1,
+            10_000);
+        governanceOptions.MaximumUnchangedEventIntervalSeconds = Math.Clamp(
+            Math.Max(
+                governanceOptions.MaximumUnchangedEventIntervalSeconds,
+                governanceOptions.EvaluationIntervalSeconds),
+            governanceOptions.EvaluationIntervalSeconds,
+            86_400);
+        governanceOptions.MaximumTrackedAssets = Math.Clamp(
+            governanceOptions.MaximumTrackedAssets,
+            100,
+            100_000);
+        governanceOptions.MaximumEventsQueryCount = Math.Clamp(
+            governanceOptions.MaximumEventsQueryCount,
+            1,
+            10_000);
+        governanceOptions.InactiveStateRetentionSeconds = Math.Clamp(
+            governanceOptions.InactiveStateRetentionSeconds,
+            governanceOptions.EvaluationIntervalSeconds,
+            604_800);
+        governanceOptions.EventRetentionHours = Math.Clamp(
+            governanceOptions.EventRetentionHours,
+            1,
+            87_600);
+        governanceOptions.MaintenanceIntervalSeconds = Math.Clamp(
+            governanceOptions.MaintenanceIntervalSeconds,
+            1,
+            86_400);
+        governanceOptions.MaintenanceBatchSize = Math.Clamp(
+            governanceOptions.MaintenanceBatchSize,
+            100,
+            100_000);
+        governanceOptions.MesEndpointPath = string.IsNullOrWhiteSpace(governanceOptions.MesEndpointPath)
+            ? "/api/wcs/asset-health-events"
+            : governanceOptions.MesEndpointPath.Trim();
+        governanceOptions.MesTimeoutSeconds = Math.Clamp(governanceOptions.MesTimeoutSeconds, 1, 120);
+        governanceOptions.MesPollIntervalSeconds = Math.Clamp(
+            governanceOptions.MesPollIntervalSeconds,
+            1,
+            300);
+        governanceOptions.MesBatchSize = Math.Clamp(governanceOptions.MesBatchSize, 1, 10_000);
+        governanceOptions.MesMaximumAttempts = Math.Clamp(
+            governanceOptions.MesMaximumAttempts,
+            1,
+            10_000);
+        governanceOptions.MesInitialRetrySeconds = Math.Clamp(
+            governanceOptions.MesInitialRetrySeconds,
+            1,
+            3_600);
+        governanceOptions.MesMaximumRetrySeconds = Math.Clamp(
+            Math.Max(governanceOptions.MesMaximumRetrySeconds, governanceOptions.MesInitialRetrySeconds),
+            governanceOptions.MesInitialRetrySeconds,
+            86_400);
+        governanceOptions.MesApiKeyHeader = governanceOptions.MesApiKeyHeader?.Trim() ?? string.Empty;
+        if (governanceOptions.Enabled && governanceOptions.MesPushEnabled)
+        {
+            if (!Uri.TryCreate(governanceOptions.MesBaseUrl, UriKind.Absolute, out var mesUri) ||
+                mesUri.Scheme is not ("http" or "https"))
+                throw new InvalidOperationException(
+                    "AssetHealthGovernance:MesBaseUrl must be an absolute HTTP/HTTPS URL when MES push is enabled.");
+        }
+
         services.AddSingleton(options);
         services.AddSingleton(healthOptions);
+        services.AddSingleton(governanceOptions);
         services.AddSingleton<AnomalyFusionEngine>();
         services.AddSingleton<IAnomalyFusionEngine>(sp =>
             sp.GetRequiredService<AnomalyFusionEngine>());
@@ -161,6 +241,15 @@ public static class AnomalyFusionDependencyInjection
             services.AddSingleton<IAssetHealthScoreHistoryStore, InMemoryAssetHealthScoreHistoryStore>();
         }
 
+        services.AddSingleton<SqlSugarAssetHealthEventJournalStore>(sp => new(
+            connectionString,
+            governanceOptions,
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SqlSugarAssetHealthEventJournalStore>>()));
+        services.AddSingleton<IAssetHealthEventJournalStore>(sp =>
+            sp.GetRequiredService<SqlSugarAssetHealthEventJournalStore>());
+        services.AddSingleton<IAssetHealthGovernanceService, AssetHealthGovernanceService>();
+        services.AddHttpClient(AssetHealthMesDeliveryService.HttpClientName);
+
         services.AddSingleton<AnomalyEvidenceChannel>();
         services.AddSingleton<IAnomalyEvidenceSink>(sp =>
             sp.GetRequiredService<AnomalyEvidenceChannel>());
@@ -171,6 +260,10 @@ public static class AnomalyFusionDependencyInjection
         services.AddHostedService<TransportCycleFusionBridgeService>();
         if (healthOptions.Enabled)
             services.AddHostedService<AssetHealthScoreSamplingService>();
+        if (governanceOptions.Enabled)
+            services.AddHostedService<AssetHealthGovernanceEvaluationService>();
+        if (governanceOptions.Enabled && governanceOptions.MesPushEnabled)
+            services.AddHostedService<AssetHealthMesDeliveryService>();
         return services;
     }
 }
