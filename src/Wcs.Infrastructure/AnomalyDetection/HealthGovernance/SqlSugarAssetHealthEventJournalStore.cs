@@ -275,7 +275,7 @@ public sealed class SqlSugarAssetHealthEventJournalStore : IAssetHealthEventJour
         entity.LastDeliveryAttemptUtc = DateTime.UtcNow;
         entity.NextDeliveryAttemptUtc = deadLetter ? null : nextAttemptUtc;
         entity.LastHttpStatusCode = httpStatusCode;
-        entity.LastDeliveryError = Truncate(error, 2000);
+        entity.LastDeliveryError = TruncateOptional(error, 2000);
         db.Updateable(entity).ExecuteCommand();
         SetLastError(entity.LastDeliveryError ?? "MES delivery failed.");
         return ValueTask.CompletedTask;
@@ -460,19 +460,19 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AssetHealthEventJo
             IsSuppressed = snapshot.IsSuppressed,
             SuppressedUntilUtc = snapshot.SuppressedUntilUtc,
             SuppressedReason = snapshot.SuppressedReason,
-            Reason = Truncate(snapshot.Reason, 2000),
-            Source = Truncate(snapshot.Source, 128),
-            Category = Truncate(snapshot.Category, 128),
+            Reason = TruncateRequired(snapshot.Reason, 2000),
+            Source = TruncateRequired(snapshot.Source, 128),
+            Category = TruncateRequired(snapshot.Category, 128),
             OccurredAtUtc = transition.OccurredAtUtc,
-            Actor = Truncate(transition.Actor, 128),
-            Note = Truncate(transition.Note, 2000),
+            Actor = TruncateOptional(transition.Actor, 128),
+            Note = TruncateOptional(transition.Note, 2000),
             DeliveryStatus = (int)transition.DeliveryStatus,
             DeliveryAttemptCount = transition.DeliveryAttemptCount,
             NextDeliveryAttemptUtc = transition.NextDeliveryAttemptUtc,
             LastDeliveryAttemptUtc = transition.LastDeliveryAttemptUtc,
             DeliveredAtUtc = transition.DeliveredAtUtc,
             LastHttpStatusCode = transition.LastHttpStatusCode,
-            LastDeliveryError = Truncate(transition.LastDeliveryError, 2000)
+            LastDeliveryError = TruncateOptional(transition.LastDeliveryError, 2000)
         };
     }
 
@@ -523,12 +523,12 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AssetHealthEventJo
 
     private void SetLastError(string error)
     {
-        lock (_statusGate) _lastError = Truncate(error, 2000);
+        lock (_statusGate) _lastError = TruncateRequired(error, 2000);
     }
 
-    private static string Truncate(string value, int maximumLength) =>
+    private static string TruncateRequired(string value, int maximumLength) =>
         value.Length <= maximumLength ? value : value[..maximumLength];
 
-    private static string? Truncate(string? value, int maximumLength) =>
+    private static string? TruncateOptional(string? value, int maximumLength) =>
         string.IsNullOrEmpty(value) ? value : value.Length <= maximumLength ? value : value[..maximumLength];
 }
