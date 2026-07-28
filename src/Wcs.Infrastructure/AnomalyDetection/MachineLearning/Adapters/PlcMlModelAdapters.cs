@@ -44,7 +44,7 @@ public sealed class FilePlcMlExternalModelStore : IPlcMlExternalModelStore
         var profileDirectory = GetProfileDirectory(profileId);
         if (!Directory.Exists(profileDirectory)) return Array.Empty<PlcMlModelManifest>();
         var result = new List<PlcMlModelManifest>();
-        foreach (var path in Directory.EnumerateFiles(profileDirectory, "manifest-*.json", SearchOption.TopDirectoryOnly))
+        foreach (var path in Directory.EnumerateFiles(directory: profileDirectory, searchPattern: "manifest-*.json", searchOption: SearchOption.TopDirectoryOnly))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var manifest = await ReadManifestAsync(path, cancellationToken);
@@ -164,10 +164,11 @@ public sealed class FilePlcMlExternalModelStore : IPlcMlExternalModelStore
 
 public sealed class IsolationForestPlcMlModelAdapter : IPlcMlModelAdapter
 {
+    public const string RuntimeAdapterId = "wcs.isolation-forest.v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public PlcMlModelAdapterKind Kind => PlcMlModelAdapterKind.IsolationForest;
-    public string AdapterId => "wcs.isolation-forest.v1";
+    public string AdapterId => RuntimeAdapterId;
 
     public Task<IPlcMlModelRuntime> LoadAsync(
         PlcMlProfile profile,
@@ -219,8 +220,8 @@ public sealed class IsolationForestPlcMlModelAdapter : IPlcMlModelAdapter
             {
                 ProfileId = Manifest.ProfileId,
                 ModelVersion = Manifest.Version,
-                AdapterKind = Kind,
-                AdapterId = AdapterId,
+                AdapterKind = PlcMlModelAdapterKind.IsolationForest,
+                AdapterId = RuntimeAdapterId,
                 DetectorName = "IsolationForest",
                 Score = score,
                 DecisionThreshold = Manifest.DecisionThreshold,
@@ -249,8 +250,10 @@ public sealed class IsolationForestPlcMlModelAdapter : IPlcMlModelAdapter
 
 public sealed class OnnxPlcMlModelAdapter : IPlcMlModelAdapter
 {
+    public const string RuntimeAdapterId = "microsoft.onnxruntime.cpu.v1";
+
     public PlcMlModelAdapterKind Kind => PlcMlModelAdapterKind.Onnx;
-    public string AdapterId => "microsoft.onnxruntime.cpu.v1";
+    public string AdapterId => RuntimeAdapterId;
 
     public Task<IPlcMlModelRuntime> LoadAsync(
         PlcMlProfile profile,
@@ -311,8 +314,8 @@ public sealed class OnnxPlcMlModelAdapter : IPlcMlModelAdapter
             {
                 ProfileId = Manifest.ProfileId,
                 ModelVersion = Manifest.Version,
-                AdapterKind = Kind,
-                AdapterId = AdapterId,
+                AdapterKind = PlcMlModelAdapterKind.Onnx,
+                AdapterId = RuntimeAdapterId,
                 DetectorName = "ONNXRuntime",
                 Score = score,
                 DecisionThreshold = Manifest.DecisionThreshold,
