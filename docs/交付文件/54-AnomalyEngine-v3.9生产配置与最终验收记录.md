@@ -9,7 +9,7 @@
 | 默认状态 | 关闭 |
 | 首轮验收 Head | `89a30dc9d71c7ee004cd88e19d2326b1aba082d6` |
 | 首轮矩阵 | 25/25 success |
-| 当前验收级别 | 仓库级研发与 CI 验证完成，等待最终证据 Head 二次复验 |
+| 当前验收级别 | 仓库级研发与 CI 验证完成，等待当前最终证据 Head 二次复验 |
 | 现场投产状态 | 未验收 |
 
 ## 2. 生产默认配置
@@ -250,7 +250,7 @@ AssetFailureForecast__Enabled=false
 - [x] 无 PLC 写入或控制依赖；
 - [x] 首轮 latest exact head Forecast 三专项成功；
 - [x] 首轮 latest exact head 25/25 成功；
-- [ ] 最终证据 Head 二次 25/25 成功；
+- [ ] 当前最终证据 Head 二次 25/25 成功；
 - [ ] PR #32 Squash 合入 `develop`。
 
 ## 14. 项目级未完成事项
@@ -261,4 +261,4 @@ AssetFailureForecast__Enabled=false
 
 v3.9 的软件安全边界、模型治理、SQL 审计、回测接口和首轮 25/25 仓库矩阵已经完成。当前仍不得宣称真实故障概率或 RUL 达到生产准确率。
 
-当前最新证据 Head 由最后一笔文档提交确定。只有该 exact Head 再次完成同等 25/25，PR #32 才可 Ready 并 Squash 合入 `develop`；Merge SHA 将以 GitHub 合并记录作为最终凭证。
+当前最终证据 Head 由最新文档提交确定。只有该 exact Head 再次完成同等 25/25，PR #32 才可 Ready 并 Squash 合入 `develop`；Merge SHA 将以 GitHub 合并记录作为最终凭证。
