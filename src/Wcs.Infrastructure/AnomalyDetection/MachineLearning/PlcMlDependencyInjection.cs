@@ -176,6 +176,7 @@ public static class PlcMlDependencyInjection
         services.AddHostedService<PlcMlAnomalyBackgroundService>();
         services.AddAnomalyEvidenceFusion(configuration, connectionString);
         services.AddAssetHealthMaintenance(configuration, connectionString);
+        services.AddAssetFailureForecast(configuration, connectionString);
         return services;
     }
 
