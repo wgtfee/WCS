@@ -2,14 +2,14 @@
 
 ## 1. 文档定位
 
-本文件定义 WCS Runtime Engine 在 v3.4 之后的独立异常诊断演进路线。
+本文件定义 WCS Runtime Engine 在 v3.4 之后的独立异常诊断与人工辅助决策路线。
 
 ```text
 EMS/RGV 统一调度主线：第一阶段～第十二阶段，软件研发已经结束
 AnomalyEngine 诊断扩展线：v1～v3.9，继续以只读诊断和人工辅助决策演进
 ```
 
-统一调度后续不再使用“第十三阶段”扩展。现场工作使用点位包、拓扑包、参数包、规则包、缺陷单、验收报告和发布单推进。AnomalyEngine 不得绕过既有状态机、路权、PLC 联锁、AlarmCenter 和审批体系。
+统一调度后续不再使用“第十三阶段”扩展。AnomalyEngine 不得绕过既有状态机、路权、PLC 联锁、AlarmCenter 和审批体系。
 
 ## 2. 已完成和当前基线
 
@@ -24,7 +24,7 @@ AnomalyEngine 诊断扩展线：v1～v3.9，继续以只读诊断和人工辅助
 | v3.4 | 可解释健康评分、趋势、SQL 历史与重启恢复 | 已完成，`develop@1d060983671d204fb25e4bf21d5b4bebd2596153` |
 | v3.5 | 健康事件治理、MES Outbox、审计和重启恢复 | 已完成，`develop@ed74768a6338aff5a1c63409ab7fb0e344ca701c` |
 | v3.6 | 根因关联、传播路径、SQL 快照和人工复核 | 已完成，`develop@900353ef8f17b3ab38cb4e711529c3fcc3629892` |
-| v3.7 | 维修建议、反馈闭环、MES 工单字段、指标和标签候选 | 功能与专项 SQL E2E 已完成，等待最新完整矩阵和合并 |
+| v3.7 | 维修建议、反馈闭环、MES 工单字段、指标和标签候选 | 功能、专项和首轮 19 项矩阵已完成，等待最终证据 Head 复验与合并 |
 
 ## 3. 总体数据流
 
@@ -50,40 +50,13 @@ v3.5～v3.9 均属于诊断与辅助决策层。自动停机、自动修改调�
 
 ## 4. v3.5：健康事件治理与 MES 联动
 
-已交付：
-
-- 按等级和连续评估次数创建/恢复事件；
-- 同一资产一个活动事件；
-- Raised、Observed、GradeChanged、Acknowledged、Suppressed、Unsuppressed、Recovered；
-- SQL Journal 双重幂等；
-- MES HTTP Outbox、指数退避、DeadLetter 和人工重试；
-- 2xx/409 幂等成功；
-- Host 重启恢复；
-- SQL、MES 和网络故障不阻塞 PLC、任务和调度。
+已交付事件创建/恢复、同一资产单活动事件、SQL Journal 双重幂等、MES HTTP Outbox、指数退避、DeadLetter、人工重试和 Host 重启恢复。SQL、MES 和网络故障不阻塞 PLC、任务和调度。
 
 边界：不停止设备、不取消任务、不修改车辆、路径或路权、不替代 AlarmCenter、不把 MES 响应当作 PLC 联锁。
 
 ## 5. v3.6：根因关联与异常传播分析
 
-### 5.1 已交付能力
-
-- 版本化、带来源和审批信息的依赖图；
-- Asset、Component、Signal、Task、Station、Segment；
-- DependsOn、Feeds、Controls、LocatedAt、Carries；
-- GraphHash 和同版本不同 Hash 拒绝；
-- 节点、边、引用、权重、自环、容量和环路校验；
-- 生产默认 `AllowCycles=false`；
-- 有界时间窗口、上游搜索和最短传播路径；
-- RootCause、Intermediate、Symptom；
-- Coverage、Topology、Temporal、Severity 排序；
-- 确定性 AnalysisId 和 SQL 幂等；
-- 图版本、不可变分析快照和人工复核 Journal；
-- Confirmed、Rejected、Supplemented；
-- Host 重启恢复。
-
-### 5.2 验收
-
-PR #29 已通过最终矩阵并 Squash 合入 `develop`：
+已交付版本化审批图、GraphHash、图校验、有界时间窗口、上游搜索、最短传播路径、可解释排序、确定性 AnalysisId、SQL 不可变分析快照、人工复核 Journal 和 Host 重启恢复。
 
 ```text
 Merge SHA: 900353ef8f17b3ab38cb4e711529c3fcc3629892
@@ -96,11 +69,7 @@ Digest: sha256:44688aa44d8710b24c1372b9dcf0dccc53f9e7165e94353d7ed034f8860194eb
 
 ## 6. v3.7：维修决策支持与反馈闭环
 
-### 6.1 目标
-
-把 v3.5 活动健康事件和 v3.6 已人工复核根因转换为可执行检查建议，并利用维修反馈评估规则采纳、故障命中、误报和维修效果。
-
-### 6.2 已实现能力
+### 6.1 已实现能力
 
 - 已审批维修 RuleSet，包含 Version、Source、ApprovedBy、ApprovedAtUtc；
 - SHA-256 RuleSetHash，同版本不同 Hash 拒绝；
@@ -119,7 +88,7 @@ Digest: sha256:44688aa44d8710b24c1372b9dcf0dccc53f9e7165e94353d7ed034f8860194eb
 - 训练标签 PendingApproval、Approved、Rejected；
 - Host 重启恢复建议、反馈和标签。
 
-### 6.3 SQL 对象
+### 6.2 SQL 对象
 
 ```text
 Wcs_AssetHealthMaintenanceRuleSetVersion
@@ -130,20 +99,31 @@ Wcs_AssetHealthMaintenanceTrainingLabel
 
 反馈只更新建议生命周期摘要并追加 Journal，不覆盖原始 RecommendationJson、v3.5 事件或 v3.6 分析。
 
-### 6.4 专项验收
+### 6.3 专项与首轮完整矩阵
 
 ```text
-Workflow: WCS Asset Health Maintenance #3
-Run ID: 30344513405
-Source SHA: 620eb179bfdb6d349487ebe931784f8c220e1349
-Artifact: wcs-asset-health-maintenance-3
-Digest: sha256:b572875eadfbeafdb8e413ef8ed6ac7f42400ede4b189c0c6ae85987c479675f
+Workflow: WCS Asset Health Maintenance #9
+Run ID: 30345256689
+Source SHA: 2ab1f05a2c8fccb3b9e273c48ab6b51d08e3c542
+Artifact: wcs-asset-health-maintenance-9
+Digest: sha256:26e1269d6057a0df3ca2a75be1191ccc771293bc09f53718b8a8cf459339a39b
 Conclusion: success
 ```
 
-断言：RuleSet=1、Recommendation=1、Feedback=2、TrainingLabel=1；重复建议和反馈幂等；Accepted→Repaired；MES 工单字段；PostHealthScore=92；fault-confirmed 标签人工 Approved；Host 重启恢复。
+专项断言：RuleSet=1、Recommendation=1、Feedback=2、TrainingLabel=1；重复建议和反馈幂等；Accepted→Repaired；MES-WO-1001；PostHealthScore=92；`fault-confirmed` 标签人工 Approved；Host 重启恢复。
 
-### 6.5 完成门槛
+首轮完整矩阵：
+
+```text
+Exact Head: 2ab1f05a2c8fccb3b9e273c48ab6b51d08e3c542
+Result: 19/19 success
+```
+
+覆盖 Maintenance Compile/E2E、Root Cause、Governance Compile/E2E、Health Scoring/SQL、Windows CI、End-to-End Load、Telemetry、PLC Anomaly Load/Soak、ML/E2E/Governance/Context/Version、Transport Cycle 和 One Hour Soak。
+
+本证据文档提交形成的新 Head 必须再次通过同等矩阵，旧 Head 成功不得替代最终复验。
+
+### 6.4 完成门槛
 
 - Core 规则和安全边界测试通过；
 - SQL 四表、索引和精确计数通过；
@@ -155,52 +135,22 @@ Conclusion: success
 - 文档 21、39、46～48 完整；
 - PR #30 Ready 并合入 `develop`。
 
-### 6.6 明确边界
+### 6.5 明确边界
 
 - 建议是检查建议，不是控制命令；
 - MES 工单号只是审计字段；
 - 无规则不生成建议；
 - 训练标签 Approved 不自动训练、激活或替换模型；
 - 不写 PLC、不停机、不取消任务、不修改路线、路权、车辆选择或派单；
-- 真实维修 SOP、权限和正式投产属于项目级验收。
+- 真实维修 SOP、权限、MES 契约和正式投产属于项目级验收。
 
 ## 7. v3.8：可插拔模型与 ONNX 运行时
 
-### 7.1 目标
-
-保留纯 .NET Isolation Forest，同时建立统一模型适配边界，使本地 ONNX 模型复用 Profile、治理、Shadow、Canary、回滚和 Evidence Fusion。
-
-### 7.2 计划能力
-
-- `IAnomalyModelAdapter`；
-- 统一特征、输入维度、标准化和输出解释；
-- Isolation Forest Adapter 和本地 ONNX Runtime Adapter；
-- 模型摘要、输入输出名称和维度校验；
-- 冻结数据集、审批、Shadow、Canary 和原子激活；
-- 模型输出只生成 Evidence，不写 PLC；
-- 推理超时、异常和内存有界；
-- 无 GPU、无外网环境可运行。
-
-启动条件：存在经过现场验收的本地模型、稳定特征和明确许可证；需通过重复性、十万窗口吞吐、回滚、内存和失败降级测试。
+保留纯 .NET Isolation Forest，同时建立统一模型适配边界，使本地 ONNX 模型复用 Profile、治理、Shadow、Canary、回滚和 Evidence Fusion。仅在存在经过现场验收的本地模型、稳定特征和明确许可证时实施。
 
 ## 8. v3.9：故障概率与剩余寿命预测
 
-### 8.1 目标
-
-在具备长期退化数据、真实故障和维修记录后，输出部件未来故障概率、剩余寿命区间和建议维护窗口。
-
-### 8.2 计划能力
-
-- 部件级退化轨迹；
-- 指定时间窗内故障概率；
-- RUL 点估计和置信区间；
-- 按产品、负载、工况和维修状态分层；
-- 时间切分、数据泄漏检查和离线回测；
-- 校准、覆盖率、提前量和误报评估；
-- 维修后退化状态重置或迁移；
-- 输出建议维护窗口，不自动下发停机。
-
-数据门槛：足够长连续历史、明确失效时间、部件更换与维修记录、工况上下文、可信标签和足够真实失效样本。数据不足时保持关闭，不输出虚假 RUL。
+在具备长期退化数据、真实故障和维修记录后，输出部件未来故障概率、剩余寿命区间和建议维护窗口。数据不足时保持关闭，不输出虚假 RUL。
 
 ## 9. 执行顺序
 
@@ -209,7 +159,7 @@ v3.5 已完成并合入 develop
   ↓
 v3.6 已完成并合入 develop
   ↓
-v3.7 功能与专项已完成，等待最终矩阵和合并
+v3.7 首轮矩阵已完成，等待最终证据 Head 复验与合并
   ↓
 v3.8 仅在成熟本地模型存在时实施
   ↓
@@ -217,8 +167,6 @@ v3.9 仅在真实失效和维修数据满足条件时实施
 ```
 
 ## 10. 统一安全原则
-
-所有阶段必须满足：
 
 1. 默认关闭；
 2. 输入、容量、时间窗口、队列、查询和保留期有界；
