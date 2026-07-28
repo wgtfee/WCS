@@ -1,0 +1,58 @@
+name: WCS PLC ML Model Adapter Compile
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Core/AnomalyDetection/MachineLearning/Adapters/**'
+      - 'src/Wcs.Core.Tests/PlcMlModelAdapterTests.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/Adapters/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/PlcMlDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - '.github/workflows/anomaly-model-adapter*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    name: compile adapter contracts, ONNX runtime, DI, and Host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: |
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj 2>&1 | tee model-adapter-restore.log
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee -a model-adapter-restore.log
+      - name: Build Core tests
+        run: dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore 2>&1 | tee model-adapter-core-build.log
+      - name: Run adapter contract tests
+        run: dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-build --filter 'FullyQualifiedName~PlcMlModelAdapterTests' --logger 'trx;LogFileName=model-adapter-tests.trx' --results-directory TestResults 2>&1 | tee model-adapter-tests.log
+      - name: Build Host with ONNX native assets
+        run: dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee model-adapter-host-build.log
+      - name: Verify ONNX native runtime copied
+        shell: bash
+        run: |
+          find src/Wcs.Host/bin/Release/net8.0 -iname '*onnxruntime*' -type f | sort | tee model-adapter-native-files.log
+          test -s model-adapter-native-files.log
+      - name: Upload compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-ml-model-adapter-compile-${{ github.run_number }}
+          path: |
+            model-adapter-*.log
+            TestResults/**
+          if-no-files-found: warn
+          retention-days: 14
