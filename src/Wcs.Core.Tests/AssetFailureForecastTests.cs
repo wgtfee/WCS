@@ -170,7 +170,7 @@ public sealed class AssetFailureForecastTests
                     GradeChanged = index > 0,
                     Direction = AssetHealthTrendDirection.Deteriorating,
                     FusionRiskScore = 0.10 + index * 0.10,
-                    FusionStatus = FusedHealthStatus.Healthy,
+                    FusionStatus = FusedHealthStatus.Normal,
                     IndependentSourceCount = 2,
                     CalculatedAtUtc = start.AddTicks(interval.Ticks * index),
                     RecordedAtUtc = start.AddTicks(interval.Ticks * index),
