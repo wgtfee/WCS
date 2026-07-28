@@ -276,18 +276,47 @@ jobs:
           popd >/dev/null
           for attempt in {1..90}; do
             if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then break; fi
+            if ! kill -0 "$(cat artifacts/root-cause-host.pid)" 2>/dev/null; then
+              cat artifacts/root-cause-host-restart.log
+              exit 1
+            fi
             if [[ "$attempt" -eq 90 ]]; then cat artifacts/root-cause-host-restart.log; exit 1; fi
             sleep 2
           done
           analysis_id="$(cat artifacts/analysis-id.txt)"
-          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/root-cause/analyses/$analysis_id" \
-            | tee artifacts/root-cause-after-restart.json
-          jq -e '.reviewDecision == 3 and .selectedRootCauseNodeId == "N-CONVEYOR" and .candidates[0].nodeId == "N-MOTOR"' \
-            artifacts/root-cause-after-restart.json >/dev/null
-          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/root-cause/status" \
-            | tee artifacts/root-cause-final-status.json
-          jq -e '.store.registeredGraphs == 1 and .store.retainedAnalyses == 1 and .store.retainedReviews == 2' \
-            artifacts/root-cause-final-status.json >/dev/null
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 5 \
+              "$ASPNETCORE_URLS/api/anomaly/root-cause/analyses/$analysis_id" \
+              -o artifacts/root-cause-after-restart.json \
+              && jq -e '.reviewDecision == 3 and .selectedRootCauseNodeId == "N-CONVEYOR" and .candidates[0].nodeId == "N-MOTOR"' \
+                artifacts/root-cause-after-restart.json >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              cat artifacts/root-cause-after-restart.json 2>/dev/null || true
+              cat artifacts/root-cause-host-restart.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat artifacts/root-cause-after-restart.json
+
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 5 \
+              "$ASPNETCORE_URLS/api/anomaly/root-cause/status" \
+              -o artifacts/root-cause-final-status.json \
+              && jq -e '.store.registeredGraphs == 1 and .store.retainedAnalyses == 1 and .store.retainedReviews == 2' \
+                artifacts/root-cause-final-status.json >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              cat artifacts/root-cause-final-status.json 2>/dev/null || true
+              cat artifacts/root-cause-host-restart.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat artifacts/root-cause-final-status.json
 
       - name: Stop services
         if: always()
