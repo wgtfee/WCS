@@ -71,20 +71,9 @@
 
 ## 5. 现场规则要求
 
-每条规则必须至少包含：
-
-- 唯一 RuleId；
-- 精确 RootCauseNodeId 或 RootCauseKind；
-- 最低事件等级；
-- 明确标题；
-- 至少一个检查项；
-- 适用的安全注意事项。
-
-建议补充部件、工具、备件、优先级和预计时长。不得把未经审核的生成式文本直接作为生产规则。
+每条规则必须至少包含唯一 RuleId、精确 RootCauseNodeId 或 RootCauseKind、最低事件等级、明确标题、至少一个检查项和适用安全注意事项。建议补充部件、工具、备件、优先级和预计时长。不得把未经审核的生成式文本直接作为生产规则。
 
 ## 6. 权限矩阵
-
-建议至少区分：
 
 | 操作 | 角色建议 |
 |---|---|
@@ -98,8 +87,6 @@ Actor 应优先来自认证身份，禁止共享账号或匿名生产写入。
 
 ## 7. SQL 验收
 
-应确认：
-
 - `Wcs_AssetHealthMaintenanceRuleSetVersion` 可追溯规则版本；
 - `Wcs_AssetHealthMaintenanceRecommendation` RecommendationId 唯一；
 - `Wcs_AssetHealthMaintenanceFeedbackJournal` FeedbackId 唯一；
@@ -112,46 +99,54 @@ Actor 应优先来自认证身份，禁止共享账号或匿名生产写入。
 ## 8. 仓库级专项验收
 
 ```text
-Workflow: WCS Asset Health Maintenance #3
-Run ID: 30344513405
-Source SHA: 620eb179bfdb6d349487ebe931784f8c220e1349
-Artifact: wcs-asset-health-maintenance-3
-Digest: sha256:b572875eadfbeafdb8e413ef8ed6ac7f42400ede4b189c0c6ae85987c479675f
+Workflow: WCS Asset Health Maintenance #9
+Run ID: 30345256689
+Source SHA: 2ab1f05a2c8fccb3b9e273c48ab6b51d08e3c542
+Artifact: wcs-asset-health-maintenance-9
+Digest: sha256:26e1269d6057a0df3ca2a75be1191ccc771293bc09f53718b8a8cf459339a39b
 Conclusion: success
 ```
 
-专项验证了：
+专项验证：RuleSet=1、Recommendation=1、Feedback=2、TrainingLabel=1、建议和反馈幂等、Accepted→Repaired、MES-WO-1001、technician-a、维修后健康分 92、`fault-confirmed` 标签人工 Approved，以及 Host 重启恢复。
 
-- RuleSet=1；
-- Recommendation=1；
-- Feedback=2；
-- TrainingLabel=1；
-- 建议和反馈重复提交幂等；
-- Accepted 和 Repaired 生命周期；
-- MES-WO-1001 与 technician-a 关联；
-- 维修后健康分 92；
-- fault-confirmed 标签人工 Approved；
-- Host 重启恢复。
+## 9. 首轮最终矩阵
 
-## 9. 最终矩阵
+```text
+Exact Head: 2ab1f05a2c8fccb3b9e273c48ab6b51d08e3c542
+Result: 19/19 success
+```
 
-最新文档 Head 必须通过 47 号测试报告所列完整矩阵。最终运行号和 Head SHA 在 PR 转 Ready 前补录。
+| 工作流 | Run |
+|---|---:|
+| Maintenance Compile | #20 |
+| Maintenance SQL E2E | #9 |
+| Root Cause | #26 |
+| Governance Compile | #36 |
+| Governance | #43 |
+| Health Scoring | #81 |
+| Health Scoring SQL | #51 |
+| Windows CI | #277 |
+| End-to-End Load | #204 |
+| Telemetry Storage Load | #81 |
+| PLC Anomaly Engine Load | #216 |
+| PLC Anomaly Engine Soak | #199 |
+| PLC Anomaly ML | #117 |
+| PLC Anomaly ML E2E | #109 |
+| PLC Anomaly ML Governance | #70 |
+| PLC Anomaly ML Context Peer | #58 |
+| PLC Anomaly ML Version Throughput | #85 |
+| Transport Cycle Analysis | #87 |
+| One Hour Soak Load | #170 |
+
+本验收记录提交后会产生新的 Head。只有新的 exact Head 再次通过同等完整矩阵，PR #30 才可标记 Ready 并合入 `develop`。
 
 ## 10. 回退
-
-紧急回退：
 
 ```text
 AssetHealthMaintenance__Enabled=false
 ```
 
-回退效果：
-
-- 停止后台生成新建议；
-- 保留规则版本、建议、反馈和标签；
-- 不影响 v3.5、v3.6、PLC、任务和调度；
-- 已存在建议继续可读；
-- 不自动关闭 MES 工单。
+回退停止后台生成新建议，保留规则版本、建议、反馈和标签，不影响 v3.5、v3.6、PLC、任务和调度，不自动关闭 MES 工单。
 
 ## 11. 明确不属于本次仓库级验收
 
@@ -166,8 +161,6 @@ AssetHealthMaintenance__Enabled=false
 
 ## 12. 安全结论
 
-v3.7 当前实现满足以下仓库级边界：
-
 ```text
 默认关闭
 + Production 空规则集
@@ -181,4 +174,4 @@ v3.7 当前实现满足以下仓库级边界：
 + 无调度修改
 ```
 
-只有最新 Head 完整矩阵全部成功后，才能将 PR 标记 Ready 并合入 `develop`。
+当前仓库级功能、专项和首轮 19 项完整矩阵已通过；最终证据 Head 仍须复验后才能合并。
