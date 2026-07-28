@@ -98,9 +98,10 @@ public sealed class AnomalyMaintenanceController : ControllerBase
         if (!Enum.IsDefined(request.Decision)) return BadRequest("decision is invalid.");
         if (request.PostHealthScore is < 0 or > 100)
             return BadRequest("postHealthScore must be between 0 and 100.");
-        if (request.Decision is MaintenanceFeedbackDecision.Rejected or
-            MaintenanceFeedbackDecision.FalsePositive or
-            MaintenanceFeedbackDecision.NoFaultFound && string.IsNullOrWhiteSpace(request.Note))
+        if (request.Decision is (MaintenanceFeedbackDecision.Rejected or
+                MaintenanceFeedbackDecision.FalsePositive or
+                MaintenanceFeedbackDecision.NoFaultFound) &&
+            string.IsNullOrWhiteSpace(request.Note))
             return BadRequest("Rejected, FalsePositive and NoFaultFound feedback require a note.");
 
         var existing = await _store.GetRecommendationAsync(recommendationId.Trim(), cancellationToken);
