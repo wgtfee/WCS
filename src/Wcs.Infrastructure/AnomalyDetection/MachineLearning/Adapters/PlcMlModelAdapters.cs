@@ -44,7 +44,7 @@ public sealed class FilePlcMlExternalModelStore : IPlcMlExternalModelStore
         var profileDirectory = GetProfileDirectory(profileId);
         if (!Directory.Exists(profileDirectory)) return Array.Empty<PlcMlModelManifest>();
         var result = new List<PlcMlModelManifest>();
-        foreach (var path in Directory.EnumerateFiles(directory: profileDirectory, searchPattern: "manifest-*.json", searchOption: SearchOption.TopDirectoryOnly))
+        foreach (var path in Directory.EnumerateFiles(profileDirectory, "manifest-*.json", SearchOption.TopDirectoryOnly))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var manifest = await ReadManifestAsync(path, cancellationToken);
