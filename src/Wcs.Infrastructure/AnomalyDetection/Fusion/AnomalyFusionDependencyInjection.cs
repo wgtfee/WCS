@@ -6,8 +6,10 @@ using Microsoft.Extensions.Hosting;
 using Wcs.Core.AnomalyDetection.Fusion;
 using Wcs.Core.AnomalyDetection.HealthGovernance;
 using Wcs.Core.AnomalyDetection.HealthScoring;
+using Wcs.Core.AnomalyDetection.RootCause;
 using Wcs.Infrastructure.AnomalyDetection.HealthGovernance;
 using Wcs.Infrastructure.AnomalyDetection.HealthScoring;
+using Wcs.Infrastructure.AnomalyDetection.RootCause;
 
 public static class AnomalyFusionDependencyInjection
 {
@@ -217,9 +219,69 @@ public static class AnomalyFusionDependencyInjection
                     "AssetHealthGovernance:MesBaseUrl must be an absolute HTTP/HTTPS URL when MES push is enabled.");
         }
 
+        var rootCauseOptions = configuration
+            .GetSection("AssetHealthRootCause")
+            .Get<AssetHealthRootCauseOptions>() ?? new AssetHealthRootCauseOptions();
+        rootCauseOptions.EvaluationIntervalSeconds = Math.Clamp(
+            rootCauseOptions.EvaluationIntervalSeconds,
+            1,
+            3_600);
+        rootCauseOptions.CorrelationWindowSeconds = Math.Clamp(
+            rootCauseOptions.CorrelationWindowSeconds,
+            1,
+            86_400);
+        rootCauseOptions.MaximumPropagationDepth = Math.Clamp(
+            rootCauseOptions.MaximumPropagationDepth,
+            1,
+            100);
+        rootCauseOptions.MaximumGraphNodes = Math.Clamp(
+            rootCauseOptions.MaximumGraphNodes,
+            1,
+            1_000_000);
+        rootCauseOptions.MaximumGraphEdges = Math.Clamp(
+            rootCauseOptions.MaximumGraphEdges,
+            0,
+            2_000_000);
+        rootCauseOptions.MaximumEventsPerAnalysis = Math.Clamp(
+            rootCauseOptions.MaximumEventsPerAnalysis,
+            1,
+            10_000);
+        rootCauseOptions.MaximumCandidates = Math.Clamp(
+            rootCauseOptions.MaximumCandidates,
+            1,
+            100);
+        rootCauseOptions.MaximumPaths = Math.Clamp(
+            rootCauseOptions.MaximumPaths,
+            1,
+            10_000);
+        rootCauseOptions.MaximumAnalysesQueryCount = Math.Clamp(
+            rootCauseOptions.MaximumAnalysesQueryCount,
+            1,
+            10_000);
+        rootCauseOptions.MinimumCandidateConfidence = Math.Clamp(
+            rootCauseOptions.MinimumCandidateConfidence,
+            0,
+            1);
+        rootCauseOptions.AnalysisRetentionHours = Math.Clamp(
+            rootCauseOptions.AnalysisRetentionHours,
+            1,
+            87_600);
+        rootCauseOptions.MaintenanceIntervalSeconds = Math.Clamp(
+            rootCauseOptions.MaintenanceIntervalSeconds,
+            1,
+            86_400);
+        rootCauseOptions.MaintenanceBatchSize = Math.Clamp(
+            rootCauseOptions.MaintenanceBatchSize,
+            100,
+            100_000);
+        rootCauseOptions.Graph ??= new RootCauseGraphDefinition();
+        rootCauseOptions.Graph.Nodes ??= new List<RootCauseGraphNode>();
+        rootCauseOptions.Graph.Edges ??= new List<RootCauseGraphEdge>();
+
         services.AddSingleton(options);
         services.AddSingleton(healthOptions);
         services.AddSingleton(governanceOptions);
+        services.AddSingleton(rootCauseOptions);
         services.AddSingleton<AnomalyFusionEngine>();
         services.AddSingleton<IAnomalyFusionEngine>(sp =>
             sp.GetRequiredService<AnomalyFusionEngine>());
@@ -250,6 +312,17 @@ public static class AnomalyFusionDependencyInjection
         services.AddSingleton<IAssetHealthGovernanceService, AssetHealthGovernanceService>();
         services.AddHttpClient(AssetHealthMesDeliveryService.HttpClientName);
 
+        services.AddSingleton<IAssetHealthRootCauseAnalysisEngine, AssetHealthRootCauseAnalysisEngine>();
+        services.AddSingleton<SqlSugarAssetHealthRootCauseAnalysisStore>(sp => new(
+            connectionString,
+            rootCauseOptions,
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SqlSugarAssetHealthRootCauseAnalysisStore>>()));
+        services.AddSingleton<IAssetHealthRootCauseAnalysisStore>(sp =>
+            sp.GetRequiredService<SqlSugarAssetHealthRootCauseAnalysisStore>());
+        services.AddSingleton<AssetHealthRootCauseAnalysisBackgroundService>();
+        services.AddSingleton<IAssetHealthRootCauseRuntimeStatus>(sp =>
+            sp.GetRequiredService<AssetHealthRootCauseAnalysisBackgroundService>());
+
         services.AddSingleton<AnomalyEvidenceChannel>();
         services.AddSingleton<IAnomalyEvidenceSink>(sp =>
             sp.GetRequiredService<AnomalyEvidenceChannel>());
@@ -264,6 +337,9 @@ public static class AnomalyFusionDependencyInjection
             services.AddHostedService<AssetHealthGovernanceEvaluationService>();
         if (governanceOptions.Enabled && governanceOptions.MesPushEnabled)
             services.AddHostedService<AssetHealthMesDeliveryService>();
+        if (rootCauseOptions.Enabled)
+            services.AddSingleton<IHostedService>(sp =>
+                sp.GetRequiredService<AssetHealthRootCauseAnalysisBackgroundService>());
         return services;
     }
 }
