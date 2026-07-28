@@ -4,75 +4,66 @@
 
 | 项目 | 内容 |
 |---|---|
-| 功能 | v3.5 健康事件治理与 MES HTTP Outbox |
+| 功能版本 | AnomalyEngine v3.5 — 健康事件治理与 MES HTTP Outbox |
+| PR | `#28` |
 | 分支 | `feature/anomaly-health-governance-v3-5` |
 | 目标分支 | `develop` |
-| 专项工作流 | `WCS Asset Health Governance` |
-| 默认启用状态 | false |
-| 默认 MES 推送状态 | false |
-| 安全边界 | 诊断通知，不进入 PLC 或调度控制 |
+| 已验证代码基线 | `1315ba7108da545222252747fff00072f19a0219` |
+| 默认治理状态 | `Enabled=false` |
+| 默认 MES 推送状态 | `MesPushEnabled=false` |
+| 安全边界 | 诊断与通知，不写 PLC、不停机、不取消任务、不改变路线、路权、车辆选择或调度 |
 
-本文记录 v3.5 的测试范围和合并门槛。最终 Run ID、Artifact、Digest、SQL 精确计数和 Soak 指标在最终矩阵完成后补入。
+## 2. 交付能力
 
-## 2. 代码交付清单
+v3.5 在 v3.4 当前评分和 SQL 历史之上提供：
 
-| 路径 | 说明 |
+- 持续低健康分转为正式健康事件；
+- 连续异常和连续恢复防抖；
+- 同一资产同时只保留一个活动事件；
+- Raised、Observed、GradeChanged、Acknowledged、Suppressed、Unsuppressed、Recovered 生命周期；
+- PeakGrade、LowestHealthScore、Actor、Reason、Note 审计；
+- SQL Server 不可变 Journal；
+- 确定性 SHA-256 MessageId 与 EventId + Version 幂等；
+- MES HTTP Outbox、超时、指数退避、DeadLetter 和人工重放；
+- HTTP 2xx 与 409 幂等成功语义；
+- Host 重启后活动事件和待发送状态恢复；
+- 状态、事件、历史、确认、抑制、解除和重试 API。
+
+## 3. 代码与工作流清单
+
+| 交付物 | 说明 |
 |---|---|
-| `AssetHealthGovernanceModels.cs` | 配置、事件、转换、状态和接口契约 |
-| `AssetHealthGovernanceService.cs` | 连续计数、生命周期、确认、抑制和恢复 |
-| `SqlSugarAssetHealthEventJournalStore.cs` | SQL Journal、Outbox、幂等、查询和清理 |
-| `AssetHealthGovernanceEvaluationService.cs` | 周期读取 v3.4 评分并推进事件 |
-| `AssetHealthMesDeliveryService.cs` | MES HTTP、幂等头、退避、DeadLetter |
-| `AnomalyHealthGovernanceController.cs` | 状态、查询和治理 API |
-| `AnomalyHealthGovernanceLoadController.cs` | 仅 LoadTest 的确定性评估入口 |
+| `AssetHealthGovernanceModels.cs` | 配置、事件、转换、状态与接口 |
+| `AssetHealthGovernanceService.cs` | 生命周期、防抖、确认、抑制与恢复 |
+| `SqlSugarAssetHealthEventJournalStore.cs` | SQL Journal、Outbox、幂等、查询与清理 |
+| `AssetHealthGovernanceEvaluationService.cs` | 周期读取 v3.4 当前评分 |
+| `AssetHealthMesDeliveryService.cs` | MES HTTP、幂等头、退避与 DeadLetter |
+| `AnomalyHealthGovernanceController.cs` | 生产治理 API |
+| `AnomalyHealthGovernanceLoadController.cs` | 仅 LoadTest 的确定性入口 |
 | `AssetHealthGovernanceServiceTests.cs` | Core 状态机单元测试 |
-| `anomaly-health-governance.yml` | SQL + MES 专项 E2E |
+| `anomaly-health-governance.yml` | SQL + MES + 重启专项 E2E |
+| `anomaly-health-governance-compile.yml` | 保留编译诊断 Artifact |
 
-## 3. 单元测试范围
+## 4. Core 单元测试
 
-### 3.1 创建防抖
+已验证：
 
-- 第 1、2 次 Degraded 不创建事件；
-- 达到连续门槛后只创建一次 Raised；
-- 同一资产不重复创建活动 EventId；
-- MessageId 对相同 EventId、Version 和转换保持确定性。
-
-### 3.2 等级和峰值
-
-- Degraded → Critical 生成 GradeChanged；
-- Critical → Degraded 仍生成 GradeChanged；
-- PeakGrade 保留最高等级；
-- LowestHealthScore 保留最低分；
-- 等级未变化时只更新内存观察值；
-- 超过心跳周期生成 Observed，但不进入 MES Pending。
-
-### 3.3 恢复防抖
-
-- 第一次健康评估不恢复；
-- 达到连续恢复门槛后生成 Recovered；
-- 恢复版本沿用原 EventId；
-- 恢复后活动事件列表为空；
-- 再次持续异常创建新 EventId。
-
-### 3.4 人工治理
-
+- 未达到连续门槛不创建事件；
+- 达到门槛只生成一个 Raised；
+- 同一资产不重复产生活动 EventId；
+- Degraded 与 Critical 等级变化生成连续版本；
+- PeakGrade 和 LowestHealthScore 正确保留；
+- 不变心跳生成 Observed，但不进入 MES Pending；
+- 连续恢复达到门槛后生成 Recovered；
+- 恢复后再次异常生成新 EventId；
 - Acknowledge 保存操作者、时间和备注；
-- 重复 Acknowledge 不重复增加版本；
-- Suppress 保存操作者、原因和有效期；
-- 过期时间必须晚于当前时间；
-- Unsuppress 生成新版本；
+- 重复确认不增加版本；
+- Suppress/Unsuppress 保存原因和有效期；
 - 抑制期间 GradeChanged 写 Journal 但不推送；
-- Recovered 即使事件此前被抑制也允许推送。
+- Recovered 即使此前被抑制仍可推送；
+- Restore 恢复活动事件，不重复投递 Delivered 消息。
 
-### 3.5 重启恢复
-
-- 最新活动事件可恢复；
-- 已恢复事件保留查询但不重新激活；
-- Delivered 不重新发送；
-- Pending 和 Retrying 继续发送；
-- 连续计数从零重新开始。
-
-## 4. SQL Journal 验收
+## 5. SQL Journal 验收
 
 表：
 
@@ -80,68 +71,94 @@
 Wcs_AssetHealthEventJournal
 ```
 
-验证：
+索引与约束：
 
-- CodeFirst 可重复执行；
-- MessageId 唯一索引存在；
-- EventId + EventVersion 唯一索引存在；
-- 同一转换重放不增加行数；
-- Raised、GradeChanged、Acknowledged、Suppressed、Unsuppressed、Recovered 版本连续；
-- 单事件历史按版本正序返回；
-- 最新事件恢复读取正确；
-- Delivered、DeadLetter 和待发送计数正确；
-- 保留清理不删除 Pending 和 Retrying；
-- 清理使用 TOP 批量限制。
+- MessageId 唯一；
+- EventId + EventVersion 唯一；
+- EventId + Version 正序查询；
+- DeliveryStatus + NextDeliveryAttemptUtc 支持 Outbox；
+- EventRetentionHours 与 MaintenanceBatchSize 控制清理；
+- Pending、Retrying 不被保留期清理；
+- 所有可空时间和备注字段显式 `IsNullable=true`。
 
-## 5. MES E2E 验收
+专项 E2E 已验证 SQL 版本连续、重放不增加行数、投递状态精确、活动事件可跨 Host 重启恢复。
 
-专项工作流启动本地 HTTP Receiver，并验证以下场景。
+## 6. MES Outbox 验收
 
-### 5.1 成功发送
+### 6.1 成功与幂等
 
 - Raised 进入 Pending；
 - Receiver 收到 JSON；
 - `Idempotency-Key` 等于 MessageId；
 - EventId 和 Version 与 SQL 一致；
-- 2xx 后状态变为 Delivered；
-- LastSuccessfulDeliveryUtc 更新。
+- HTTP 2xx 后变为 Delivered；
+- HTTP 409 视为幂等成功，不进入重试。
 
-### 5.2 幂等冲突
+### 6.2 故障与恢复
 
-Receiver 对重复消息返回 409：
-
-- WCS 将 409 视为已接收；
-- 状态变为 Delivered；
-- 不进入重试；
-- SQL 不生成重复版本。
-
-### 5.3 5xx 和网络中断
-
-- Host 和 `/health/live` 保持正常；
-- 消息变为 Retrying；
+- HTTP 5xx、超时和断线不影响 Host `/health/live`；
+- 状态进入 Retrying；
 - AttemptCount 增加；
-- NextAttemptUtc 按指数退避；
+- NextDeliveryAttemptUtc 使用指数退避；
 - MES 恢复后自动 Delivered；
-- 不需要重启 Host。
+- 达到最大尝试次数进入 DeadLetter；
+- 人工重试恢复为 Pending，并可最终 Delivered。
 
-### 5.4 DeadLetter
+### 6.3 抑制语义
 
-- 连续失败达到 MesMaximumAttempts；
-- 状态变为 DeadLetter；
-- 不再自动发送；
-- 人工重试 API 将状态恢复为 Pending；
-- 后续成功后 Delivered。
+- Suppressed 操作可通知 MES；
+- 抑制期间等级变化仍进入 SQL Journal，但 DeliveryStatus=Suppressed；
+- Receiver 不收到被抑制的 GradeChanged；
+- Unsuppressed 与 Recovered 按规则发送。
 
-### 5.5 抑制
+## 7. 专项工作流证据
 
-- Suppressed 操作本身可推送；
-- 抑制期间 GradeChanged 的 DeliveryStatus=Suppressed；
-- Receiver 不收到该等级变化；
-- Unsuppressed 和 Recovered 按规则推送。
+`WCS Asset Health Governance #9` 全部步骤成功：
 
-## 6. API 验收
+- Build Host and focused tests；
+- Prepare SQL Server；
+- Start deterministic MES receiver；
+- Start Host；
+- Verify raised, acknowledge, suppress, and unsuppress；
+- Verify retry, dead letter, manual replay, and recovery；
+- Verify SQL versions, idempotency, and receiver contract；
+- Verify Host restart recovery。
 
-验证：
+证据：
+
+| 项目 | 值 |
+|---|---|
+| Workflow Run | `WCS Asset Health Governance #9` |
+| Run ID | `30320836736` |
+| Artifact | `wcs-asset-health-governance-9` |
+| Digest | `sha256:3b558cfe7875004cf85c61a9dd0f35774d4df915f6c0efe3a600d2a49a852a4c` |
+| 结果 | Success |
+
+## 8. 源代码完整回归矩阵
+
+代码基线 `1315ba7108da545222252747fff00072f19a0219` 共 13 项全部成功：
+
+| 工作流 | 运行号 | 结果 |
+|---|---:|---|
+| WCS Asset Health Governance | 9 | Success |
+| WCS Asset Health Governance Compile | 4 | Success |
+| WCS Anomaly Health Scoring | 34 | Success |
+| WCS Anomaly Health Scoring SQL | 16 | Success |
+| WCS Windows CI | 228 | Success |
+| WCS End-to-End Load | 157 | Success |
+| WCS PLC Telemetry Storage Load | 52 | Success |
+| WCS PLC Anomaly Engine Load | 169 | Success |
+| WCS PLC Anomaly Engine Soak | 152 | Success |
+| WCS Anomaly Fusion Load | 60 | Success |
+| WCS Anomaly Fusion Bridge E2E | 52 | Success |
+| WCS Transport Cycle Analysis | 55 | Success |
+| WCS One Hour Soak Load | 123 | Success |
+
+专项工作流不能代替完整回归；以上矩阵同时覆盖原有调度、Telemetry、异常、Fusion、健康评分、SQL 历史与持续运行链路。
+
+## 9. API 验收
+
+已覆盖：
 
 ```http
 GET  /api/anomaly/health-governance/status
@@ -154,77 +171,47 @@ POST /api/anomaly/health-governance/events/{eventId}/unsuppress
 POST /api/anomaly/health-governance/deliveries/{messageId}/retry
 ```
 
-必须确认：
+生产要求：治理写操作必须接入项目身份授权，Actor 与原因不可由匿名客户端随意伪造。LoadTest API 在非 LoadTest 环境必须返回 404。
 
-- 空 ID 返回 400；
-- 不存在事件返回 404；
-- 缺少 Actor 或 Reason 返回 400；
-- 过去的 UntilUtc 返回 400；
-- 已 Delivered 消息人工重试返回冲突；
-- 查询最大数量受限；
-- LoadTest API 在非 LoadTest 环境返回 404。
+## 10. 性能、容量与安全
 
-## 7. 完整回归矩阵
+- HTTP 不在 PLC、命令、任务或调度线程执行；
+- 单次扫描、查询、MES 批量和 SQL 清理均有上限；
+- 失败消息使用有界退避，不产生 CPU 忙循环；
+- DeadLetter 不再自动发送；
+- Journal 和内存状态具有保留期；
+- 一小时 Soak 已成功；
+- 仓库生产默认 `Enabled=false`；
+- 仓库生产默认 `MesPushEnabled=false`；
+- Git 不保存生产 MES 密钥；
+- 无 PLC 写入、Stop、任务取消或调度修改。
 
-最终提交必须通过：
+## 11. 回退
 
-- WCS Asset Health Governance；
-- WCS Anomaly Health Scoring；
-- WCS Anomaly Health Scoring SQL；
-- WCS Windows CI；
-- WCS End-to-End Load；
-- WCS PLC Anomaly Engine Load；
-- WCS PLC Anomaly Engine Soak；
-- WCS Anomaly Fusion Load；
-- WCS Anomaly Fusion Bridge E2E；
-- WCS Transport Cycle Analysis；
-- WCS PLC Telemetry Storage Load；
-- WCS ML、Governance、Context Peer 和 Version Throughput；
-- WCS One Hour Soak Load。
+优先关闭 MES 推送：
 
-不得只用专项工作流代替完整回归。
+```text
+AssetHealthGovernance__MesPushEnabled=false
+```
 
-## 8. 性能和容量门槛
+完全关闭事件治理：
 
-必须确认：
+```text
+AssetHealthGovernance__Enabled=false
+```
 
-- 没有 HTTP 请求发生在 PLC、命令、任务或调度线程；
-- 评估服务单次扫描资产数有上限；
-- SQL 查询和历史返回数量有上限；
-- MES 每批数量有上限；
-- 失败消息不会无限快速重试；
-- Journal 保留期和清理批次有上限；
-- 事件结束后内存状态可清理；
-- 一小时 Soak 中 Pending 最终归零；
-- DeadLetter 不造成 CPU 忙循环；
-- Host RSS、托管内存和内部字典无持续无界增长。
+关闭 v3.5 不影响 PLC、任务、调度、Fusion、v3.4 当前评分或健康历史查询。SQL Journal 应保留用于审计，不应作为紧急回退的一部分直接删除。
 
-## 9. 安全检查
+## 12. 仓库级结论
 
-- [ ] 默认 Enabled=false；
-- [ ] 默认 MesPushEnabled=false；
-- [ ] 生产配置不含 MES 密钥；
-- [ ] 无 PLC 写入；
-- [ ] 无设备 Stop；
-- [ ] 无任务取消；
-- [ ] 无路线、路权或车辆选择修改；
-- [ ] MES 故障不影响控制链路；
-- [ ] 查询接口无副作用；
-- [ ] 写操作保存 Actor 和原因；
-- [ ] 自动控制联动仍不在 v3.5 范围。
+- [x] Core 状态机测试通过；
+- [x] SQL Journal 精确版本和幂等通过；
+- [x] Host 重启恢复通过；
+- [x] MES 2xx、409、5xx、DeadLetter 和人工重试通过；
+- [x] 抑制推送规则通过；
+- [x] 源代码完整回归矩阵通过；
+- [x] 一小时 Soak 通过；
+- [x] 默认关闭与控制安全边界通过；
+- [x] 文档 00、21、39、40、41、42 已补齐。
 
-## 10. 合并门槛
-
-- [ ] Core 状态机测试通过；
-- [ ] SQL Journal 精确版本和幂等通过；
-- [ ] Host 重启恢复通过；
-- [ ] MES 2xx 和 409 通过；
-- [ ] 5xx、超时、断线和恢复通过；
-- [ ] DeadLetter 和人工重试通过；
-- [ ] 抑制推送规则通过；
-- [ ] 完整回归矩阵通过；
-- [ ] 一小时 Soak 通过；
-- [ ] 文档 00、21、39、40、41 更新；
-- [ ] PR 描述包含安全边界和回退方式。
-
-全部完成后才能将 v3.5 标记为仓库级研发完成。现场 MES 接口联调、身份权限、网络策略和投产签署仍属于项目级工作。
+**v3.5 仓库级软件研发与自动化验收完成。现场 MES 真实接口、身份权限、网络策略、阈值和投产签署仍属于独立项目级验收。**
