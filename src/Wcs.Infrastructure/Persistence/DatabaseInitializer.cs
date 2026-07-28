@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Wcs.Core.AnomalyDetection;
 using Wcs.Core.PlcSubsystem.Examples;
 using Wcs.Core.Telemetry;
+using Wcs.Infrastructure.AnomalyDetection.HealthGovernance;
 using Wcs.Infrastructure.AnomalyDetection.HealthScoring;
 
 public interface IDatabaseInitializer
@@ -52,6 +53,7 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(PlcTelemetryEntity),
                 typeof(PlcAnomalyEntity),
                 typeof(AssetHealthScoreEntity),
+                typeof(AssetHealthEventJournalEntity),
                 typeof(TransportConfigurationEntity),
                 typeof(TransportJournalEntity),
                 typeof(TransportGovernedOperationEntity),
@@ -77,9 +79,17 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_AssetHealthScore_P
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AssetHealthScore_AssetTime' AND object_id = OBJECT_ID('Wcs_AssetHealthScore'))
     CREATE INDEX IX_Wcs_AssetHealthScore_AssetTime ON Wcs_AssetHealthScore(AssetId, RecordedAtUtc DESC, Sequence DESC);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AssetHealthScore_Time' AND object_id = OBJECT_ID('Wcs_AssetHealthScore'))
-    CREATE INDEX IX_Wcs_AssetHealthScore_Time ON Wcs_AssetHealthScore(RecordedAtUtc);");
+    CREATE INDEX IX_Wcs_AssetHealthScore_Time ON Wcs_AssetHealthScore(RecordedAtUtc);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_AssetHealthEventJournal_MessageId' AND object_id = OBJECT_ID('Wcs_AssetHealthEventJournal'))
+    CREATE UNIQUE INDEX UX_Wcs_AssetHealthEventJournal_MessageId ON Wcs_AssetHealthEventJournal(MessageId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_AssetHealthEventJournal_EventVersion' AND object_id = OBJECT_ID('Wcs_AssetHealthEventJournal'))
+    CREATE UNIQUE INDEX UX_Wcs_AssetHealthEventJournal_EventVersion ON Wcs_AssetHealthEventJournal(EventId, EventVersion);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AssetHealthEventJournal_AssetTime' AND object_id = OBJECT_ID('Wcs_AssetHealthEventJournal'))
+    CREATE INDEX IX_Wcs_AssetHealthEventJournal_AssetTime ON Wcs_AssetHealthEventJournal(AssetId, OccurredAtUtc DESC, Sequence DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AssetHealthEventJournal_Delivery' AND object_id = OBJECT_ID('Wcs_AssetHealthEventJournal'))
+    CREATE INDEX IX_Wcs_AssetHealthEventJournal_Delivery ON Wcs_AssetHealthEventJournal(DeliveryStatus, NextDeliveryAttemptUtc, Sequence);");
 
-            _logger.LogInformation("数据库和所有表已就绪 (21 张)");
+            _logger.LogInformation("数据库和所有表已就绪 (22 张)");
             await Task.CompletedTask;
             return true;
         }
