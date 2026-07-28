@@ -35,6 +35,10 @@ jobs:
         run: |
           dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj 2>&1 | tee model-adapter-restore.log
           dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee -a model-adapter-restore.log
+      - name: Clean outputs
+        run: |
+          dotnet clean src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+          dotnet clean src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
       - name: Build Core tests
         run: dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore 2>&1 | tee model-adapter-core-build.log
       - name: Run adapter contract tests
@@ -44,12 +48,11 @@ jobs:
       - name: Verify ONNX managed and Linux native package assets
         shell: bash
         run: |
-          package_root="$HOME/.nuget/packages/microsoft.ml.onnxruntime/1.28.0"
-          test -d "$package_root"
-          find "$package_root" -type f \( -iname 'Microsoft.ML.OnnxRuntime.dll' -o -iname 'libonnxruntime.so*' \) \
-            | sort | tee model-adapter-native-files.log
-          managed="$(find "$package_root" -type f -iname 'Microsoft.ML.OnnxRuntime.dll' -print -quit)"
-          native="$(find "$package_root" -type f -iname 'libonnxruntime.so*' -print -quit)"
+          find "$HOME/.nuget/packages" -type f \
+            \( -iname 'Microsoft.ML.OnnxRuntime.dll' -o -iname 'libonnxruntime.so*' \) \
+            -path '*/1.28.0/*' | sort | tee model-adapter-native-files.log
+          managed="$(grep -Ei '/Microsoft\.ML\.OnnxRuntime\.dll$' model-adapter-native-files.log | head -n1)"
+          native="$(grep -Ei '/libonnxruntime\.so([.][0-9.]+)?$' model-adapter-native-files.log | head -n1)"
           test -n "$managed"
           test -n "$native"
           file "$managed" "$native" | tee model-adapter-native-file-types.log
