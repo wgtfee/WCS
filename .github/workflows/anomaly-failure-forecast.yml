@@ -374,7 +374,7 @@ jobs:
           done
           cat artifacts/failure-forecast-host/host-recovered.log
           exit 1
-      - name: Verify SQL persistence and zero control writes
+      - name: Verify SQL persistence and zero PLC writes
         shell: bash
         run: |
           curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/forecast/assets/MOTOR-RUL-01/latest" \
@@ -391,12 +391,19 @@ jobs:
                 (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecastModelVersion),
                 (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecast),
                 (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecastOutcomeJournal),
-                (SELECT COUNT_BIG(*) FROM Wcs_PlcWriteLog),
-                (SELECT COUNT_BIG(*) FROM Wcs_TaskRuntime),
-                (SELECT COUNT_BIG(*) FROM Wcs_TransportGovernedOperation);"
+                (SELECT COUNT_BIG(*) FROM Wcs_PlcWriteLog);"
           ' | tee artifacts/failure-forecast-host/sql-final.txt
-          values="$(grep -E '^[[:space:]]*[0-9]+([[:space:]]+[0-9]+){5}[[:space:]]*$' artifacts/failure-forecast-host/sql-final.txt | tail -n1 | xargs)"
-          [[ "$values" == "2 2 1 0 0 0" ]]
+          values="$(grep -E '^[[:space:]]*[0-9]+([[:space:]]+[0-9]+){3}[[:space:]]*$' artifacts/failure-forecast-host/sql-final.txt | tail -n1 | xargs)"
+          [[ "$values" == "2 2 1 0" ]]
+      - name: Verify forecast code has no control dependencies
+        shell: bash
+        run: |
+          ! grep -R -n -E 'Wcs\.Core\.(PlcSubsystem|TaskEngine)|TransportDispatch|TransportTraffic|CommandBus|IPlc' \
+            src/Wcs.Core/AnomalyDetection/Forecasting \
+            src/Wcs.Infrastructure/AnomalyDetection/Forecasting \
+            src/Wcs.Host/Controllers/AnomalyForecastController.cs \
+            src/Wcs.Host/Controllers/AnomalyForecastLoadController.cs \
+            | tee artifacts/failure-forecast-host/control-dependency-check.log
       - name: Validate Host logs
         shell: bash
         run: |
