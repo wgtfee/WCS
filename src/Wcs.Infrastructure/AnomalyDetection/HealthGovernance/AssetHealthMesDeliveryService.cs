@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Wcs.Core.AnomalyDetection.HealthGovernance;
+using Wcs.Core.AnomalyDetection.HealthScoring;
 
 /// <summary>
 /// 从 SQL Outbox 拉取待发送健康事件并通过 HTTP 幂等推送 MES。
