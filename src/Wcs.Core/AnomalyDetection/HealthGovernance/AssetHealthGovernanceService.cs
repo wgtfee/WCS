@@ -62,10 +62,7 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
             var transitions = new List<AssetHealthEventTransition>(2);
             var current = state.ActiveEvent;
 
-            if (current is not null &&
-                current.IsSuppressed &&
-                current.SuppressedUntilUtc is not null &&
-                current.SuppressedUntilUtc <= utcNow)
+            if (current is not null && IsSuppressionExpired(current, utcNow))
             {
                 current = current with
                 {
@@ -79,8 +76,8 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
                     current,
                     AssetHealthEventTransitionType.Unsuppressed,
                     utcNow,
-                    actor: "system",
-                    note: "Suppression window expired."));
+                    "system",
+                    "Suppression window expired."));
                 state.ActiveEvent = current;
                 state.LastJournaledUtc = utcNow;
             }
@@ -99,8 +96,8 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
                             current,
                             AssetHealthEventTransitionType.Raised,
                             utcNow,
-                            actor: null,
-                            note: null));
+                            null,
+                            null));
                         state.ActiveEvent = current;
                         state.LastJournaledUtc = utcNow;
                     }
@@ -127,8 +124,8 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
                             updated,
                             AssetHealthEventTransitionType.GradeChanged,
                             utcNow,
-                            actor: null,
-                            note: $"Health grade changed from {current.Grade} to {updated.Grade}."));
+                            null,
+                            $"Health grade changed from {current.Grade} to {updated.Grade}."));
                         state.LastJournaledUtc = utcNow;
                     }
                     else if (utcNow - state.LastJournaledUtc >=
@@ -139,8 +136,8 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
                             updated,
                             AssetHealthEventTransitionType.Observed,
                             utcNow,
-                            actor: null,
-                            note: "Active health event heartbeat."));
+                            null,
+                            "Active health event heartbeat."));
                         state.LastJournaledUtc = utcNow;
                     }
 
@@ -151,7 +148,11 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
             else
             {
                 state.ConsecutiveUnhealthy = 0;
-                if (current is not null)
+                if (current is null)
+                {
+                    state.ConsecutiveRecovery = 0;
+                }
+                else
                 {
                     state.ConsecutiveRecovery++;
                     if (state.ConsecutiveRecovery >= _options.ConsecutiveRecoveryEvaluations)
@@ -176,17 +177,13 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
                             recovered,
                             AssetHealthEventTransitionType.Recovered,
                             utcNow,
-                            actor: null,
-                            note: "Health score recovered below the event threshold."));
+                            null,
+                            "Health score recovered below the event threshold."));
                         current = recovered;
                         state.ActiveEvent = null;
                         state.ConsecutiveRecovery = 0;
                         state.LastJournaledUtc = utcNow;
                     }
-                }
-                else
-                {
-                    state.ConsecutiveRecovery = 0;
                 }
             }
 
@@ -217,30 +214,37 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
         }
     }
 
-    public async ValueTask<AssetHealthEventSnapshot?> AcknowledgeAsync(
+    public ValueTask<AssetHealthEventSnapshot?> AcknowledgeAsync(
         string eventId,
         string actor,
         string? note,
         DateTime utcNow,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(eventId) || string.IsNullOrWhiteSpace(actor)) return null;
-        return await MutateEventAsync(
+        if (string.IsNullOrWhiteSpace(eventId) || string.IsNullOrWhiteSpace(actor))
+            return ValueTask.FromResult<AssetHealthEventSnapshot?>(null);
+
+        var normalizedActor = actor.Trim();
+        return MutateEventAsync(
             eventId.Trim(),
             utcNow,
             cancellationToken,
             current => current.Acknowledged
                 ? null
-                : (current with
-                {
-                    Version = current.Version + 1,
-                    Acknowledged = true,
-                    AcknowledgedAtUtc = NormalizeUtc(utcNow),
-                    AcknowledgedBy = actor.Trim()
-                }, AssetHealthEventTransitionType.Acknowledged, actor.Trim(), note));
+                : new EventMutation(
+                    current with
+                    {
+                        Version = current.Version + 1,
+                        Acknowledged = true,
+                        AcknowledgedAtUtc = NormalizeUtc(utcNow),
+                        AcknowledgedBy = normalizedActor
+                    },
+                    AssetHealthEventTransitionType.Acknowledged,
+                    normalizedActor,
+                    note));
     }
 
-    public async ValueTask<AssetHealthEventSnapshot?> SuppressAsync(
+    public ValueTask<AssetHealthEventSnapshot?> SuppressAsync(
         string eventId,
         string actor,
         string reason,
@@ -251,49 +255,62 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
         if (string.IsNullOrWhiteSpace(eventId) ||
             string.IsNullOrWhiteSpace(actor) ||
             string.IsNullOrWhiteSpace(reason))
-            return null;
+            return ValueTask.FromResult<AssetHealthEventSnapshot?>(null);
 
         utcNow = NormalizeUtc(utcNow);
-        if (untilUtc is not null && NormalizeUtc(untilUtc.Value) <= utcNow)
+        var normalizedUntil = untilUtc is null ? null : NormalizeUtc(untilUtc.Value);
+        if (normalizedUntil is not null && normalizedUntil <= utcNow)
             throw new ArgumentOutOfRangeException(nameof(untilUtc), "Suppression end must be in the future.");
 
-        var normalizedUntil = untilUtc is null ? null : NormalizeUtc(untilUtc.Value);
-        return await MutateEventAsync(
+        var normalizedActor = actor.Trim();
+        var normalizedReason = reason.Trim();
+        return MutateEventAsync(
             eventId.Trim(),
             utcNow,
             cancellationToken,
             current => current.IsSuppressed && current.SuppressedUntilUtc == normalizedUntil
                 ? null
-                : (current with
-                {
-                    Version = current.Version + 1,
-                    IsSuppressed = true,
-                    SuppressedUntilUtc = normalizedUntil,
-                    SuppressedReason = reason.Trim()
-                }, AssetHealthEventTransitionType.Suppressed, actor.Trim(), reason.Trim()));
+                : new EventMutation(
+                    current with
+                    {
+                        Version = current.Version + 1,
+                        IsSuppressed = true,
+                        SuppressedUntilUtc = normalizedUntil,
+                        SuppressedReason = normalizedReason
+                    },
+                    AssetHealthEventTransitionType.Suppressed,
+                    normalizedActor,
+                    normalizedReason));
     }
 
-    public async ValueTask<AssetHealthEventSnapshot?> UnsuppressAsync(
+    public ValueTask<AssetHealthEventSnapshot?> UnsuppressAsync(
         string eventId,
         string actor,
         string? note,
         DateTime utcNow,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(eventId) || string.IsNullOrWhiteSpace(actor)) return null;
-        return await MutateEventAsync(
+        if (string.IsNullOrWhiteSpace(eventId) || string.IsNullOrWhiteSpace(actor))
+            return ValueTask.FromResult<AssetHealthEventSnapshot?>(null);
+
+        var normalizedActor = actor.Trim();
+        return MutateEventAsync(
             eventId.Trim(),
             utcNow,
             cancellationToken,
             current => !current.IsSuppressed
                 ? null
-                : (current with
-                {
-                    Version = current.Version + 1,
-                    IsSuppressed = false,
-                    SuppressedUntilUtc = null,
-                    SuppressedReason = null
-                }, AssetHealthEventTransitionType.Unsuppressed, actor.Trim(), note));
+                : new EventMutation(
+                    current with
+                    {
+                        Version = current.Version + 1,
+                        IsSuppressed = false,
+                        SuppressedUntilUtc = null,
+                        SuppressedReason = null
+                    },
+                    AssetHealthEventTransitionType.Unsuppressed,
+                    normalizedActor,
+                    note));
     }
 
     public void Restore(IReadOnlyList<AssetHealthEventTransition> latestTransitions)
@@ -309,7 +326,8 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
             {
                 var current = transition.Event;
                 _eventsById[current.EventId] = current;
-                if (current.LifecycleStatus != AssetHealthEventLifecycleStatus.Active) continue;
+                if (current.LifecycleStatus != AssetHealthEventLifecycleStatus.Active)
+                    continue;
 
                 if (!_assetStates.TryGetValue(current.AssetId, out var state) ||
                     state.ActiveEvent is null ||
@@ -392,15 +410,13 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
         await _mutationGate.WaitAsync(cancellationToken);
         try
         {
-            List<(string AssetId, AssetHealthEventSnapshot Event, AssetHealthEventTransition Transition)> expiredSuppressions;
+            List<ExpiredSuppression> expired;
             lock (_stateGate)
             {
-                expiredSuppressions = _assetStates.Values
+                expired = _assetStates.Values
                     .Where(static state => state.ActiveEvent is not null)
                     .Select(static state => (state.AssetId, Event: state.ActiveEvent!))
-                    .Where(item => item.Event.IsSuppressed &&
-                                   item.Event.SuppressedUntilUtc is not null &&
-                                   item.Event.SuppressedUntilUtc <= utcNow)
+                    .Where(item => IsSuppressionExpired(item.Event, utcNow))
                     .Select(item =>
                     {
                         var updated = item.Event with
@@ -411,22 +427,25 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
                             SuppressedReason = null,
                             LastObservedUtc = utcNow
                         };
-                        return (item.AssetId, Event: updated, Transition: CreateTransition(
+                        return new ExpiredSuppression(
+                            item.AssetId,
                             updated,
-                            AssetHealthEventTransitionType.Unsuppressed,
-                            utcNow,
-                            actor: "system",
-                            note: "Suppression window expired."));
+                            CreateTransition(
+                                updated,
+                                AssetHealthEventTransitionType.Unsuppressed,
+                                utcNow,
+                                "system",
+                                "Suppression window expired."));
                     })
                     .ToList();
             }
 
-            foreach (var item in expiredSuppressions)
+            foreach (var item in expired)
                 await _journal.AppendAsync(item.Transition, cancellationToken);
 
             lock (_stateGate)
             {
-                foreach (var item in expiredSuppressions)
+                foreach (var item in expired)
                 {
                     if (_assetStates.TryGetValue(item.AssetId, out var state))
                     {
@@ -438,15 +457,18 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
 
                 var inactiveCutoff = utcNow.AddSeconds(-_options.InactiveStateRetentionSeconds);
                 foreach (var assetId in _assetStates
-                             .Where(pair => pair.Value.ActiveEvent is null && pair.Value.LastEvaluatedUtc < inactiveCutoff)
+                             .Where(pair => pair.Value.ActiveEvent is null &&
+                                            pair.Value.LastEvaluatedUtc < inactiveCutoff)
                              .Select(static pair => pair.Key)
                              .ToArray())
                     _assetStates.Remove(assetId);
 
                 var eventCutoff = utcNow.AddHours(-_options.EventRetentionHours);
                 foreach (var eventId in _eventsById
-                             .Where(pair => pair.Value.LifecycleStatus == AssetHealthEventLifecycleStatus.Recovered &&
-                                            pair.Value.RecoveredAtUtc < eventCutoff)
+                             .Where(pair =>
+                                 pair.Value.LifecycleStatus == AssetHealthEventLifecycleStatus.Recovered &&
+                                 pair.Value.RecoveredAtUtc is not null &&
+                                 pair.Value.RecoveredAtUtc < eventCutoff)
                              .Select(static pair => pair.Key)
                              .ToArray())
                     _eventsById.Remove(eventId);
@@ -464,7 +486,7 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
         string eventId,
         DateTime utcNow,
         CancellationToken cancellationToken,
-        Func<AssetHealthEventSnapshot, (AssetHealthEventSnapshot Event, AssetHealthEventTransitionType Type, string? Actor, string? Note)?> mutation)
+        Func<AssetHealthEventSnapshot, EventMutation?> mutation)
     {
         utcNow = NormalizeUtc(utcNow);
         await _mutationGate.WaitAsync(cancellationToken);
@@ -473,20 +495,22 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
             AssetHealthEventSnapshot current;
             lock (_stateGate)
             {
-                if (!_eventsById.TryGetValue(eventId, out current!) ||
-                    current.LifecycleStatus != AssetHealthEventLifecycleStatus.Active)
+                if (!_eventsById.TryGetValue(eventId, out var found) ||
+                    found.LifecycleStatus != AssetHealthEventLifecycleStatus.Active)
                     return null;
+                current = found;
             }
 
             var result = mutation(current);
             if (result is null) return current;
-            var updated = result.Value.Event with { LastObservedUtc = utcNow };
+
+            var updated = result.Event with { LastObservedUtc = utcNow };
             var transition = CreateTransition(
                 updated,
-                result.Value.Type,
+                result.Type,
                 utcNow,
-                result.Value.Actor,
-                result.Value.Note);
+                result.Actor,
+                result.Note);
             await _journal.AppendAsync(transition, cancellationToken);
 
             lock (_stateGate)
@@ -559,8 +583,8 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
             TransitionType = type,
             Event = snapshot,
             OccurredAtUtc = utcNow,
-            Actor = string.IsNullOrWhiteSpace(actor) ? null : actor.Trim(),
-            Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+            Actor = NormalizeOptional(actor),
+            Note = NormalizeOptional(note),
             DeliveryStatus = deliveryStatus,
             DeliveryAttemptCount = 0,
             NextDeliveryAttemptUtc = deliveryStatus == AssetHealthDeliveryStatus.Pending ? utcNow : null,
@@ -610,6 +634,11 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
             : (factor.Source, factor.Category, factor.Reason);
     }
 
+    private static bool IsSuppressionExpired(AssetHealthEventSnapshot snapshot, DateTime utcNow) =>
+        snapshot.IsSuppressed &&
+        snapshot.SuppressedUntilUtc is not null &&
+        snapshot.SuppressedUntilUtc <= utcNow;
+
     private static string CreateMessageId(
         string eventId,
         int version,
@@ -624,6 +653,20 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
         : value.Kind == DateTimeKind.Utc
             ? value
             : value.ToUniversalTime();
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed record EventMutation(
+        AssetHealthEventSnapshot Event,
+        AssetHealthEventTransitionType Type,
+        string? Actor,
+        string? Note);
+
+    private sealed record ExpiredSuppression(
+        string AssetId,
+        AssetHealthEventSnapshot Event,
+        AssetHealthEventTransition Transition);
 
     private sealed class TrackedAssetState
     {
