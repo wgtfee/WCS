@@ -1,0 +1,426 @@
+name: WCS Asset Failure Forecast
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Core/AnomalyDetection/Forecasting/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Forecasting/**'
+      - 'src/Wcs.Host/Controllers/AnomalyForecast*.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/PlcMlDependencyInjection.cs'
+      - 'src/Wcs.Host/appsettings*.json'
+      - '.github/workflows/anomaly-failure-forecast*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  ASPNETCORE_ENVIRONMENT: ForecastLoadTest
+  DOTNET_ENVIRONMENT: ForecastLoadTest
+  ASPNETCORE_URLS: http://127.0.0.1:5170
+  ConnectionStrings__WcsDb: 'Server=127.0.0.1,1433;Database=WCS_FailureForecast;User Id=sa;Password=Wcs_Forecast!2026;Encrypt=False;TrustServerCertificate=True;'
+  Simulator__Enabled: 'true'
+  Storage__Telemetry__Provider: Disabled
+  AnomalyDetection__MachineLearning__Enabled: 'false'
+  AnomalyDetection__MachineLearning__ManagementApiEnabled: 'true'
+  AnomalyHealthScoring__Enabled: 'true'
+  AnomalyHealthScoring__HistoryProvider: SqlServer
+  AnomalyHealthScoring__MinimumScoreChangeToRecord: '0.01'
+  AnomalyHealthScoring__MaximumUnchangedIntervalSeconds: '1'
+  AnomalyHealthScoring__MaximumHistoryPerAsset: '5000'
+  AnomalyHealthScoring__MaximumHistoryQueryCount: '5000'
+  AnomalyHealthScoring__HistoryWriteBatchSize: '100'
+  AssetFailureForecast__Enabled: 'true'
+  AssetFailureForecast__ModelDirectory: '${{ github.workspace }}/artifacts/failure-forecast-host-models'
+  AssetFailureForecast__EvaluationIntervalSeconds: '3600'
+  AssetFailureForecast__MinimumHistoryPoints: '48'
+  AssetFailureForecast__MinimumHistorySpanHours: '24'
+  AssetFailureForecast__MaximumHistoryPoints: '100'
+  AssetFailureForecast__MaximumAssetsPerEvaluation: '100'
+
+jobs:
+  host-e2e:
+    name: history, ONNX, SQL, outcomes, activation, isolation, and restart
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: 'Wcs_Forecast!2026'
+        ports:
+          - 1433:1433
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate approved local forecast versions
+        shell: bash
+        run: |
+          mkdir -p artifacts/failure-forecast-host artifacts/failure-forecast-host-models
+          python -m pip install --disable-pip-version-check --no-cache-dir 'onnx==1.22.0' \
+            2>&1 | tee artifacts/failure-forecast-host/onnx-install.log
+          python - <<'PY'
+          import hashlib
+          import json
+          import onnx
+          from pathlib import Path
+          from onnx import TensorProto, helper
+
+          root = Path('artifacts/failure-forecast-host-models')
+          features = [
+              'health.latest', 'health.mean', 'health.minimum', 'health.maximum',
+              'health.stddev', 'health.slopePerHour', 'health.delta',
+              'fusionRisk.mean', 'fusionRisk.maximum', 'grade.changeCount',
+              'grade.degradedOrWorseRatio', 'grade.criticalRatio',
+              'history.sampleCount', 'history.spanHours'
+          ]
+          def create(version, values, created):
+              model_path = root / f'{version}.onnx'
+              input_info = helper.make_tensor_value_info('features', TensorProto.FLOAT, [1, 14])
+              output_info = helper.make_tensor_value_info('forecast', TensorProto.FLOAT, [1, 6])
+              tensor = helper.make_tensor('values', TensorProto.FLOAT, [1, 6], values)
+              constant = helper.make_node('Constant', [], ['forecast'], value=tensor)
+              graph = helper.make_graph([constant], f'wcs_{version}', [input_info], [output_info])
+              model = helper.make_model(graph, producer_name='wcs-ci', opset_imports=[helper.make_operatorsetid('', 13)])
+              model.ir_version = 10
+              onnx.checker.check_model(model)
+              onnx.save(model, model_path)
+              digest = hashlib.sha256(model_path.read_bytes()).hexdigest().upper()
+              manifest = {
+                  'schemaVersion': 1,
+                  'version': version,
+                  'adapterId': 'microsoft.onnxruntime.cpu.forecast.v1',
+                  'artifactFile': model_path.name,
+                  'artifactSha256': digest,
+                  'createdUtc': created,
+                  'source': 'github-actions-generated-offline',
+                  'approvedBy': 'ci-reliability-reviewer',
+                  'approvedAtUtc': '2026-07-28T00:05:00Z',
+                  'trainingDatasetVersion': 'ci-degradation-dataset-v1',
+                  'trainingAssetCount': 100,
+                  'failureEventCount': 20,
+                  'censoredRecordCount': 80,
+                  'validationAuc': 0.82,
+                  'validationBrierScore': 0.14,
+                  'validationRulMaeHours': 18.0,
+                  'validationIntervalCoverage': 0.84,
+                  'featureNames': features,
+                  'means': [0.0] * 14,
+                  'standardDeviations': [1.0] * 14,
+                  'inputName': 'features',
+                  'outputName': 'forecast',
+                  'inputShape': [1, 14],
+                  'outputShape': [1, 6],
+                  'maximumRulHours': 1000.0,
+                  'description': 'CI generated local forecast model.'
+              }
+              (root / f'manifest-{version}.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+              return manifest
+          v1 = create('forecast-host-v1', [0.10, 0.30, 0.60, 40.0, 72.0, 120.0], '2026-07-28T00:00:00Z')
+          create('forecast-host-v2', [0.20, 0.40, 0.70, 20.0, 48.0, 96.0], '2026-07-28T00:02:00Z')
+          (root / 'active.json').write_text(json.dumps(v1, indent=2), encoding='utf-8')
+          PY
+          find artifacts/failure-forecast-host-models -maxdepth 1 -type f -print | sort \
+            | tee artifacts/failure-forecast-host/model-files.log
+          test -s artifacts/failure-forecast-host-models/active.json
+      - name: Build Host
+        shell: bash
+        run: |
+          rm -rf src/Wcs.Host/bin src/Wcs.Host/obj src/Wcs.Infrastructure/bin src/Wcs.Infrastructure/obj
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee artifacts/failure-forecast-host/restore.log
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore \
+            2>&1 | tee artifacts/failure-forecast-host/build.log
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          echo "$sql_container" > artifacts/failure-forecast-host/sql-container-id.txt
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_FailureForecast]"
+          '
+      - name: Start Host and verify active v1
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/failure-forecast-host/host-v1.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/failure-forecast-host/host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/forecast/status" \
+                | tee artifacts/failure-forecast-host/status-v1.json
+              jq -e '.enabled == true and .availability == 3 and .activeModelVersion == "forecast-host-v1" and .failures == 0' \
+                artifacts/failure-forecast-host/status-v1.json >/dev/null
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/failure-forecast-host/host.pid)" 2>/dev/null; then
+              cat artifacts/failure-forecast-host/host-v1.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/failure-forecast-host/host-v1.log
+          exit 1
+      - name: Verify insufficient history produces no forecast
+        shell: bash
+        run: |
+          curl --fail --silent --show-error -H 'Content-Type: application/json' \
+            --data '{"assetId":"MOTOR-SHORT","count":3,"intervalMinutes":60,"startHealthScore":90,"healthScoreDelta":-1,"startFusionRisk":0.1,"fusionRiskDelta":0.01}' \
+            "$ASPNETCORE_URLS/api/anomaly/forecast/load/history" \
+            | tee artifacts/failure-forecast-host/short-history.json
+          jq -e '.accepted == 3 and .controlWrites == 0' artifacts/failure-forecast-host/short-history.json >/dev/null
+          sleep 3
+          status="$(curl --silent --output artifacts/failure-forecast-host/short-evaluate.json --write-out '%{http_code}' \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/forecast/assets/MOTOR-SHORT/evaluate")"
+          [[ "$status" == "422" ]]
+          jq -e '.availability == 2 and .prediction == null' artifacts/failure-forecast-host/short-evaluate.json >/dev/null
+      - name: Verify forecast idempotency and exact v1 output
+        shell: bash
+        run: |
+          curl --fail --silent --show-error -H 'Content-Type: application/json' \
+            --data '{"assetId":"MOTOR-RUL-01","count":48,"intervalMinutes":60,"startHealthScore":95,"healthScoreDelta":-0.5,"startFusionRisk":0.05,"fusionRiskDelta":0.01}' \
+            "$ASPNETCORE_URLS/api/anomaly/forecast/load/history" \
+            | tee artifacts/failure-forecast-host/history.json
+          jq -e '.accepted == 48 and .controlWrites == 0' artifacts/failure-forecast-host/history.json >/dev/null
+          sql_container="$(cat artifacts/failure-forecast-host/sql-container-id.txt)"
+          for attempt in {1..60}; do
+            count="$(docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_FailureForecast -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT_BIG(*) FROM Wcs_AssetHealthScore WHERE AssetId = '\''MOTOR-RUL-01'\'';"
+            ' | tr -d '\r' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tail -n1 | xargs)"
+            [[ "$count" == "48" ]] && break
+            [[ "$attempt" -eq 60 ]] && { echo "history count=$count"; exit 1; }
+            sleep 1
+          done
+          curl --fail --silent --show-error --request POST \
+            "$ASPNETCORE_URLS/api/anomaly/forecast/assets/MOTOR-RUL-01/evaluate" \
+            | tee artifacts/failure-forecast-host/evaluate-v1.json
+          jq -e '
+            .availability == 3 and
+            .prediction.modelVersion == "forecast-host-v1" and
+            .prediction.sampleCount == 48 and
+            .prediction.historySpanHours == 47 and
+            .prediction.failureProbability24Hours > 0.099 and .prediction.failureProbability24Hours < 0.101 and
+            .prediction.failureProbability72Hours > 0.299 and .prediction.failureProbability72Hours < 0.301 and
+            .prediction.failureProbability168Hours > 0.599 and .prediction.failureProbability168Hours < 0.601 and
+            .prediction.rulLowerHours == 40 and .prediction.rulMedianHours == 72 and .prediction.rulUpperHours == 120' \
+            artifacts/failure-forecast-host/evaluate-v1.json >/dev/null
+          curl --fail --silent --show-error --request POST \
+            "$ASPNETCORE_URLS/api/anomaly/forecast/assets/MOTOR-RUL-01/evaluate" \
+            | tee artifacts/failure-forecast-host/evaluate-v1-duplicate.json
+          jq -e --slurpfile first artifacts/failure-forecast-host/evaluate-v1.json \
+            '.prediction.forecastId == $first[0].prediction.forecastId' \
+            artifacts/failure-forecast-host/evaluate-v1-duplicate.json >/dev/null
+      - name: Verify SQL, outcome idempotency, and metrics
+        shell: bash
+        run: |
+          forecast_id="$(jq -r '.prediction.forecastId' artifacts/failure-forecast-host/evaluate-v1.json)"
+          forecasted_at="$(jq -r '.prediction.forecastedAtUtc' artifacts/failure-forecast-host/evaluate-v1.json)"
+          observed_at="$(python - "$forecasted_at" <<'PY'
+          import datetime, sys
+          value = datetime.datetime.fromisoformat(sys.argv[1].replace('Z', '+00:00')) + datetime.timedelta(hours=72)
+          print(value.isoformat().replace('+00:00', 'Z'))
+          PY
+          )"
+          jq -n --arg observed "$observed_at" '{kind:0, observedAtUtc:$observed, recordedBy:"ci-reliability-engineer", note:"Observed failure at the v1 median RUL for deterministic metric validation."}' \
+            > artifacts/failure-forecast-host/outcome-request.json
+          for attempt in 1 2; do
+            curl --fail --silent --show-error -H 'Content-Type: application/json' \
+              --data @artifacts/failure-forecast-host/outcome-request.json \
+              "$ASPNETCORE_URLS/api/anomaly/forecast/forecasts/$forecast_id/outcomes" \
+              | tee "artifacts/failure-forecast-host/outcome-$attempt.json"
+          done
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/forecast/metrics" \
+            | tee artifacts/failure-forecast-host/metrics-v1.json
+          jq -e '
+            .forecastCount == 1 and .outcomeCount == 1 and .observedFailureCount == 1 and
+            .meanAbsoluteRulErrorHours == 0 and .predictionIntervalCoverage == 1 and
+            .brierScore24Hours > 0.009 and .brierScore24Hours < 0.011' \
+            artifacts/failure-forecast-host/metrics-v1.json >/dev/null
+          sql_container="$(cat artifacts/failure-forecast-host/sql-container-id.txt)"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_FailureForecast -h -1 -W -Q "
+              SET NOCOUNT ON;
+              SELECT
+                (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecastModelVersion),
+                (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecast),
+                (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecastOutcomeJournal);"
+          ' | tee artifacts/failure-forecast-host/sql-v1.txt
+          values="$(grep -E '^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]*$' artifacts/failure-forecast-host/sql-v1.txt | tail -n1 | xargs)"
+          [[ "$values" == "1 1 1" ]]
+      - name: Activate v2 and create a versioned forecast
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --request POST \
+            "$ASPNETCORE_URLS/api/anomaly/forecast/models/forecast-host-v2/activate" \
+            | tee artifacts/failure-forecast-host/activate-v2.json
+          jq -e '.activeModelVersion == "forecast-host-v2" and .availability == 3 and .failures == 0' \
+            artifacts/failure-forecast-host/activate-v2.json >/dev/null
+          curl --fail --silent --show-error --request POST \
+            "$ASPNETCORE_URLS/api/anomaly/forecast/assets/MOTOR-RUL-01/evaluate" \
+            | tee artifacts/failure-forecast-host/evaluate-v2.json
+          jq -e '
+            .prediction.modelVersion == "forecast-host-v2" and
+            .prediction.failureProbability24Hours > 0.199 and .prediction.failureProbability24Hours < 0.201 and
+            .prediction.failureProbability72Hours > 0.399 and .prediction.failureProbability72Hours < 0.401 and
+            .prediction.failureProbability168Hours > 0.699 and .prediction.failureProbability168Hours < 0.701 and
+            .prediction.rulLowerHours == 20 and .prediction.rulMedianHours == 48 and .prediction.rulUpperHours == 96' \
+            artifacts/failure-forecast-host/evaluate-v2.json >/dev/null
+          sql_container="$(cat artifacts/failure-forecast-host/sql-container-id.txt)"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_FailureForecast -h -1 -W -Q "
+              SET NOCOUNT ON;
+              SELECT
+                (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecastModelVersion),
+                (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecast);"
+          ' | tee artifacts/failure-forecast-host/sql-v2.txt
+          values="$(grep -E '^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]*$' artifacts/failure-forecast-host/sql-v2.txt | tail -n1 | xargs)"
+          [[ "$values" == "2 2" ]]
+      - name: Verify Host restart recovers v2
+        shell: bash
+        run: |
+          kill "$(cat artifacts/failure-forecast-host/host.pid)"
+          wait "$(cat artifacts/failure-forecast-host/host.pid)" 2>/dev/null || true
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/failure-forecast-host/host-restart.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/failure-forecast-host/host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/forecast/status" \
+                | tee artifacts/failure-forecast-host/status-restart.json
+              jq -e '.availability == 3 and .activeModelVersion == "forecast-host-v2" and .failures == 0' \
+                artifacts/failure-forecast-host/status-restart.json >/dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          cat artifacts/failure-forecast-host/host-restart.log
+          exit 1
+      - name: Verify bad hash is isolated and recoverable
+        shell: bash
+        run: |
+          kill "$(cat artifacts/failure-forecast-host/host.pid)"
+          wait "$(cat artifacts/failure-forecast-host/host.pid)" 2>/dev/null || true
+          cp artifacts/failure-forecast-host-models/active.json artifacts/failure-forecast-host/active-v2-good.json
+          jq '.artifactSha256 = ("0" * 64)' artifacts/failure-forecast-host-models/active.json \
+            > artifacts/failure-forecast-host-models/active.json.tmp
+          mv artifacts/failure-forecast-host-models/active.json.tmp artifacts/failure-forecast-host-models/active.json
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/failure-forecast-host/host-bad-hash.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/failure-forecast-host/host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/forecast/status" \
+                | tee artifacts/failure-forecast-host/status-bad-hash.json
+              jq -e '.availability == 4 and .activeModelVersion == null and .failures >= 1 and (.lastError | contains("hash mismatch"))' \
+                artifacts/failure-forecast-host/status-bad-hash.json >/dev/null
+              break
+            fi
+            [[ "$attempt" -eq 90 ]] && { cat artifacts/failure-forecast-host/host-bad-hash.log; exit 1; }
+            sleep 2
+          done
+          kill "$(cat artifacts/failure-forecast-host/host.pid)"
+          wait "$(cat artifacts/failure-forecast-host/host.pid)" 2>/dev/null || true
+          cp artifacts/failure-forecast-host/active-v2-good.json artifacts/failure-forecast-host-models/active.json
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/failure-forecast-host/host-recovered.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/failure-forecast-host/host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/forecast/status" \
+                | tee artifacts/failure-forecast-host/status-recovered.json
+              jq -e '.availability == 3 and .activeModelVersion == "forecast-host-v2" and .failures == 0' \
+                artifacts/failure-forecast-host/status-recovered.json >/dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          cat artifacts/failure-forecast-host/host-recovered.log
+          exit 1
+      - name: Verify SQL persistence and zero control writes
+        shell: bash
+        run: |
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/forecast/assets/MOTOR-RUL-01/latest" \
+            | tee artifacts/failure-forecast-host/latest-after-restart.json
+          jq -e '.modelVersion == "forecast-host-v2" and .rulMedianHours == 48' \
+            artifacts/failure-forecast-host/latest-after-restart.json >/dev/null
+          sql_container="$(cat artifacts/failure-forecast-host/sql-container-id.txt)"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_FailureForecast -h -1 -W -Q "
+              SET NOCOUNT ON;
+              SELECT
+                (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecastModelVersion),
+                (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecast),
+                (SELECT COUNT_BIG(*) FROM Wcs_AssetFailureForecastOutcomeJournal),
+                (SELECT COUNT_BIG(*) FROM Wcs_PlcWriteLog),
+                (SELECT COUNT_BIG(*) FROM Wcs_TaskRuntime),
+                (SELECT COUNT_BIG(*) FROM Wcs_TransportGovernedOperation);"
+          ' | tee artifacts/failure-forecast-host/sql-final.txt
+          values="$(grep -E '^[[:space:]]*[0-9]+([[:space:]]+[0-9]+){5}[[:space:]]*$' artifacts/failure-forecast-host/sql-final.txt | tail -n1 | xargs)"
+          [[ "$values" == "2 2 1 0 0 0" ]]
+      - name: Validate Host logs
+        shell: bash
+        run: |
+          cat artifacts/failure-forecast-host/host-v1.log \
+              artifacts/failure-forecast-host/host-restart.log \
+              artifacts/failure-forecast-host/host-bad-hash.log \
+              artifacts/failure-forecast-host/host-recovered.log \
+              > artifacts/failure-forecast-host/host-combined.log
+          ! grep -E 'Stack overflow|OutOfMemoryException|AccessViolationException|segmentation fault' \
+            artifacts/failure-forecast-host/host-combined.log
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/failure-forecast-host/host.pid ]]; then
+            kill "$(cat artifacts/failure-forecast-host/host.pid)" 2>/dev/null || true
+          fi
+      - name: Upload failure forecast evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-asset-failure-forecast-${{ github.run_number }}
+          path: |
+            artifacts/failure-forecast-host/**
+            artifacts/failure-forecast-host-models/*.json
+          if-no-files-found: error
+          retention-days: 14
