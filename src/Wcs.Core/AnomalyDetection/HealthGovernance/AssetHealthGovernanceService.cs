@@ -82,7 +82,7 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
                 state.LastJournaledUtc = utcNow;
             }
 
-            if (snapshot.Grade >= _options.MinimumEventGrade)
+            if (IsAtLeast(snapshot.Grade, _options.MinimumEventGrade))
             {
                 state.ConsecutiveUnhealthy++;
                 state.ConsecutiveRecovery = 0;
@@ -108,7 +108,9 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
                     var updated = current with
                     {
                         Grade = snapshot.Grade,
-                        PeakGrade = snapshot.Grade > current.PeakGrade ? snapshot.Grade : current.PeakGrade,
+                        PeakGrade = IsMoreSevere(snapshot.Grade, current.PeakGrade)
+                            ? snapshot.Grade
+                            : current.PeakGrade,
                         HealthScore = snapshot.HealthScore,
                         LowestHealthScore = Math.Min(current.LowestHealthScore, snapshot.HealthScore),
                         LastObservedUtc = utcNow,
@@ -366,9 +368,9 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
         {
             return _eventsById.Values
                 .Where(item => lifecycleStatus is null || item.LifecycleStatus == lifecycleStatus)
-                .Where(item => minimumGrade is null || item.Grade >= minimumGrade)
+                .Where(item => minimumGrade is null || IsAtLeast(item.Grade, minimumGrade.Value))
                 .OrderByDescending(static item => item.LifecycleStatus == AssetHealthEventLifecycleStatus.Active)
-                .ThenByDescending(static item => item.Grade)
+                .ThenByDescending(static item => (int)item.Grade)
                 .ThenByDescending(static item => item.LastObservedUtc)
                 .Take(maximumCount)
                 .ToArray();
@@ -633,6 +635,12 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
             ? ("Fusion", "AssetHealth", snapshot.Summary)
             : (factor.Source, factor.Category, factor.Reason);
     }
+
+    private static bool IsAtLeast(AssetHealthGrade value, AssetHealthGrade minimum) =>
+        (int)value >= (int)minimum;
+
+    private static bool IsMoreSevere(AssetHealthGrade value, AssetHealthGrade other) =>
+        (int)value > (int)other;
 
     private static bool IsSuppressionExpired(AssetHealthEventSnapshot snapshot, DateTime utcNow) =>
         snapshot.IsSuppressed &&
