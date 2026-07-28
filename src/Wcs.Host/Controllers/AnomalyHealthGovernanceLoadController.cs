@@ -1,5 +1,6 @@
 namespace Wcs.Host.Controllers;
 
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Wcs.Core.AnomalyDetection.Fusion;
 using Wcs.Core.AnomalyDetection.HealthGovernance;
@@ -110,7 +111,10 @@ public sealed class AssetHealthGovernanceLoadRequest
 public sealed class AssetHealthGovernanceLoadPoint
 {
     public double HealthScore { get; set; }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public AssetHealthGrade? Grade { get; set; }
+
     public int IndependentSourceCount { get; set; } = 2;
     public DateTime EvaluatedAtUtc { get; set; }
     public string? Source { get; set; }
