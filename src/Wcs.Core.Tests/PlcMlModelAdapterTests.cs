@@ -13,11 +13,37 @@ public sealed class PlcMlModelAdapterTests
         var manifest = CreateManifest(profile);
 
         PlcMlModelManifestValidator.Validate(profile, manifest);
+        PlcMlFeatureSchema.ValidateManifest(profile, manifest);
         var first = PlcMlModelManifestValidator.ComputeManifestHash(manifest);
         var second = PlcMlModelManifestValidator.ComputeManifestHash(manifest);
 
         Assert.Equal(64, first.Length);
         Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void Feature_schema_is_deterministic_and_exact()
+    {
+        var profile = CreateProfile();
+        var expected = new[]
+        {
+            "Current.mean",
+            "Current.stddev",
+            "Current.min",
+            "Current.max",
+            "Current.last",
+            "Current.slope",
+            "Current.range",
+            "Current.samplesPerSecond"
+        };
+
+        Assert.Equal(expected, PlcMlFeatureSchema.BuildExpectedFeatureNames(profile));
+        var manifest = CreateManifest(profile);
+        PlcMlFeatureSchema.ValidateManifest(profile, manifest);
+
+        manifest.FeatureNames = manifest.FeatureNames.Reverse().ToArray();
+        Assert.Throws<InvalidOperationException>(() =>
+            PlcMlFeatureSchema.ValidateManifest(profile, manifest));
     }
 
     [Fact]
@@ -87,6 +113,7 @@ public sealed class PlcMlModelAdapterTests
     private static PlcMlModelManifest CreateManifest(PlcMlProfile profile)
     {
         var artifact = new byte[] { 1, 2, 3 };
+        var features = PlcMlFeatureSchema.BuildExpectedFeatureNames(profile);
         return new PlcMlModelManifest
         {
             ProfileId = profile.ProfileId,
@@ -99,12 +126,12 @@ public sealed class PlcMlModelAdapterTests
             Source = "approved-offline-training",
             ApprovedBy = "maintenance-engineer",
             ApprovedAtUtc = new DateTime(2026, 7, 28, 1, 0, 0, DateTimeKind.Utc),
-            FeatureNames = new[] { "Current.mean" },
-            Means = new[] { 10d },
-            StandardDeviations = new[] { 2d },
+            FeatureNames = features,
+            Means = Enumerable.Repeat(0d, features.Length).ToArray(),
+            StandardDeviations = Enumerable.Repeat(1d, features.Length).ToArray(),
             InputName = "features",
             OutputName = "score",
-            InputShape = new[] { 1, 1 },
+            InputShape = new[] { 1, features.Length },
             ScoreTransform = PlcMlScoreTransform.Sigmoid,
             DecisionThreshold = 0.8,
             CalibrationMeanScore = 0.2,
