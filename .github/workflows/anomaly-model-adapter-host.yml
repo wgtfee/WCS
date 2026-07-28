@@ -221,8 +221,7 @@ jobs:
               SELECT COUNT_BIG(*) AS CandidateRows,
                      SUM(CASE WHEN IsActive = 0 THEN 1 ELSE 0 END) AS RecoveredRows,
                      COUNT(DISTINCT ModelVersion) AS ModelVersions
-              FROM Wcs_PlcMlCandidate
-              WHERE ProfileId = '''ML-CV-CURRENT''';"
+              FROM Wcs_PlcMlCandidate;"
           ' | tee artifacts/onnx-host/sql-candidates.txt
           values="$(grep -E '^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]*$' artifacts/onnx-host/sql-candidates.txt | tail -n1 | xargs)"
           [[ "$values" == "2 2 1" ]]
