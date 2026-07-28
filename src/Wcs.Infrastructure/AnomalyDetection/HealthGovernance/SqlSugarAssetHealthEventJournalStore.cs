@@ -32,17 +32,24 @@ public sealed class AssetHealthEventJournalEntity
     public double LowestHealthScore { get; set; }
     public DateTime FirstDetectedUtc { get; set; }
     public DateTime LastObservedUtc { get; set; }
+
+    [SugarColumn(IsNullable = true)]
     public DateTime? RecoveredAtUtc { get; set; }
+
     public bool Acknowledged { get; set; }
+
+    [SugarColumn(IsNullable = true)]
     public DateTime? AcknowledgedAtUtc { get; set; }
 
-    [SugarColumn(Length = 128)]
+    [SugarColumn(Length = 128, IsNullable = true)]
     public string? AcknowledgedBy { get; set; }
 
     public bool IsSuppressed { get; set; }
+
+    [SugarColumn(IsNullable = true)]
     public DateTime? SuppressedUntilUtc { get; set; }
 
-    [SugarColumn(Length = 1000)]
+    [SugarColumn(Length = 1000, IsNullable = true)]
     public string? SuppressedReason { get; set; }
 
     [SugarColumn(Length = 2000)]
@@ -56,20 +63,28 @@ public sealed class AssetHealthEventJournalEntity
 
     public DateTime OccurredAtUtc { get; set; }
 
-    [SugarColumn(Length = 128)]
+    [SugarColumn(Length = 128, IsNullable = true)]
     public string? Actor { get; set; }
 
-    [SugarColumn(Length = 2000)]
+    [SugarColumn(Length = 2000, IsNullable = true)]
     public string? Note { get; set; }
 
     public int DeliveryStatus { get; set; }
     public int DeliveryAttemptCount { get; set; }
+
+    [SugarColumn(IsNullable = true)]
     public DateTime? NextDeliveryAttemptUtc { get; set; }
+
+    [SugarColumn(IsNullable = true)]
     public DateTime? LastDeliveryAttemptUtc { get; set; }
+
+    [SugarColumn(IsNullable = true)]
     public DateTime? DeliveredAtUtc { get; set; }
+
+    [SugarColumn(IsNullable = true)]
     public int? LastHttpStatusCode { get; set; }
 
-    [SugarColumn(Length = 2000)]
+    [SugarColumn(Length = 2000, IsNullable = true)]
     public string? LastDeliveryError { get; set; }
 }
 
