@@ -2,177 +2,140 @@
 
 ## 1. 文档定位
 
-本文件定义 WCS Runtime Engine 在 v3.4 之后的独立异常诊断与人工辅助决策路线。
-
-```text
-EMS/RGV 统一调度主线：第一阶段～第十二阶段，软件研发已经结束
-AnomalyEngine 诊断扩展线：v1～v3.9，继续以只读诊断和人工辅助决策演进
-```
-
-统一调度后续不再使用“第十三阶段”扩展。AnomalyEngine 不得绕过既有状态机、路权、PLC 联锁、AlarmCenter 和审批体系。
+本文件定义 WCS Runtime Engine 在 v3.4 之后的独立异常诊断与人工辅助决策路线。统一调度主线第一至第十二阶段已经结束；AnomalyEngine 不得绕过状态机、路权、PLC 联锁、AlarmCenter 和审批体系。
 
 ## 2. 已完成和当前基线
 
 | 版本 | 能力 | 状态 |
 |---|---|---|
-| v1 | 规则、阈值、变化率、持续时间、MAD、一致性 | 已完成 |
-| v2 | 特征窗口与 Isolation Forest | 已完成 |
-| v2.1 | 模型治理、Shadow、Canary、审批、漂移与回滚 | 已完成 |
-| v3.1 | 运行上下文与同群偏离 | 已完成 |
-| v3.2 | 运输动作周期与阶段异常 | 已完成 |
-| v3.3 | 多模型异常证据融合 | 已完成 |
-| v3.4 | 可解释健康评分、趋势、SQL 历史与重启恢复 | 已完成，`develop@1d060983671d204fb25e4bf21d5b4bebd2596153` |
-| v3.5 | 健康事件治理、MES Outbox、审计和重启恢复 | 已完成，`develop@ed74768a6338aff5a1c63409ab7fb0e344ca701c` |
-| v3.6 | 根因关联、传播路径、SQL 快照和人工复核 | 已完成，`develop@900353ef8f17b3ab38cb4e711529c3fcc3629892` |
-| v3.7 | 维修建议、反馈闭环、MES 工单字段、指标和标签候选 | 功能、专项和首轮 19 项矩阵已完成，等待最终证据 Head 复验与合并 |
+| v3.4 | 健康评分、趋势、SQL 历史 | 已完成 |
+| v3.5 | 健康事件治理、MES Outbox、审计 | 已完成，`develop@ed74768a6338aff5a1c63409ab7fb0e344ca701c` |
+| v3.6 | 根因关联、传播路径、人工复核 | 已完成，`develop@900353ef8f17b3ab38cb4e711529c3fcc3629892` |
+| v3.7 | 维修建议、反馈、工单、指标和标签 | 已完成，`develop@f26cdbeae77c4e246477ea0c6ba60c3511ef86f4` |
+| v3.8 | 可插拔模型、本地 ONNX Runtime、Profile 分流和失败隔离 | 功能、专项、文档和首轮 20/20 已完成，等待最终证据 Head 复验与合并 |
+| v3.9 | 故障概率与剩余寿命 | 仅在真实失效数据满足条件后实施 |
 
 ## 3. 总体数据流
 
 ```text
-规则 / 统计 / ML / 同群 / 周期异常
-                 ↓
-v3.3 Evidence Fusion
-                 ↓
-v3.4 Health Score + Trend
-                 ↓
-v3.5 Governed Health Event + MES Outbox
-                 ↓
-v3.6 Root Cause Graph Analysis + Review Journal
-                 ↓
-v3.7 Approved Maintenance Rules + Feedback Journal
-                 ↓
-v3.8 Pluggable Model / ONNX Runtime
-                 ↓
-v3.9 Failure Probability and RUL
+规则 / 统计 / Isolation Forest / ONNX / 同群 / 周期异常
+                         ↓
+                 v3.3 Evidence Fusion
+                         ↓
+              v3.4 Health Score + Trend
+                         ↓
+       v3.5 Governed Health Event + MES Outbox
+                         ↓
+       v3.6 Root Cause Graph + Review Journal
+                         ↓
+       v3.7 Maintenance Rules + Feedback Journal
+                         ↓
+          v3.9 Failure Probability and RUL
 ```
 
-v3.5～v3.9 均属于诊断与辅助决策层。自动停机、自动修改调度、自动释放路权或自动下发维修动作必须进入独立安全项目。
+v3.8 是 ML Evidence 入口扩展，可独立向 Fusion 提供 Evidence，不位于 v3.7 之后的控制链路。
 
-## 4. v3.5：健康事件治理与 MES 联动
+## 4. v3.5～v3.7 摘要
 
-已交付事件创建/恢复、同一资产单活动事件、SQL Journal 双重幂等、MES HTTP Outbox、指数退避、DeadLetter、人工重试和 Host 重启恢复。SQL、MES 和网络故障不阻塞 PLC、任务和调度。
+- v3.5：健康事件创建/恢复、SQL Journal、MES Outbox、指数退避、DeadLetter 和重启恢复；
+- v3.6：审批图、GraphHash、有界关联、传播路径、不可变快照、复核 Journal；
+- v3.7：审批 RuleSet、RuleSetHash、维修建议、反馈 Journal、MES 工单字段、指标、候选训练标签。
 
-边界：不停止设备、不取消任务、不修改车辆、路径或路权、不替代 AlarmCenter、不把 MES 响应当作 PLC 联锁。
+这些阶段均为诊断与人工辅助决策，不写 PLC、不停机、不取消任务、不修改路线、路权、车辆选择或派单。
 
-## 5. v3.6：根因关联与异常传播分析
+## 5. v3.8：可插拔模型与本地 ONNX 运行时
 
-已交付版本化审批图、GraphHash、图校验、有界时间窗口、上游搜索、最短传播路径、可解释排序、确定性 AnalysisId、SQL 不可变分析快照、人工复核 Journal 和 Host 重启恢复。
+### 5.1 已实现能力
+
+- `PlcMlModelManifest` 与确定性 ManifestHash；
+- Profile→FeatureSchema 精确映射；
+- `IPlcMlModelAdapter` / `IPlcMlModelRuntime` / Adapter Registry；
+- 本地 External Model Store；
+- Isolation Forest Adapter；
+- Microsoft ONNX Runtime CPU Adapter；
+- float32 输入输出、张量 Shape、路径 containment、256 MB、SHA-256 校验；
+- InferenceSession 缓存和显式释放；
+- `PluggablePlcMlAnomalyEngine` Decorator；
+- DI 物理排除外部 Profile，避免双推理；
+- 外部 Profile 禁止在线训练和 AutoTrain；
+- Shadow、Canary、Active、连续异常和恢复；
+- Candidate SQL、Detected/Recovered Event；
+- 活动异常期间禁止切版；
+- 本地版本激活和 Host 重启恢复；
+- 坏 Hash 时 Host 健康、模型拒载、失败可见；
+- 只读 Adapter 状态 API；
+- 通用和 Production 双重默认关闭。
+
+### 5.2 首轮完整矩阵
 
 ```text
-Merge SHA: 900353ef8f17b3ab38cb4e711529c3fcc3629892
-Specialty: WCS Asset Health Root Cause #9
-Artifact: wcs-asset-health-root-cause-9
-Digest: sha256:44688aa44d8710b24c1372b9dcf0dccc53f9e7165e94353d7ed034f8860194eb
+Exact Head: 1a3cbdf2ff29e589f02f6581dfc9ff00ab9af9e0
+Result: 20/20 success
 ```
 
-边界：Confidence 不是故障概率；无图映射不猜测；Supplemented 不修改活动图；图修改必须新版本审批；不自动停机、取消任务或修改调度。
-
-## 6. v3.7：维修决策支持与反馈闭环
-
-### 6.1 已实现能力
-
-- 已审批维修 RuleSet，包含 Version、Source、ApprovedBy、ApprovedAtUtc；
-- SHA-256 RuleSetHash，同版本不同 Hash 拒绝；
-- 根因到检查项、部件、工具、备件和安全注意事项的规则映射；
-- Confirmed 或 Supplemented 后才允许生成建议；
-- Confirmed 受 `MinimumRootCauseConfidence` 限制；
-- 精确 RootCauseNodeId 规则优先于 RootCauseKind 规则；
-- 无匹配规则时不生成伪建议；
-- 确定性 RecommendationId 和 SQL 幂等；
-- Proposed、Accepted、Rejected、Completed、Cancelled 生命周期；
-- Accepted、Rejected、FalsePositive、Repaired、NoFaultFound、Cancelled 反馈；
-- MES 工单号、处理人和完成时间审计字段；
-- 维修前后健康分；
-- 接受率、确认故障率、误报率和平均关闭时长；
-- Repaired、FalsePositive、NoFaultFound 形成候选训练标签；
-- 训练标签 PendingApproval、Approved、Rejected；
-- Host 重启恢复建议、反馈和标签。
-
-### 6.2 SQL 对象
+专项证据：
 
 ```text
-Wcs_AssetHealthMaintenanceRuleSetVersion
-Wcs_AssetHealthMaintenanceRecommendation
-Wcs_AssetHealthMaintenanceFeedbackJournal
-Wcs_AssetHealthMaintenanceTrainingLabel
+Compile #28 / Run 30358668837
+Artifact: wcs-plc-ml-model-adapter-compile-28
+Digest: sha256:786b53a405e89c261ee2b8daad6082147f956dc84c336862af362f6e43072d7c
+
+Real ONNX E2E #21 / Run 30358668940
+Artifact: wcs-plc-ml-model-adapter-e2e-21
+Digest: sha256:191e97b5e299e082ba062d007b776b93073c6795c94fc1e48f0442172d12ce31
+
+Host E2E #11 / Run 30358668818
+Artifact: wcs-plc-ml-model-adapter-host-11
+Digest: sha256:28e948d8aba200d8fc09cf3ed141f0d825ba76cdc8f9a81a8bd0be21953402f2
 ```
 
-反馈只更新建议生命周期摘要并追加 Journal，不覆盖原始 RecommendationJson、v3.5 事件或 v3.6 分析。
+Host 专项已验证正常不 Raise、异常 Raise=2、恢复 Recover=2、SQL 2/2/1、活动异常切版 409、恢复后 v2、重启恢复、坏 Hash 隔离和修复后恢复。
 
-### 6.3 专项与首轮完整矩阵
+### 5.3 完成门槛
 
-```text
-Workflow: WCS Asset Health Maintenance #9
-Run ID: 30345256689
-Source SHA: 2ab1f05a2c8fccb3b9e273c48ab6b51d08e3c542
-Artifact: wcs-asset-health-maintenance-9
-Digest: sha256:26e1269d6057a0df3ca2a75be1191ccc771293bc09f53718b8a8cf459339a39b
-Conclusion: success
-```
+- [x] Core Manifest / FeatureSchema；
+- [x] Adapter Compile、real ONNX E2E、Host E2E；
+- [x] 旧 ML、Governance、Context、Version、Windows、Load、Soak、Health、RootCause、Maintenance 无回归；
+- [x] 首轮 exact head 20/20；
+- [x] 文档 00、21、39、49～51；
+- [ ] 最终证据提交形成的新 exact head 20/20；
+- [ ] PR #31 Ready 并 Squash 合入 develop。
 
-专项断言：RuleSet=1、Recommendation=1、Feedback=2、TrainingLabel=1；重复建议和反馈幂等；Accepted→Repaired；MES-WO-1001；PostHealthScore=92；`fault-confirmed` 标签人工 Approved；Host 重启恢复。
+### 5.4 安全边界
 
-首轮完整矩阵：
-
-```text
-Exact Head: 2ab1f05a2c8fccb3b9e273c48ab6b51d08e3c542
-Result: 19/19 success
-```
-
-覆盖 Maintenance Compile/E2E、Root Cause、Governance Compile/E2E、Health Scoring/SQL、Windows CI、End-to-End Load、Telemetry、PLC Anomaly Load/Soak、ML/E2E/Governance/Context/Version、Transport Cycle 和 One Hour Soak。
-
-本证据文档提交形成的新 Head 必须再次通过同等矩阵，旧 Head 成功不得替代最终复验。
-
-### 6.4 完成门槛
-
-- Core 规则和安全边界测试通过；
-- SQL 四表、索引和精确计数通过；
-- 建议/反馈/标签幂等通过；
-- MES 工单字段和指标通过；
-- Host 重启恢复通过；
-- Production 默认关闭、规则集为空；
-- 最新源码与文档 Head 完整回归和一小时 Soak 全绿；
-- 文档 21、39、46～48 完整；
-- PR #30 Ready 并合入 `develop`。
-
-### 6.5 明确边界
-
-- 建议是检查建议，不是控制命令；
-- MES 工单号只是审计字段；
-- 无规则不生成建议；
-- 训练标签 Approved 不自动训练、激活或替换模型；
+- 仓库不保存真实模型、URL、密钥和许可证；
+- 不自动下载、训练、审批或激活外部模型；
+- 模型输出是诊断分数，不是实际故障概率或安全联锁；
+- Adapter 失败不阻塞 Host 和控制链路；
+- 无有效模型时不产生预测；
 - 不写 PLC、不停机、不取消任务、不修改路线、路权、车辆选择或派单；
-- 真实维修 SOP、权限、MES 契约和正式投产属于项目级验收。
+- 真实模型、数据、许可证、准确率和正式投产属于项目级验收。
 
-## 7. v3.8：可插拔模型与 ONNX 运行时
+## 6. v3.9：故障概率与剩余寿命预测
 
-保留纯 .NET Isolation Forest，同时建立统一模型适配边界，使本地 ONNX 模型复用 Profile、治理、Shadow、Canary、回滚和 Evidence Fusion。仅在存在经过现场验收的本地模型、稳定特征和明确许可证时实施。
+仅在具备长期退化历史、明确失效时间、部件更换和维修记录、工况上下文、可信标签和足够真实失效样本后实施。必须完成时间切分、数据泄漏检查、校准和覆盖率评估；数据不足时保持关闭，不输出虚假 RUL。
 
-## 8. v3.9：故障概率与剩余寿命预测
-
-在具备长期退化数据、真实故障和维修记录后，输出部件未来故障概率、剩余寿命区间和建议维护窗口。数据不足时保持关闭，不输出虚假 RUL。
-
-## 9. 执行顺序
+## 7. 执行顺序
 
 ```text
 v3.5 已完成并合入 develop
   ↓
 v3.6 已完成并合入 develop
   ↓
-v3.7 首轮矩阵已完成，等待最终证据 Head 复验与合并
+v3.7 已完成并合入 develop
   ↓
-v3.8 仅在成熟本地模型存在时实施
+v3.8 首轮 20/20 已完成，等待最终证据 Head 复验与合并
   ↓
 v3.9 仅在真实失效和维修数据满足条件时实施
 ```
 
-## 10. 统一安全原则
+## 8. 统一安全原则
 
 1. 默认关闭；
-2. 输入、容量、时间窗口、队列、查询和保留期有界；
+2. 输入、容量、窗口、队列、查询、模型大小和保留期有界；
 3. 结果可解释、可版本化、可审计、可回退；
 4. SQL、MES 或模型故障不阻塞控制链路；
 5. 人工操作保存身份、原因和时间；
-6. 不在仓库保存现场密钥、真实点位、维修规则和未脱敏数据；
+6. 仓库不保存现场密钥、真实点位、维修规则、真实模型和未脱敏数据；
 7. 不直接写 PLC、不自动停机、不修改调度；
 8. 自动控制联动必须另立安全项目、风险分析和现场验收。
