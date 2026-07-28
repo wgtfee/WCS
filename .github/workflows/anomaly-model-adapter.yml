@@ -82,7 +82,7 @@ jobs:
             \( -iname 'Microsoft.ML.OnnxRuntime.dll' -o -iname 'libonnxruntime.so*' \) \
             | sort | tee artifacts/onnx-e2e/runtime-files.log
           grep -Eq 'Microsoft\.ML\.OnnxRuntime\.dll$' artifacts/onnx-e2e/runtime-files.log
-          grep -Eq 'libonnxruntime\.so([.][0-9.]+)?$' artifacts/onnx-e2e/runtime-files.log
+          grep -Eq 'runtimes/linux-x64/native/libonnxruntime\.so([.][0-9.]+)?$' artifacts/onnx-e2e/runtime-files.log
 
       - name: Run real ONNX inference and restart recovery
         shell: bash
@@ -117,7 +117,7 @@ jobs:
         shell: bash
         run: |
           ! grep -REqi 'https?://' artifacts/onnx-e2e/model-store artifacts/onnx-e2e/evidence.json
-          native="$(grep -E 'libonnxruntime\.so([.][0-9.]+)?$' artifacts/onnx-e2e/runtime-files.log | head -n1)"
+          native="$(grep -E 'runtimes/linux-x64/native/libonnxruntime\.so([.][0-9.]+)?$' artifacts/onnx-e2e/runtime-files.log | head -n1)"
           test -n "$native"
           file "$native" | tee artifacts/onnx-e2e/native-file-type.log
           ldd "$native" | tee artifacts/onnx-e2e/native-ldd.log
