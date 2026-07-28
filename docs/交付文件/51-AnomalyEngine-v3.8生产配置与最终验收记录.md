@@ -7,6 +7,7 @@
 | 版本 | v3.8 |
 | 能力 | 可插拔模型与本地 ONNX Runtime |
 | 默认状态 | 关闭 |
+| 首轮仓库验收 | `1a3cbdf2ff29e589f02f6581dfc9ff00ab9af9e0`，20/20 success |
 | 现场投产 | 必须独立签署，不由仓库 CI 自动代表 |
 
 ## 2. 仓库安全默认
@@ -31,14 +32,7 @@
 }
 ```
 
-仓库不包含：
-
-- 真实 ONNX 模型；
-- 现场 Manifest；
-- 下载 URL；
-- 密钥或许可证文件；
-- 真实 PLC 点位和资产编号；
-- 自动激活配置。
+仓库不包含真实 ONNX、现场 Manifest、下载 URL、密钥、许可证文件、真实 PLC 点位、资产编号或自动激活配置。
 
 ## 3. 生产启用顺序
 
@@ -59,128 +53,30 @@
 → Active
 ```
 
-不得直接从关闭状态跳到 Active。
+不得从关闭状态直接跳到 Active。
 
-## 4. Profile 配置约束
+## 4. 生产约束
 
-外部 Profile：
-
-- 必须在 `MachineLearning.Profiles` 中唯一；
-- `Enabled=true`；
-- `CollectTrainingData=false`；
-- `AutoTrain=false`；
-- Signals 和顺序与离线训练一致；
-- `DeploymentMode` 初始为 Shadow；
-- 在 `PluggableRuntime.Profiles` 中声明相同 ProfileId；
-- AdapterKind 与 Manifest 相同；
-- `Required=true` 时缺少活动模型必须报警并保持无推理。
-
-示例结构仅说明字段，不代表生产值：
-
-```json
-{
-  "AnomalyDetection": {
-    "MachineLearning": {
-      "Enabled": true,
-      "PluggableRuntime": {
-        "Enabled": true,
-        "MaximumTrackedWindows": 5000,
-        "InactiveStateRetentionSeconds": 300,
-        "Profiles": [
-          {
-            "ProfileId": "<approved-profile>",
-            "AdapterKind": "Onnx",
-            "Required": true
-          }
-        ]
-      },
-      "Profiles": [
-        {
-          "ProfileId": "<approved-profile>",
-          "Enabled": true,
-          "CollectTrainingData": false,
-          "AutoTrain": false,
-          "DeploymentMode": "Shadow",
-          "Signals": []
-        }
-      ]
-    }
-  }
-}
-```
-
-## 5. Manifest 签署项
-
-每个版本必须记录：
-
-- ProfileId；
-- Version；
-- AdapterKind / AdapterId；
-- ArtifactFile；
-- ArtifactSha256；
-- CreatedUtc；
-- Source；
-- ApprovedBy；
-- ApprovedAtUtc；
-- FeatureNames；
-- Means / StandardDeviations；
-- InputName / OutputName / InputShape；
-- ScoreTransform；
-- DecisionThreshold；
-- Calibration 指标；
-- 训练数据版本和离线测试报告外部编号；
-- 模型许可证和第三方组件清单外部编号。
-
-同一 Version 不得对应不同模型内容或特征契约。
-
-## 6. 目录与权限
-
-- 模型目录不得位于临时目录；
-- WCS 运行账号只需读取模型、读取版本 Manifest、原子更新 `active.json`；
-- 普通操作员不得修改模型文件；
+- 外部 Profile 必须唯一、`CollectTrainingData=false`、`AutoTrain=false`；
+- Signals 顺序必须与离线训练一致；
+- 初始 DeploymentMode 为 Shadow；
+- Manifest 必须记录 ProfileId、Version、Adapter、ArtifactSha256、Source、审批、FeatureNames、归一化、张量、阈值、校准和外部训练/许可证编号；
+- 同一 Version 不得对应不同 ArtifactSha256 或 FeatureSchema；
+- 模型只能从受控本地目录加载；
 - 发布账号与运行账号分离；
-- 目录纳入备份、校验和防病毒排除策略；
-- 禁止通过共享匿名目录或公网 URL 加载模型；
-- 现场变更必须保存发布单和回退版本。
+- 活动异常期间禁止切版；
+- 无有效模型时不推理；
+- Adapter、SQL 或模型失败不阻塞 Host 和控制链路。
 
-## 7. 运行监控
+## 5. 监控与回退
 
-接口：
+只读状态接口：
 
 ```text
 GET /api/anomaly/ml/adapters/status
 ```
 
-至少监控：
-
-- ActiveAdapterId；
-- ActiveModelVersion；
-- ManifestHash；
-- ArtifactSha256；
-- Predictions；
-- AnomalyObservations；
-- Raised / Recovered；
-- ShadowRaised / ActiveRaised；
-- Failures；
-- ActiveAnomalies；
-- TrackedInferenceStates；
-- CompletedWindows / DroppedIncompleteWindows；
-- LastError。
-
-必须与 SQL Candidate、Fusion Evidence、健康事件和维护反馈联查。
-
-## 8. 切版与回滚
-
-切版前：
-
-- 新版本文件和 Manifest 已发布；
-- Hash 和 FeatureSchema 已验证；
-- 无活动异常；
-- Candidate 已审查；
-- 回退版本存在；
-- 操作人身份和变更单有效。
-
-活动异常存在时 API 必须拒绝切版。切版成功后更新 `active.json`，Host 重启仍应恢复相同版本。
+至少监控 ActiveAdapterId、ActiveModelVersion、ManifestHash、ArtifactSha256、Predictions、Raised、Recovered、Failures、ActiveAnomalies、TrackedInferenceStates、CompletedWindows、DroppedIncompleteWindows 和 LastError。
 
 紧急关闭：
 
@@ -188,83 +84,61 @@ GET /api/anomaly/ml/adapters/status
 AnomalyDetection__MachineLearning__PluggableRuntime__Enabled=false
 ```
 
-关闭只停止外部模型推理，不删除模型、Candidate 或审计数据，不影响 PLC、任务、路权和调度。
+关闭外部推理不会删除模型、Candidate 或审计记录，也不影响 PLC、任务、路权和调度。
 
-## 9. 故障处理
+## 6. 首轮专项证据
 
-### 9.1 Hash mismatch
+```text
+Compile #28 / Run 30358668837
+Artifact: wcs-plc-ml-model-adapter-compile-28
+Digest: sha256:786b53a405e89c261ee2b8daad6082147f956dc84c336862af362f6e43072d7c
 
-表现：Host 健康，外部状态无活动版本，Failures 增加，LastError 包含 Hash 错误。
+Real ONNX E2E #21 / Run 30358668940
+Artifact: wcs-plc-ml-model-adapter-e2e-21
+Digest: sha256:191e97b5e299e082ba062d007b776b93073c6795c94fc1e48f0442172d12ce31
 
-处理：隔离文件 → 对照发布 Hash → 恢复正确模型和 Manifest → 重启或重新激活 → 核验状态。
+Host E2E #11 / Run 30358668818
+Artifact: wcs-plc-ml-model-adapter-host-11
+Digest: sha256:28e948d8aba200d8fc09cf3ed141f0d825ba76cdc8f9a81a8bd0be21953402f2
+```
 
-### 9.2 FeatureSchema mismatch
+Host 专项已通过 v1/v2、本地加载、正常/异常、Raise=2、Recover=2、SQL 2/2/1、活动异常切版 409、恢复后 v2、重启恢复、坏 Hash 隔离和修复后恢复。
 
-表现：模型拒载，不产生预测。
+## 7. 仓库级验收
 
-处理：禁止临时调整特征顺序绕过；重新导出匹配 Profile 的模型，或升级 Profile 与模型版本并重新审批。
-
-### 9.3 Native runtime 缺失
-
-表现：ONNX Session 创建失败。
-
-处理：核对发布目录的 `Microsoft.ML.OnnxRuntime.dll` 和平台对应 `libonnxruntime`，检查依赖和架构，不允许切换远程推理绕过。
-
-### 9.4 推理失败或资源异常
-
-表现：Failures 增加，旧控制链路继续运行。
-
-处理：切回 Shadow 或关闭 PluggableRuntime，保留证据，检查模型维度、输出、内存和并发；不得扩大线程或内存上限掩盖缺陷。
-
-## 10. 仓库级验收
-
-最终应满足：
-
-- [ ] Core Manifest / FeatureSchema 测试通过；
-- [ ] Adapter Compile 干净构建通过；
-- [ ] 真实 ONNX native E2E 通过；
-- [ ] Host RawSignal→ONNX→SQL→EventBus 生命周期通过；
-- [ ] 正常不 Raise；
-- [ ] 异常 Raise 精确；
-- [ ] 恢复精确；
-- [ ] 活动异常期间切版阻断；
-- [ ] 恢复后切版成功；
-- [ ] 重启恢复活动版本；
-- [ ] 坏 Hash Host 健康且模型拒载；
-- [ ] 20,000 次推理吞吐和 256 MB RSS 门槛通过；
-- [ ] 旧 Isolation Forest、Governance、Context、Version、Health 和 Maintenance 无回归；
-- [ ] One Hour Soak 通过；
-- [ ] Production 默认关闭；
-- [ ] 最终证据提交后 exact-head 再次全绿；
+- [x] Core Manifest / FeatureSchema 测试；
+- [x] Adapter Compile 干净构建；
+- [x] 真实 ONNX native E2E；
+- [x] Host RawSignal→ONNX→SQL→EventBus 生命周期；
+- [x] 正常不 Raise；
+- [x] 异常与恢复精确；
+- [x] 活动异常切版阻断；
+- [x] 恢复后切版与重启恢复；
+- [x] 坏 Hash Host 健康且模型拒载；
+- [x] 20,000 次推理、吞吐和 256 MB RSS 门槛；
+- [x] 旧 Isolation Forest、Governance、Context、Version、Health 和 Maintenance 无回归；
+- [x] One Hour Soak；
+- [x] Production 默认关闭；
+- [x] 首轮 exact head 20/20；
+- [ ] 最终证据 Head 再次 20/20；
 - [ ] PR Squash 合入 develop。
 
-## 11. 现场验收
+## 8. 现场验收
 
-仓库级验收不代表现场验收。现场还必须签署：
+仓库级验收不代表现场验收。现场仍须签署训练数据来源和授权、真实故障样本、准确率/召回率/误报率/校准、工况分层、数据泄漏检查、CPU/内存/磁盘容量、模型许可证与安全扫描、权限、展示契约、Shadow/Canary 结果、回退演练及不接入自动控制的安全确认。
 
-- 模型训练数据来源和授权；
-- 真实缺陷/故障样本；
-- 离线准确率、召回率、误报率和校准；
-- 工况分层和数据泄漏检查；
-- 现场 CPU、内存和磁盘容量；
-- 模型许可证与安全扫描；
-- 操作权限和审批；
-- MES、维修和告警展示契约；
-- Shadow / Canary 观察结果；
-- 回退演练；
-- 不接入自动控制的安全确认。
-
-## 12. 最终记录
+## 9. 当前记录
 
 | 项目 | 结果 |
 |---|---|
-| 功能代码 | 已实现，等待最终矩阵 |
+| 功能代码 | 已实现 |
 | 默认关闭 | 已实现 |
-| Adapter Compile | 开发期已成功 |
-| Real ONNX E2E | 开发期已成功 |
-| Host 生命周期 E2E | 主要链路已成功，SQL 测试脚本已修正，等待最终成功运行 |
-| 完整回归 | 等待 latest exact head |
+| Adapter Compile | #28 成功 |
+| Real ONNX E2E | #21 成功 |
+| Host 生命周期 E2E | #11 成功 |
+| 首轮完整回归 | 20/20 成功 |
+| 最终证据复验 | 待新 Head 完成 |
 | 合并 | 尚未执行 |
 | 现场投产 | 未验收 |
 
-最终运行号、Artifact、Digest、Head 和 merge SHA 在最终收口时回填。
+本文件提交产生的新 exact head 必须再次通过同等完整矩阵，旧 Head 的成功不得替代。
