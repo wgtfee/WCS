@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wcs.Core.AnomalyDetection.MachineLearning;
 using Wcs.Core.AnomalyDetection.MachineLearning.Adapters;
+using Wcs.Core.EventBus.Publisher;
 using Wcs.Infrastructure.AnomalyDetection.Fusion;
 using Wcs.Infrastructure.AnomalyDetection.MachineLearning;
 using Wcs.Infrastructure.AnomalyDetection.MachineLearning.Adapters;
@@ -28,6 +29,9 @@ public static class PlcMlDependencyInjection
         var options = configuration
             .GetSection("AnomalyDetection:MachineLearning")
             .Get<PlcMlAnomalyOptions>() ?? new PlcMlAnomalyOptions();
+        var pluggableOptions = configuration
+            .GetSection("AnomalyDetection:MachineLearning:PluggableRuntime")
+            .Get<PlcMlPluggableRuntimeOptions>() ?? new PlcMlPluggableRuntimeOptions();
 
         options.ModelDirectory = string.IsNullOrWhiteSpace(options.ModelDirectory)
             ? "data/anomaly-models"
@@ -39,6 +43,14 @@ public static class PlcMlDependencyInjection
         options.MaximumTrackedWindows = Math.Clamp(options.MaximumTrackedWindows, 100, 1_000_000);
         options.InactiveInferenceStateRetentionSeconds = Math.Clamp(
             options.InactiveInferenceStateRetentionSeconds,
+            1,
+            86_400);
+        pluggableOptions.MaximumTrackedWindows = Math.Clamp(
+            pluggableOptions.MaximumTrackedWindows,
+            1,
+            1_000_000);
+        pluggableOptions.InactiveStateRetentionSeconds = Math.Clamp(
+            pluggableOptions.InactiveStateRetentionSeconds,
             1,
             86_400);
 
@@ -116,7 +128,21 @@ public static class PlcMlDependencyInjection
                 throw new InvalidOperationException($"PLC ML Profile {profile.ProfileId} 至少需要一个信号定义。");
         }
 
+        var externalProfileIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var mapping in pluggableOptions.Profiles)
+        {
+            mapping.ProfileId = mapping.ProfileId?.Trim() ?? string.Empty;
+            if (pluggableOptions.Enabled && mapping.ProfileId.Length == 0)
+                throw new InvalidOperationException("PluggableRuntime ProfileId 不能为空。");
+            if (!externalProfileIds.Add(mapping.ProfileId))
+                throw new InvalidOperationException($"PluggableRuntime ProfileId 重复：{mapping.ProfileId}。");
+            if (pluggableOptions.Enabled && !profileIds.Contains(mapping.ProfileId))
+                throw new InvalidOperationException($"PluggableRuntime Profile 不存在：{mapping.ProfileId}。");
+        }
+        if (!pluggableOptions.Enabled) externalProfileIds.Clear();
+
         services.AddSingleton(options);
+        services.AddSingleton(pluggableOptions);
         services.AddSingleton<PlcFeatureWindowEngine>();
         services.AddSingleton<IPlcMlModelStore, FilePlcMlModelStore>();
         services.AddSingleton<IPlcMlExternalModelStore, FilePlcMlExternalModelStore>();
@@ -128,8 +154,22 @@ public static class PlcMlDependencyInjection
         services.AddSingleton<PlcMlOperatingContextCenter>();
         services.AddSingleton<PlcMlPeerComparisonEngine>();
         services.AddSingleton<IPlcMlContextPeerRuntime, PlcMlContextPeerRuntime>();
-        services.AddSingleton<PlcMlAnomalyEngine>();
-        services.AddSingleton<IPlcMlAnomalyEngine>(sp => sp.GetRequiredService<PlcMlAnomalyEngine>());
+        services.AddSingleton(sp =>
+        {
+            var legacyOptions = CreateLegacyOptions(options, externalProfileIds);
+            return new PlcMlAnomalyEngine(
+                legacyOptions,
+                new PlcFeatureWindowEngine(legacyOptions),
+                sp.GetRequiredService<IPlcMlModelStore>(),
+                sp.GetRequiredService<IPlcMlTrainingStore>(),
+                sp.GetRequiredService<IPlcMlGovernanceStore>(),
+                sp.GetRequiredService<IEventBus>());
+        });
+        services.AddSingleton<PluggablePlcMlAnomalyEngine>();
+        services.AddSingleton<IPlcMlAnomalyEngine>(sp =>
+            sp.GetRequiredService<PluggablePlcMlAnomalyEngine>());
+        services.AddSingleton<IPlcMlExternalRuntimeStatusProvider>(sp =>
+            sp.GetRequiredService<PluggablePlcMlAnomalyEngine>());
         services.AddSingleton<IPlcMlGovernanceService, PlcMlGovernanceService>();
         if (options.Enabled || options.ManagementApiEnabled)
             services.AddHostedService(_ => new PlcMlGovernanceSchemaService(connectionString));
@@ -138,4 +178,20 @@ public static class PlcMlDependencyInjection
         services.AddAssetHealthMaintenance(configuration, connectionString);
         return services;
     }
+
+    private static PlcMlAnomalyOptions CreateLegacyOptions(
+        PlcMlAnomalyOptions source,
+        IReadOnlySet<string> externalProfileIds) => new()
+    {
+        Enabled = source.Enabled,
+        ManagementApiEnabled = source.ManagementApiEnabled,
+        ModelDirectory = source.ModelDirectory,
+        TrainingDirectory = source.TrainingDirectory,
+        MaintenanceIntervalMs = source.MaintenanceIntervalMs,
+        MaximumTrackedWindows = source.MaximumTrackedWindows,
+        InactiveInferenceStateRetentionSeconds = source.InactiveInferenceStateRetentionSeconds,
+        Profiles = source.Profiles
+            .Where(profile => !externalProfileIds.Contains(profile.ProfileId))
+            .ToList()
+    };
 }
