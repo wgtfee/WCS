@@ -210,13 +210,13 @@ public sealed class OnnxAssetFailureForecastRuntime : IAssetFailureForecastRunti
     {
         if (!_session.InputMetadata.TryGetValue(Manifest.InputName, out var input))
             throw new InvalidOperationException($"Forecast ONNX input was not found: {Manifest.InputName}.");
-        if (input.ElementType != typeof(float) || input.Dimensions.Count != 2)
+        if (input.ElementType != typeof(float) || input.Dimensions.Length != 2)
             throw new InvalidOperationException("Forecast ONNX input must be a rank-2 float32 tensor.");
         if (input.Dimensions[0] is not (-1 or 1) || input.Dimensions[1] != Manifest.FeatureNames.Length)
             throw new InvalidOperationException("Forecast ONNX input dimensions do not match the manifest.");
         if (!_session.OutputMetadata.TryGetValue(Manifest.OutputName, out var output))
             throw new InvalidOperationException($"Forecast ONNX output was not found: {Manifest.OutputName}.");
-        if (output.ElementType != typeof(float) || output.Dimensions.Count != 2)
+        if (output.ElementType != typeof(float) || output.Dimensions.Length != 2)
             throw new InvalidOperationException("Forecast ONNX output must be a rank-2 float32 tensor.");
         if (output.Dimensions[0] is not (-1 or 1) || output.Dimensions[1] != 6)
             throw new InvalidOperationException("Forecast ONNX output dimensions must be [-1|1, 6].");
