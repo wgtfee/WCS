@@ -13,7 +13,7 @@
 | v3.6 | 根因关联、传播路径、人工复核 | 已完成，`develop@900353ef8f17b3ab38cb4e711529c3fcc3629892` |
 | v3.7 | 维修建议、反馈、工单、指标和标签 | 已完成，`develop@f26cdbeae77c4e246477ea0c6ba60c3511ef86f4` |
 | v3.8 | 可插拔模型、本地 ONNX Runtime、Profile 分流和失败隔离 | 已完成，`develop@5e875afaf3ebee7c386dec8043b902f704dd7930` |
-| v3.9 | 故障概率、RUL 区间、Outcome 回测和 SQL 审计 | 功能、专项、文档和首轮 25/25 已完成，等待最终证据 Head 二次复验与合并 |
+| v3.9 | 故障概率、RUL 区间、Outcome 回测和 SQL 审计 | 功能、专项、文档和首轮 25/25 已完成，等待当前最终证据 Head 二次复验与合并 |
 
 ## 3. 总体数据流
 
@@ -152,7 +152,7 @@ Host+SQL #9 验证短历史无预测、48 点/47 小时门槛、v1/v2 精确输�
 - [x] 文档 52～54；
 - [x] 首轮 latest exact head Forecast Compile/Runtime/Host 全绿；
 - [x] 首轮 latest exact head 25/25 全绿；
-- [ ] 最终证据 Head 二次 25/25 全绿；
+- [ ] 当前最终证据 Head 二次 25/25 全绿；
 - [ ] PR #32 Ready 并 Squash 合入 `develop`。
 
 ### 6.8 明确边界
@@ -175,7 +175,7 @@ v3.7 已完成并合入 develop
   ↓
 v3.8 已完成并合入 develop
   ↓
-v3.9 首轮 25/25 已完成，等待最终证据 Head 二次复验与合并
+v3.9 首轮 25/25 已完成，等待当前最终证据 Head 二次复验与合并
 ```
 
 ## 8. 统一安全原则
