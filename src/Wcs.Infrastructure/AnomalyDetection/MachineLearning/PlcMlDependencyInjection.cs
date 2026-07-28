@@ -3,8 +3,10 @@ namespace Wcs.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wcs.Core.AnomalyDetection.MachineLearning;
+using Wcs.Core.AnomalyDetection.MachineLearning.Adapters;
 using Wcs.Infrastructure.AnomalyDetection.Fusion;
 using Wcs.Infrastructure.AnomalyDetection.MachineLearning;
+using Wcs.Infrastructure.AnomalyDetection.MachineLearning.Adapters;
 
 public static class PlcMlDependencyInjection
 {
@@ -117,6 +119,10 @@ public static class PlcMlDependencyInjection
         services.AddSingleton(options);
         services.AddSingleton<PlcFeatureWindowEngine>();
         services.AddSingleton<IPlcMlModelStore, FilePlcMlModelStore>();
+        services.AddSingleton<IPlcMlExternalModelStore, FilePlcMlExternalModelStore>();
+        services.AddSingleton<IPlcMlModelAdapter, IsolationForestPlcMlModelAdapter>();
+        services.AddSingleton<IPlcMlModelAdapter, OnnxPlcMlModelAdapter>();
+        services.AddSingleton<PlcMlModelAdapterRegistry>();
         services.AddSingleton<IPlcMlTrainingStore, FilePlcMlTrainingStore>();
         services.AddSingleton<IPlcMlGovernanceStore>(_ => new SqlSugarPlcMlGovernanceStore(connectionString));
         services.AddSingleton<PlcMlOperatingContextCenter>();
