@@ -171,7 +171,7 @@ public sealed class AssetHealthGovernanceServiceTests
             AssetHealthGrade.Degraded => FusedHealthStatus.Warning,
             _ => FusedHealthStatus.Alarm
         },
-        IndependentSourceCount = grade >= AssetHealthGrade.Degraded ? 2 : 0,
+        IndependentSourceCount = (int)grade >= (int)AssetHealthGrade.Degraded ? 2 : 0,
         CalculatedAtUtc = DateTime.UnixEpoch,
         Factors = new[]
         {
