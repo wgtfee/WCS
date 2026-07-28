@@ -261,4 +261,4 @@ AssetFailureForecast__Enabled=false
 
 v3.9 的软件安全边界、模型治理、SQL 审计、回测接口和首轮 25/25 仓库矩阵已经完成。当前仍不得宣称真实故障概率或 RUL 达到生产准确率。
 
-本证据更新会产生新的 latest Head。只有该 Head 再次完成同等 25/25，PR #32 才可 Ready 并 Squash 合入 `develop`；Merge SHA 将在最终合并后补入或由合并记录作为最终凭证。
+当前最新证据 Head 由最后一笔文档提交确定。只有该 exact Head 再次完成同等 25/25，PR #32 才可 Ready 并 Squash 合入 `develop`；Merge SHA 将以 GitHub 合并记录作为最终凭证。
