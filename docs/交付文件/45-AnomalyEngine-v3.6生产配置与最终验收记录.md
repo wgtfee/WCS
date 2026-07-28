@@ -8,7 +8,8 @@
 | 主题 | 资产健康根因关联与异常传播 |
 | 分支 | `feature/anomaly-root-cause-propagation-v3-6` |
 | PR | #29 |
-| 状态 | Draft，等待最新文档提交完整矩阵全绿 |
+| 仓库级验收基线 | `4c559fdcd045a69597a6246bdfd626fcc681dfec` |
+| 状态 | 15 项矩阵已全绿，进入最终文档复验与合并流程 |
 | 现场状态 | 不代表真实根因图、权限、实车或正式投产已经验收 |
 
 ## 2. 生产安全默认
@@ -64,16 +65,14 @@
 - Host 重启恢复；
 - 状态、图、分析、事件最新分析和复核 API。
 
-## 5. 专项验收证据
-
-首次完整成功：
+## 5. 最终专项验收证据
 
 ```text
-Workflow: WCS Asset Health Root Cause #1
-Run ID: 30332417724
-Source SHA: 3f340d836a8827d39a79b3ecd8b690c4dfc38d84
-Artifact: wcs-asset-health-root-cause-1
-Digest: sha256:605e9dfc0a00a4dd097d901d035244709a8fe0aa9e478c1bf59d728028317b80
+Workflow: WCS Asset Health Root Cause #9
+Run ID: 30333201098
+Source SHA: 4c559fdcd045a69597a6246bdfd626fcc681dfec
+Artifact: wcs-asset-health-root-cause-9
+Digest: sha256:44688aa44d8710b24c1372b9dcf0dccc53f9e7165e94353d7ed034f8860194eb
 ```
 
 该运行验证：
@@ -87,31 +86,29 @@ Digest: sha256:605e9dfc0a00a4dd097d901d035244709a8fe0aa9e478c1bf59d728028317b80
 - Graph=1、Analysis=1、Review=2 精确计数；
 - Host 重启恢复。
 
-后续单次状态请求竞态已通过工作流就绪重试修复，且未放宽任何业务或 SQL 断言。
+重启后的接口就绪采用有界重试，但没有删除、跳过或放宽任何业务、SQL、传播和恢复断言。
 
 ## 6. 最终完整矩阵
 
-最新文档提交必须全部通过以下工作流：
+| 工作流 | 运行号 | 状态 |
+|---|---:|---|
+| WCS Asset Health Root Cause Compile | #19 | success |
+| WCS Asset Health Root Cause | #9 | success |
+| WCS Windows CI | #252 | success |
+| WCS End-to-End Load | #180 | success |
+| WCS PLC Telemetry Storage Load | #66 | success |
+| WCS PLC Anomaly Engine Load | #192 | success |
+| WCS PLC Anomaly Engine Soak | #175 | success |
+| WCS Anomaly Fusion Load | #77 | success |
+| WCS Anomaly Fusion Bridge E2E | #69 | success |
+| WCS Transport Cycle Analysis | #71 | success |
+| WCS Anomaly Health Scoring | #57 | success |
+| WCS Anomaly Health Scoring SQL | #33 | success |
+| WCS Asset Health Governance Compile | #21 | success |
+| WCS Asset Health Governance | #26 | success |
+| WCS One Hour Soak Load | #146 | success |
 
-| 工作流 | 最终状态/运行号 |
-|---|---|
-| WCS Asset Health Root Cause Compile | 待最终补录 |
-| WCS Asset Health Root Cause | 待最终补录 |
-| WCS Windows CI | 待最终补录 |
-| WCS End-to-End Load | 待最终补录 |
-| WCS PLC Telemetry Storage Load | 待最终补录 |
-| WCS PLC Anomaly Engine Load | 待最终补录 |
-| WCS PLC Anomaly Engine Soak | 待最终补录 |
-| WCS Anomaly Fusion Load | 待最终补录 |
-| WCS Anomaly Fusion Bridge E2E | 待最终补录 |
-| WCS Transport Cycle Analysis | 待最终补录 |
-| WCS Anomaly Health Scoring | 待最终补录 |
-| WCS Anomaly Health Scoring SQL | 待最终补录 |
-| WCS Asset Health Governance Compile | 待最终补录 |
-| WCS Asset Health Governance | 待最终补录 |
-| WCS One Hour Soak Load | 待最终补录 |
-
-最终矩阵以最新 Head SHA 为准；不得使用被后续代码或文档提交替代的旧运行作为最终合并依据。
+基线 `4c559fdcd045a69597a6246bdfd626fcc681dfec` 的 15 项工作流全部成功。
 
 ## 7. 安全边界验收
 
@@ -185,16 +182,19 @@ PR #29 只有同时满足以下条件才能标记 Ready 并 Squash 合入 `devel
 - PR 描述记录最终运行号、Artifact、Digest、安全边界和回退；
 - 不存在通过删除测试、跳过重启或放宽 SQL 数量门槛实现的假绿。
 
+本次最终证据文档提交会再次触发完整矩阵；只有该新 Head 再次全部成功后才能合并。
+
 ## 12. 当前结论
 
 ```text
 代码实现：完成
 专项 Core：通过
-首次专项 SQL E2E：通过
-工作流重启就绪增强：完成
+专项 SQL E2E：通过
+Host 重启恢复：通过
 生产默认与回退：完成
 文档：完成
-最新 Head 完整矩阵：执行中
-仓库级最终验收：待全绿
+首轮 15 项矩阵：通过
+最终证据文档复验：等待最新 Head 全绿
+仓库级最终验收：待最终复验后合并
 现场投产验收：未开始
 ```
