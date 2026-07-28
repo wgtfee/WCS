@@ -72,10 +72,9 @@ jobs:
       - name: Clean build ONNX E2E
         shell: bash
         run: |
+          rm -rf src/Wcs.OnnxAdapter.E2E/bin src/Wcs.OnnxAdapter.E2E/obj
           dotnet restore src/Wcs.OnnxAdapter.E2E/Wcs.OnnxAdapter.E2E.csproj \
             2>&1 | tee artifacts/onnx-e2e/restore.log
-          dotnet clean src/Wcs.OnnxAdapter.E2E/Wcs.OnnxAdapter.E2E.csproj \
-            --configuration Release --no-restore
           dotnet build src/Wcs.OnnxAdapter.E2E/Wcs.OnnxAdapter.E2E.csproj \
             --configuration Release --no-restore \
             2>&1 | tee artifacts/onnx-e2e/build.log
