@@ -260,7 +260,7 @@ public sealed class AssetHealthGovernanceService : IAssetHealthGovernanceService
             return ValueTask.FromResult<AssetHealthEventSnapshot?>(null);
 
         utcNow = NormalizeUtc(utcNow);
-        var normalizedUntil = untilUtc is null ? null : NormalizeUtc(untilUtc.Value);
+        DateTime? normalizedUntil = untilUtc is null ? null : NormalizeUtc(untilUtc.Value);
         if (normalizedUntil is not null && normalizedUntil <= utcNow)
             throw new ArgumentOutOfRangeException(nameof(untilUtc), "Suppression end must be in the future.");
 
