@@ -7,6 +7,7 @@ using Wcs.Core.PlcSubsystem.Examples;
 using Wcs.Core.Telemetry;
 using Wcs.Infrastructure.AnomalyDetection.HealthGovernance;
 using Wcs.Infrastructure.AnomalyDetection.HealthScoring;
+using Wcs.Infrastructure.AnomalyDetection.Maintenance;
 using Wcs.Infrastructure.AnomalyDetection.RootCause;
 
 public interface IDatabaseInitializer
@@ -58,6 +59,10 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(AssetHealthRootCauseGraphVersionEntity),
                 typeof(AssetHealthRootCauseAnalysisEntity),
                 typeof(AssetHealthRootCauseReviewEntity),
+                typeof(AssetHealthMaintenanceRuleSetVersionEntity),
+                typeof(AssetHealthMaintenanceRecommendationEntity),
+                typeof(AssetHealthMaintenanceFeedbackEntity),
+                typeof(AssetHealthMaintenanceTrainingLabelEntity),
                 typeof(TransportConfigurationEntity),
                 typeof(TransportJournalEntity),
                 typeof(TransportGovernedOperationEntity),
@@ -105,9 +110,27 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_RootCauseAnalysis_
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_RootCauseReview_Id' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseReviewJournal'))
     CREATE UNIQUE INDEX UX_Wcs_RootCauseReview_Id ON Wcs_AssetHealthRootCauseReviewJournal(ReviewId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_RootCauseReview_Analysis' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseReviewJournal'))
-    CREATE INDEX IX_Wcs_RootCauseReview_Analysis ON Wcs_AssetHealthRootCauseReviewJournal(AnalysisId, Sequence DESC);");
+    CREATE INDEX IX_Wcs_RootCauseReview_Analysis ON Wcs_AssetHealthRootCauseReviewJournal(AnalysisId, Sequence DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_MaintRuleSet_Version' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceRuleSetVersion'))
+    CREATE UNIQUE INDEX UX_Wcs_MaintRuleSet_Version ON Wcs_AssetHealthMaintenanceRuleSetVersion(Version);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_MaintRuleSet_Hash' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceRuleSetVersion'))
+    CREATE UNIQUE INDEX UX_Wcs_MaintRuleSet_Hash ON Wcs_AssetHealthMaintenanceRuleSetVersion(RuleSetHash);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_MaintRecommendation_Id' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceRecommendation'))
+    CREATE UNIQUE INDEX UX_Wcs_MaintRecommendation_Id ON Wcs_AssetHealthMaintenanceRecommendation(RecommendationId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_MaintRecommendation_Analysis' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceRecommendation'))
+    CREATE INDEX IX_Wcs_MaintRecommendation_Analysis ON Wcs_AssetHealthMaintenanceRecommendation(AnalysisId, Sequence DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_MaintRecommendation_Asset' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceRecommendation'))
+    CREATE INDEX IX_Wcs_MaintRecommendation_Asset ON Wcs_AssetHealthMaintenanceRecommendation(AssetId, Status, Sequence DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_MaintFeedback_Id' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceFeedbackJournal'))
+    CREATE UNIQUE INDEX UX_Wcs_MaintFeedback_Id ON Wcs_AssetHealthMaintenanceFeedbackJournal(FeedbackId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_MaintFeedback_Recommendation' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceFeedbackJournal'))
+    CREATE INDEX IX_Wcs_MaintFeedback_Recommendation ON Wcs_AssetHealthMaintenanceFeedbackJournal(RecommendationId, Sequence DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_MaintTrainingLabel_Id' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceTrainingLabel'))
+    CREATE UNIQUE INDEX UX_Wcs_MaintTrainingLabel_Id ON Wcs_AssetHealthMaintenanceTrainingLabel(CandidateId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_MaintTrainingLabel_Status' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceTrainingLabel'))
+    CREATE INDEX IX_Wcs_MaintTrainingLabel_Status ON Wcs_AssetHealthMaintenanceTrainingLabel(Status, Sequence DESC);");
 
-            _logger.LogInformation("数据库和所有表已就绪 (25 张)");
+            _logger.LogInformation("数据库和所有表已就绪 (29 张)");
             await Task.CompletedTask;
             return true;
         }
