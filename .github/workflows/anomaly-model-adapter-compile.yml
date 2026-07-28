@@ -31,14 +31,16 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Remove previous outputs
+        shell: bash
+        run: |
+          rm -rf src/Wcs.Core.Tests/bin src/Wcs.Core.Tests/obj
+          rm -rf src/Wcs.Host/bin src/Wcs.Host/obj
+          rm -rf src/Wcs.Infrastructure/bin src/Wcs.Infrastructure/obj
       - name: Restore
         run: |
           dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj 2>&1 | tee model-adapter-restore.log
           dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee -a model-adapter-restore.log
-      - name: Clean outputs
-        run: |
-          dotnet clean src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
-          dotnet clean src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
       - name: Build Core tests
         run: dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore 2>&1 | tee model-adapter-core-build.log
       - name: Run adapter contract tests
