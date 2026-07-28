@@ -13,28 +13,28 @@
 | v3.6 | 根因关联、传播路径、人工复核 | 已完成，`develop@900353ef8f17b3ab38cb4e711529c3fcc3629892` |
 | v3.7 | 维修建议、反馈、工单、指标和标签 | 已完成，`develop@f26cdbeae77c4e246477ea0c6ba60c3511ef86f4` |
 | v3.8 | 可插拔模型、本地 ONNX Runtime、Profile 分流和失败隔离 | 已完成，`develop@5e875afaf3ebee7c386dec8043b902f704dd7930` |
-| v3.9 | 故障概率、RUL 区间、Outcome 回测和 SQL 审计 | 功能、专项与文档已建立，正在完成 Host+SQL 和完整矩阵 |
+| v3.9 | 故障概率、RUL 区间、Outcome 回测和 SQL 审计 | 功能、专项、文档和首轮 25/25 已完成，等待最终证据 Head 二次复验与合并 |
 
 ## 3. 总体数据流
 
 ```text
 规则 / 统计 / Isolation Forest / ONNX / 同群 / 周期异常
-                          ↓
-                  v3.3 Evidence Fusion
-                          ↓
-               v3.4 Health Score + Trend
-                          ↓
-        v3.5 Governed Health Event + MES Outbox
-                          ↓
-        v3.6 Root Cause Graph + Review Journal
-                          ↓
-        v3.7 Maintenance Rules + Feedback Journal
+                           ↓
+                   v3.3 Evidence Fusion
+                           ↓
+                v3.4 Health Score + Trend
+                           ↓
+         v3.5 Governed Health Event + MES Outbox
+                           ↓
+         v3.6 Root Cause Graph + Review Journal
+                           ↓
+         v3.7 Maintenance Rules + Feedback Journal
 
 v3.4 retained Health History
-                          ↓
-        v3.9 Failure Probability + RUL Interval
-                          ↓
-          Forecast SQL + Outcome Journal + Metrics
+                           ↓
+         v3.9 Failure Probability + RUL Interval
+                           ↓
+           Forecast SQL + Outcome Journal + Metrics
 ```
 
 v3.8 是 ML Evidence 入口扩展；v3.9 是健康历史的预测分析分支。二者均不位于 PLC 或调度控制链路。
@@ -52,20 +52,7 @@ v3.8 是 ML Evidence 入口扩展；v3.9 是健康历史的预测分析分支。
 
 v3.8 已完成最终两轮 20/20 矩阵并合入 `develop@5e875afaf3ebee7c386dec8043b902f704dd7930`。
 
-主要能力：
-
-- `PlcMlModelManifest` 与确定性 ManifestHash；
-- Profile→FeatureSchema 精确映射；
-- `IPlcMlModelAdapter` / `IPlcMlModelRuntime` / Adapter Registry；
-- 本地 External Model Store；
-- Isolation Forest 与 Microsoft ONNX Runtime CPU Adapter；
-- float32、Shape、路径 containment、256 MB、SHA-256；
-- `PluggablePlcMlAnomalyEngine` Decorator 与 Profile 物理分流；
-- 外部 Profile 禁止在线训练和 AutoTrain；
-- Shadow、Canary、Active、Candidate SQL、Detected/Recovered Event；
-- 活动异常期间禁止切版；
-- Host 重启恢复与坏 Hash 隔离；
-- 仓库和 Production 默认关闭。
+主要能力包括确定性 ManifestHash、Profile→FeatureSchema 精确映射、Adapter Registry、本地 External Model Store、Isolation Forest 与 ONNX Runtime CPU Adapter、路径 containment、256 MB 上限、SHA-256、Profile 物理分流、外部 Profile 禁止在线训练、Shadow/Canary/Active、Candidate SQL、活动异常期间禁止切版、重启恢复、坏 Hash 隔离和默认关闭。
 
 ## 6. v3.9：故障概率与剩余寿命预测
 
@@ -82,7 +69,7 @@ RulMedianHours
 RulUpperHours
 ```
 
-不满足条件时返回 `Disabled`、`ModelUnavailable`、`InsufficientData` 或 `Failed`。
+不满足条件时返回 `Disabled`、`ModelUnavailable`、`InsufficientData` 或 `Failed`，且不写 Forecast SQL。
 
 ### 6.2 固定 14 维历史特征
 
@@ -107,19 +94,7 @@ history.spanHours
 
 ### 6.3 模型治理
 
-`AssetFailureForecastModelManifest` 要求：
-
-- Version、ArtifactFile、ArtifactSha256；
-- Source、ApprovedBy、ApprovedAtUtc；
-- TrainingDatasetVersion；
-- TrainingAssetCount；
-- FailureEventCount；
-- CensoredRecordCount；
-- ValidationAuc；
-- ValidationBrierScore；
-- ValidationRulMaeHours；
-- ValidationIntervalCoverage；
-- 输入输出名称、Shape、FeatureNames 和 MaximumRulHours。
+`AssetFailureForecastModelManifest` 要求 Version、ArtifactFile、ArtifactSha256、Source、ApprovedBy、ApprovedAtUtc、TrainingDatasetVersion、TrainingAssetCount、FailureEventCount、CensoredRecordCount、ValidationAuc、ValidationBrierScore、ValidationRulMaeHours、ValidationIntervalCoverage、输入输出名称、Shape、FeatureNames 和 MaximumRulHours。
 
 软件最低门槛包括训练资产 ≥30、真实失效 ≥10、删失记录 ≥1、AUC ≥0.65、Brier ≤0.30、区间覆盖 ≥0.70。现场必须建立更严格标准。
 
@@ -141,23 +116,30 @@ Wcs_AssetFailureForecastOutcomeJournal
 
 ForecastId 按资产、模型版本和历史窗口确定性生成。Outcome 只追加：ObservedFailure、PreventiveMaintenance、CensoredNoFailure、InvalidPrediction。
 
-Outcome 支持计算 24h Brier、RUL 中位数绝对误差和预测区间覆盖率。无 Outcome 时不伪造指标。
+Outcome 支持计算 24h Brier、RUL 中位数绝对误差和预测区间覆盖率；无 Outcome 时不伪造指标。
 
-### 6.6 已完成专项
-
-开发期真实 Runtime 成功证据：
+### 6.6 首轮专项证据
 
 ```text
-Workflow: WCS Asset Failure Forecast Runtime #4
-Run ID: 30372982523
-Head: ab7d22fb99a115eb10f6b736cc9d25b53fae3a57
-Artifact: wcs-asset-failure-forecast-runtime-4
-Digest: sha256:2e57c09b731f4098384ae9aea827b2d7b6e1a9455ef8791844d01bb79e7bc2d6
+Exact Head: 89a30dc9d71c7ee004cd88e19d2326b1aba082d6
+Matrix: 25/25 success
+
+Compile #24 / Run 30374580719
+Artifact: wcs-asset-failure-forecast-compile-24
+Digest: sha256:9ed5e3bd847f7f143cb641331acee651acdcb728ae3ec8594699342c0632cda3
+
+Runtime #11 / Run 30374580859
+Artifact: wcs-asset-failure-forecast-runtime-11
+Digest: sha256:db286fc938e0baba9910560bf82dc6bd81f149cf6087e271c040f1fdbb759634
+
+Host+SQL #9 / Run 30374580756
+Artifact: wcs-asset-failure-forecast-9
+Digest: sha256:6125c7206eba529a327daf8f35a94f36c08f1e5f887202f9def06ec3d32bf7c9
 ```
 
-该专项已验证六输出、20,000 次推理、约 120,100 次/秒、RSS 增长约 38.5 MB、Hash/Shape/FeatureOrder/弱训练证据拒绝、重启恢复和控制写入为 0。结果只代表 CI 微型模型。
+Runtime #11 验证 20,000 次推理约 76,747 次/秒、RSS 增长约 17.85 MB、Hash/Shape/FeatureOrder/弱训练证据拒绝、重启恢复和控制写入为 0。
 
-Host+SQL 专项已验证到最终证据门槛：短历史无预测、v1 幂等、Outcome 指标、v2 切版、重启、坏 Hash 隔离和恢复均成功。最新 Head 正在复验最终三表计数、PLC 写入为 0 和源码无控制依赖。
+Host+SQL #9 验证短历史无预测、48 点/47 小时门槛、v1/v2 精确输出、Forecast/Outcome 幂等、SQL 2/2/1、Brier≈0.01、RUL MAE=0、区间覆盖=1、切版、重启、坏 Hash 隔离与恢复、PLC 写入为 0 和源码无控制依赖。
 
 ### 6.7 完成门槛
 
@@ -168,9 +150,9 @@ Host+SQL 专项已验证到最终证据门槛：短历史无预测、v1 幂等�
 - [x] 模型切换、重启和坏模型隔离；
 - [x] Production 默认关闭；
 - [x] 文档 52～54；
-- [ ] latest exact head Forecast Compile/Runtime/Host 全绿；
-- [ ] latest exact head 完整矩阵全绿；
-- [ ] 最终证据 Head 二次完整矩阵全绿；
+- [x] 首轮 latest exact head Forecast Compile/Runtime/Host 全绿；
+- [x] 首轮 latest exact head 25/25 全绿；
+- [ ] 最终证据 Head 二次 25/25 全绿；
 - [ ] PR #32 Ready 并 Squash 合入 `develop`。
 
 ### 6.8 明确边界
@@ -193,7 +175,7 @@ v3.7 已完成并合入 develop
   ↓
 v3.8 已完成并合入 develop
   ↓
-v3.9 功能和专项已建立，正在最终收口
+v3.9 首轮 25/25 已完成，等待最终证据 Head 二次复验与合并
 ```
 
 ## 8. 统一安全原则
