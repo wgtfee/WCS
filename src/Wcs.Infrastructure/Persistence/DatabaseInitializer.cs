@@ -7,6 +7,7 @@ using Wcs.Core.PlcSubsystem.Examples;
 using Wcs.Core.Telemetry;
 using Wcs.Infrastructure.AnomalyDetection.HealthGovernance;
 using Wcs.Infrastructure.AnomalyDetection.HealthScoring;
+using Wcs.Infrastructure.AnomalyDetection.RootCause;
 
 public interface IDatabaseInitializer
 {
@@ -54,6 +55,9 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(PlcAnomalyEntity),
                 typeof(AssetHealthScoreEntity),
                 typeof(AssetHealthEventJournalEntity),
+                typeof(AssetHealthRootCauseGraphVersionEntity),
+                typeof(AssetHealthRootCauseAnalysisEntity),
+                typeof(AssetHealthRootCauseReviewEntity),
                 typeof(TransportConfigurationEntity),
                 typeof(TransportJournalEntity),
                 typeof(TransportGovernedOperationEntity),
@@ -87,9 +91,23 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_AssetHealthEventJo
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AssetHealthEventJournal_AssetTime' AND object_id = OBJECT_ID('Wcs_AssetHealthEventJournal'))
     CREATE INDEX IX_Wcs_AssetHealthEventJournal_AssetTime ON Wcs_AssetHealthEventJournal(AssetId, OccurredAtUtc DESC, Sequence DESC);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AssetHealthEventJournal_Delivery' AND object_id = OBJECT_ID('Wcs_AssetHealthEventJournal'))
-    CREATE INDEX IX_Wcs_AssetHealthEventJournal_Delivery ON Wcs_AssetHealthEventJournal(DeliveryStatus, NextDeliveryAttemptUtc, Sequence);");
+    CREATE INDEX IX_Wcs_AssetHealthEventJournal_Delivery ON Wcs_AssetHealthEventJournal(DeliveryStatus, NextDeliveryAttemptUtc, Sequence);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_RootCauseGraph_Version' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseGraphVersion'))
+    CREATE UNIQUE INDEX UX_Wcs_RootCauseGraph_Version ON Wcs_AssetHealthRootCauseGraphVersion(Version);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_RootCauseGraph_Hash' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseGraphVersion'))
+    CREATE UNIQUE INDEX UX_Wcs_RootCauseGraph_Hash ON Wcs_AssetHealthRootCauseGraphVersion(GraphHash);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_RootCauseAnalysis_Id' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseAnalysis'))
+    CREATE UNIQUE INDEX UX_Wcs_RootCauseAnalysis_Id ON Wcs_AssetHealthRootCauseAnalysis(AnalysisId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_RootCauseAnalysis_Trigger' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseAnalysis'))
+    CREATE INDEX IX_Wcs_RootCauseAnalysis_Trigger ON Wcs_AssetHealthRootCauseAnalysis(TriggerEventId, Sequence DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_RootCauseAnalysis_Time' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseAnalysis'))
+    CREATE INDEX IX_Wcs_RootCauseAnalysis_Time ON Wcs_AssetHealthRootCauseAnalysis(AnalyzedAtUtc DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_RootCauseReview_Id' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseReviewJournal'))
+    CREATE UNIQUE INDEX UX_Wcs_RootCauseReview_Id ON Wcs_AssetHealthRootCauseReviewJournal(ReviewId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_RootCauseReview_Analysis' AND object_id = OBJECT_ID('Wcs_AssetHealthRootCauseReviewJournal'))
+    CREATE INDEX IX_Wcs_RootCauseReview_Analysis ON Wcs_AssetHealthRootCauseReviewJournal(AnalysisId, Sequence DESC);");
 
-            _logger.LogInformation("数据库和所有表已就绪 (22 张)");
+            _logger.LogInformation("数据库和所有表已就绪 (25 张)");
             await Task.CompletedTask;
             return true;
         }
