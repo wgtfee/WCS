@@ -231,7 +231,7 @@ jobs:
             --data @artifacts/maintenance-request.json \
             "$ASPNETCORE_URLS/api/anomaly/maintenance/load/recommendations" \
             | tee artifacts/maintenance-first.json
-          jq -e '.inserted == true and .recommendation.ruleId == "RULE-MOTOR-E2E" and .recommendation.rootCauseNodeId == "N-MOTOR" and .recommendation.status == 0 and .recommendation.inspectionItems | length == 2' \
+          jq -e '.inserted == true and .recommendation.ruleId == "RULE-MOTOR-E2E" and .recommendation.rootCauseNodeId == "N-MOTOR" and .recommendation.status == 0 and ((.recommendation.inspectionItems | length) == 2)' \
             artifacts/maintenance-first.json >/dev/null
           recommendation_id="$(jq -r '.recommendation.recommendationId' artifacts/maintenance-first.json)"
           echo "$recommendation_id" > artifacts/recommendation-id.txt
