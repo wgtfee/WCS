@@ -1,0 +1,355 @@
+name: WCS Anomaly Health Scoring SQL
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/anomaly-health-scoring-sql.yml'
+      - 'src/Wcs.Core/AnomalyDetection/HealthScoring/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/HealthScoring/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Fusion/AnomalyFusionDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/PlcMlDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Host/Controllers/AnomalyHealth*.cs'
+      - 'src/Wcs.Host/appsettings*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  ASPNETCORE_ENVIRONMENT: LoadTest
+  DOTNET_ENVIRONMENT: LoadTest
+  ASPNETCORE_URLS: http://127.0.0.1:5108
+  ConnectionStrings__WcsDb: 'Server=127.0.0.1,1433;Database=WCS_HealthHistory;User Id=sa;Password=Wcs_HealthHistory!2026;Encrypt=False;TrustServerCertificate=True;'
+  Simulator__Enabled: 'false'
+  Storage__Telemetry__Provider: Disabled
+  AnomalyDetection__Enabled: 'false'
+  AnomalyDetection__MachineLearning__Enabled: 'false'
+  TransportCycleAnalysis__Enabled: 'false'
+  AnomalyFusion__Enabled: 'false'
+  TransportObservability__Enabled: 'false'
+  TransportResilience__Enabled: 'false'
+  TransportResilience__AutomaticBackupEnabled: 'false'
+  AnomalyHealthScoring__Enabled: 'true'
+  AnomalyHealthScoring__HistoryProvider: SqlServer
+  AnomalyHealthScoring__SamplingIntervalSeconds: '3600'
+  AnomalyHealthScoring__MinimumScoreChangeToRecord: '0'
+  AnomalyHealthScoring__MaximumUnchangedIntervalSeconds: '3600'
+  AnomalyHealthScoring__MaximumHistoryPerAsset: '100'
+  AnomalyHealthScoring__MaximumTrackedHistoryAssets: '1000'
+  AnomalyHealthScoring__HistoryRetentionHours: '1'
+  AnomalyHealthScoring__TrendWindowSize: '12'
+  AnomalyHealthScoring__TrendChangeThreshold: '2'
+  AnomalyHealthScoring__MaximumHistoryQueryCount: '100'
+  AnomalyHealthScoring__HistoryWriteChannelCapacity: '1000'
+  AnomalyHealthScoring__HistoryWriteBatchSize: '20'
+  AnomalyHealthScoring__HistoryWriteRetryDelayMs: '500'
+  AnomalyHealthScoring__HistoryMaintenanceIntervalSeconds: '1'
+  AnomalyHealthScoring__HistoryMaintenanceBatchSize: '100'
+
+jobs:
+  sql-history:
+    name: SQL idempotency, outage recovery, restart, paging, and retention
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: 'Wcs_HealthHistory!2026'
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Host and focused tests
+        shell: bash
+        run: |
+          mkdir -p artifacts/TestResults
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~AssetHealthScoringServiceTests|FullyQualifiedName~AssetHealthScoreHistoryStoreTests|FullyQualifiedName~AssetHealthHistoryPagingTests' \
+            --logger 'trx;LogFileName=anomaly-health-sql-core.trx' \
+            --results-directory artifacts/TestResults
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          echo "$sql_container" > artifacts/sql-container-id.txt
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_HealthHistory]"
+          '
+
+      - name: Create deterministic payloads
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+
+          now = datetime.now(timezone.utc).replace(microsecond=0)
+          def iso(value):
+              return value.isoformat().replace('+00:00', 'Z')
+
+          points = []
+          for offset, score in enumerate((95, 80, 60, 35)):
+              timestamp = now - timedelta(minutes=3-offset)
+              points.append({
+                  'healthScore': score,
+                  'recordedAtUtc': iso(timestamp),
+                  'calculatedAtUtc': iso(timestamp),
+                  'summary': f'sql-e2e-{score}'
+              })
+          Path('artifacts/health-points.json').write_text(json.dumps({
+              'assetId': 'HEALTH-SQL-E2E',
+              'points': points
+          }))
+
+          outage_time = now + timedelta(minutes=1)
+          Path('artifacts/health-outage-point.json').write_text(json.dumps({
+              'assetId': 'HEALTH-SQL-E2E',
+              'points': [{
+                  'healthScore': 25,
+                  'recordedAtUtc': iso(outage_time),
+                  'calculatedAtUtc': iso(outage_time),
+                  'summary': 'sql-e2e-outage'
+              }]
+          }))
+
+          old_time = now - timedelta(hours=72)
+          Path('artifacts/health-old-point.json').write_text(json.dumps({
+              'assetId': 'HEALTH-SQL-E2E',
+              'points': [{
+                  'healthScore': 50,
+                  'recordedAtUtc': iso(old_time),
+                  'calculatedAtUtc': iso(old_time),
+                  'summary': 'sql-e2e-expired'
+              }]
+          }))
+          PY
+
+      - name: Start Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/health-sql-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/health-sql-host.pid"
+          popd >/dev/null
+
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health/history/status" \
+                | tee artifacts/health-sql-initial-status.json
+              jq -e '.provider == "SqlServer" and .isAvailable == true and .pendingWrites == 0' \
+                artifacts/health-sql-initial-status.json >/dev/null
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/health-sql-host.pid)" 2>/dev/null; then
+              cat artifacts/health-sql-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/health-sql-host.log
+          exit 1
+
+      - name: Verify batch persistence, paging, and trend
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/health-points.json \
+            "$ASPNETCORE_URLS/api/anomaly/health/load/points" \
+            | tee artifacts/health-sql-record.json
+          jq -e '.accepted == 4' artifacts/health-sql-record.json >/dev/null
+
+          for attempt in {1..60}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health/history/status" \
+              > artifacts/health-sql-status.json
+            if jq -e '.pendingWrites == 0 and .retainedPoints == 4 and .droppedWrites == 0' \
+              artifacts/health-sql-status.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then cat artifacts/health-sql-status.json; exit 1; fi
+            sleep 1
+          done
+
+          curl --fail --silent \
+            "$ASPNETCORE_URLS/api/anomaly/health/assets/HEALTH-SQL-E2E/history/page?skip=0&maxCount=2" \
+            | tee artifacts/health-sql-page.json
+          jq -e '.count == 2 and .hasMore == true and .items[0].healthScore == 60 and .items[1].healthScore == 35' \
+            artifacts/health-sql-page.json >/dev/null
+
+          curl --fail --silent \
+            "$ASPNETCORE_URLS/api/anomaly/health/assets/HEALTH-SQL-E2E/trend/range?windowSize=10" \
+            | tee artifacts/health-sql-trend.json
+          jq -e '.direction == 2 and .sampleCount == 4 and .scoreDelta == -60' \
+            artifacts/health-sql-trend.json >/dev/null
+
+      - name: Verify restart recovery and idempotent replay
+        shell: bash
+        run: |
+          kill "$(cat artifacts/health-sql-host.pid)"
+          wait "$(cat artifacts/health-sql-host.pid)" 2>/dev/null || true
+
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll >> "$GITHUB_WORKSPACE/artifacts/health-sql-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/health-sql-host.pid"
+          popd >/dev/null
+
+          for attempt in {1..60}; do
+            if curl --fail --silent "$ASPNETCORE_URLS/health/live" >/dev/null; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then cat artifacts/health-sql-host.log; exit 1; fi
+            sleep 1
+          done
+
+          curl --fail --silent \
+            "$ASPNETCORE_URLS/api/anomaly/health/assets/HEALTH-SQL-E2E/history/page?maxCount=10" \
+            | tee artifacts/health-sql-after-restart.json
+          jq -e '.count == 4' artifacts/health-sql-after-restart.json >/dev/null
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/health-points.json \
+            "$ASPNETCORE_URLS/api/anomaly/health/load/points" \
+            > artifacts/health-sql-replay.json
+
+          for attempt in {1..60}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health/history/status" \
+              > artifacts/health-sql-replay-status.json
+            if jq -e '.pendingWrites == 0 and .retainedPoints == 4 and .idempotentDuplicatePoints >= 4' \
+              artifacts/health-sql-replay-status.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then cat artifacts/health-sql-replay-status.json; exit 1; fi
+            sleep 1
+          done
+
+      - name: Verify SQL outage isolation and recovery
+        shell: bash
+        run: |
+          sql_container="$(cat artifacts/sql-container-id.txt)"
+          docker stop "$sql_container" >/dev/null
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/health-outage-point.json \
+            "$ASPNETCORE_URLS/api/anomaly/health/load/points" \
+            | tee artifacts/health-sql-outage-record.json
+          jq -e '.accepted == 1' artifacts/health-sql-outage-record.json >/dev/null
+          curl --fail --silent "$ASPNETCORE_URLS/health/live" >/dev/null
+          sleep 2
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health/history/status" \
+            | tee artifacts/health-sql-outage-status.json
+          jq -e '.isAvailable == false and .pendingWrites >= 1' artifacts/health-sql-outage-status.json >/dev/null
+
+          docker start "$sql_container" >/dev/null
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+
+          for attempt in {1..90}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health/history/status" \
+              > artifacts/health-sql-recovered-status.json
+            if jq -e '.isAvailable == true and .pendingWrites == 0 and .retainedPoints == 5 and .failedWriteBatches >= 1' \
+              artifacts/health-sql-recovered-status.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 90 ]]; then cat artifacts/health-sql-recovered-status.json; exit 1; fi
+            sleep 1
+          done
+
+      - name: Verify retention cleanup and exact SQL count
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/health-old-point.json \
+            "$ASPNETCORE_URLS/api/anomaly/health/load/points" \
+            > artifacts/health-sql-old-record.json
+          for attempt in {1..60}; do
+            curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/health/history/status" \
+              > artifacts/health-sql-before-maintain.json
+            if jq -e '.pendingWrites == 0 and .retainedPoints == 6' artifacts/health-sql-before-maintain.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then cat artifacts/health-sql-before-maintain.json; exit 1; fi
+            sleep 1
+          done
+
+          sleep 2
+          curl --fail --silent --show-error --request POST \
+            "$ASPNETCORE_URLS/api/anomaly/health/load/maintain" \
+            | tee artifacts/health-sql-after-maintain.json
+          jq -e '.retainedPoints == 5 and .evictedPoints >= 1 and .droppedWrites == 0' \
+            artifacts/health-sql-after-maintain.json >/dev/null
+
+          sql_container="$(cat artifacts/sql-container-id.txt)"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_HealthHistory -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM Wcs_AssetHealthScore; SELECT COUNT(*)-COUNT(DISTINCT PointId) FROM Wcs_AssetHealthScore;"
+          ' | sed '/^$/d' | tee artifacts/health-sql-counts.txt
+          [[ "$(sed -n '1p' artifacts/health-sql-counts.txt | tr -d '[:space:]')" == "5" ]]
+          [[ "$(sed -n '2p' artifacts/health-sql-counts.txt | tr -d '[:space:]')" == "0" ]]
+
+      - name: Validate Host log
+        if: always()
+        shell: bash
+        run: |
+          test -s artifacts/health-sql-host.log
+          if grep -Eqi 'OutOfMemory|Unhandled exception|duplicate key|Stack overflow' artifacts/health-sql-host.log; then
+            grep -Eni -C 5 'OutOfMemory|Unhandled exception|duplicate key|Stack overflow' artifacts/health-sql-host.log
+            exit 1
+          fi
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/health-sql-host.pid ]]; then
+            kill "$(cat artifacts/health-sql-host.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload SQL health history evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-anomaly-health-sql-${{ github.run_number }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 14

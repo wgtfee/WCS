@@ -128,7 +128,7 @@ public static class PlcMlDependencyInjection
         if (options.Enabled || options.ManagementApiEnabled)
             services.AddHostedService(_ => new PlcMlGovernanceSchemaService(connectionString));
         services.AddHostedService<PlcMlAnomalyBackgroundService>();
-        services.AddAnomalyEvidenceFusion(configuration);
+        services.AddAnomalyEvidenceFusion(configuration, connectionString);
         return services;
     }
 }
