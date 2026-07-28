@@ -39,13 +39,21 @@ jobs:
         run: dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore 2>&1 | tee model-adapter-core-build.log
       - name: Run adapter contract tests
         run: dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-build --filter 'FullyQualifiedName~PlcMlModelAdapterTests' --logger 'trx;LogFileName=model-adapter-tests.trx' --results-directory TestResults 2>&1 | tee model-adapter-tests.log
-      - name: Build Host with ONNX native assets
+      - name: Build Host with ONNX managed API
         run: dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee model-adapter-host-build.log
-      - name: Verify ONNX native runtime copied
+      - name: Publish Linux x64 Host and verify ONNX native runtime
         shell: bash
         run: |
-          find src/Wcs.Host/bin/Release/net8.0 -iname '*onnxruntime*' -type f | sort | tee model-adapter-native-files.log
-          test -s model-adapter-native-files.log
+          mkdir -p artifacts/model-adapter-publish
+          dotnet publish src/Wcs.Host/Wcs.Host.csproj \
+            --configuration Release \
+            --runtime linux-x64 \
+            --self-contained false \
+            --output artifacts/model-adapter-publish \
+            2>&1 | tee model-adapter-publish.log
+          find artifacts/model-adapter-publish -iname '*onnxruntime*' -type f | sort | tee model-adapter-native-files.log
+          grep -Eq 'libonnxruntime\.so$' model-adapter-native-files.log
+          grep -Eq 'Microsoft\.ML\.OnnxRuntime\.dll$' model-adapter-native-files.log
       - name: Upload compiler diagnostics
         if: always()
         uses: actions/upload-artifact@v4
