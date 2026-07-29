@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   boundary:
-    name: deny production, require dual switches, and prevent control coupling
+    name: deny production, bound capacity, and prevent control coupling
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -38,16 +38,34 @@ jobs:
         shell: bash
         run: |
           jq -e '.Simulator.Enabled == false' src/Wcs.Host/appsettings.Production.json >/dev/null
-          jq -e '.Simulator.Enabled == true and .SimulationGovernance.Enabled == true' src/Wcs.Host/appsettings.Simulation.json >/dev/null
-          jq -e '.Simulator.Enabled == true and .SimulationGovernance.Enabled == true' src/Wcs.Host/appsettings.SimulationLoadTest.json >/dev/null
-          jq -e '.AnomalyDetection.Enabled == false and .AnomalyDetection.MachineLearning.Enabled == false and .AssetFailureForecast.Enabled == false' src/Wcs.Host/appsettings.Simulation.json >/dev/null
-          jq -e '.SimulationGovernance.AllowedEnvironments == ["Simulation", "SimulationLoadTest"]' src/Wcs.Host/appsettings.Simulation.json >/dev/null
+          jq -e '
+            .Simulator.Enabled == true and
+            .SimulationGovernance.Enabled == true and
+            .SimulationGovernance.MaximumScenarioBytes == 1048576 and
+            .SimulationGovernance.MaximumRegisteredScenarioVersions == 10000 and
+            .SimulationGovernance.MaximumEvidenceRecords == 10000 and
+            .SimulationGovernance.MaximumEvidenceValueCharacters == 4096 and
+            .SimulationGovernance.AllowedEnvironments == ["Simulation", "SimulationLoadTest"] and
+            .AnomalyDetection.Enabled == false and
+            .AnomalyDetection.MachineLearning.Enabled == false and
+            .AssetFailureForecast.Enabled == false' \
+            src/Wcs.Host/appsettings.Simulation.json >/dev/null
+          jq -e '
+            .Simulator.Enabled == true and
+            .SimulationGovernance.Enabled == true and
+            .SimulationGovernance.MaximumRegisteredScenarioVersions == 10000 and
+            .SimulationGovernance.MaximumEvidenceRecords == 100000 and
+            .SimulationGovernance.MaximumEvidenceValueCharacters == 4096 and
+            .SimulationGovernance.AllowedEnvironments == ["Simulation", "SimulationLoadTest"]' \
+            src/Wcs.Host/appsettings.SimulationLoadTest.json >/dev/null
 
       - name: Validate static safety boundary
         shell: bash
         run: |
           grep -q '_environment.IsProduction()' src/Wcs.Host/BackgroundServices/SimulatorBackgroundService.cs
           grep -q 'return NotFound()' src/Wcs.Host/Controllers/SimulationGovernanceController.cs
+          grep -q 'maximumRegisteredScenarioVersions' src/Wcs.Host/Controllers/SimulationGovernanceController.cs
+          grep -q 'maximumEvidenceValueCharacters' src/Wcs.Host/Controllers/SimulationGovernanceController.cs
           grep -q 'controlWritesAllowed = false' src/Wcs.Host/Controllers/SimulationGovernanceController.cs
           ! grep -R -E 'Wcs\.Core\.(Command|TaskEngine|TransportScheduling|PlcSubsystem)' src/Wcs.Simulator/Governance
           ! grep -R -E 'WriteAsync|WriteBlock|WriteTag|CancelTask|ReleaseReservation|Dispatch' src/Wcs.Simulator/Governance src/Wcs.Host/Controllers/SimulationGovernanceController.cs
