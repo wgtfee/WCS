@@ -1,11 +1,12 @@
 namespace Wcs.Host.Simulation;
 
 using Wcs.Simulator.ScenarioEngine;
+using Wcs.Simulator.VirtualPlc;
 
 /// <summary>
 /// One process-scoped composition root for the governed scenario catalog,
-/// deterministic engine and bounded run registry. It is inert until a
-/// Simulation-only controller operation is invoked.
+/// deterministic engine, virtual PLC contracts and bounded run registry. It is
+/// inert until a Simulation-only controller operation is invoked.
 /// </summary>
 public sealed class SimulationHostRuntime
 {
@@ -14,18 +15,24 @@ public sealed class SimulationHostRuntime
 
     private SimulationHostRuntime(
         SimulationScenarioEngineOptions engineOptions,
-        SimulationRunRegistryOptions runOptions)
+        SimulationRunRegistryOptions runOptions,
+        VirtualPlcOptions virtualPlcOptions)
     {
         Catalog = new SimulationScenarioCatalog();
         EngineOptions = engineOptions;
         RunOptions = runOptions;
-        Engine = new SimulationScenarioEngine(options: engineOptions);
+        VirtualPlcOptions = virtualPlcOptions;
+        Engine = new SimulationScenarioEngine(
+            VirtualPlcScenarioHandlers.CreateActions(virtualPlcOptions),
+            VirtualPlcScenarioHandlers.CreateAssertions(virtualPlcOptions),
+            engineOptions);
         Runs = new SimulationRunRegistry(Engine, runOptions);
     }
 
     public SimulationScenarioCatalog Catalog { get; }
     public SimulationScenarioEngineOptions EngineOptions { get; }
     public SimulationRunRegistryOptions RunOptions { get; }
+    public VirtualPlcOptions VirtualPlcOptions { get; }
     public SimulationScenarioEngine Engine { get; }
     public SimulationRunRegistry Runs { get; }
 
@@ -43,9 +50,13 @@ public sealed class SimulationHostRuntime
             var runOptions = configuration
                 .GetSection(SimulationRunRegistryOptions.SectionName)
                 .Get<SimulationRunRegistryOptions>() ?? new SimulationRunRegistryOptions();
+            var virtualPlcOptions = configuration
+                .GetSection(VirtualPlcOptions.SectionName)
+                .Get<VirtualPlcOptions>() ?? new VirtualPlcOptions();
             engineOptions.Validate();
             runOptions.Validate();
-            _instance = new SimulationHostRuntime(engineOptions, runOptions);
+            virtualPlcOptions.Validate();
+            _instance = new SimulationHostRuntime(engineOptions, runOptions, virtualPlcOptions);
             return _instance;
         }
     }
