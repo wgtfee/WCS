@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Wcs.Core.AnomalyDetection;
 using Wcs.Core.PlcSubsystem.Examples;
 using Wcs.Core.Telemetry;
+using Wcs.Infrastructure.AnomalyDetection.Forecasting;
 using Wcs.Infrastructure.AnomalyDetection.HealthGovernance;
 using Wcs.Infrastructure.AnomalyDetection.HealthScoring;
 using Wcs.Infrastructure.AnomalyDetection.Maintenance;
@@ -63,6 +64,9 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(AssetHealthMaintenanceRecommendationEntity),
                 typeof(AssetHealthMaintenanceFeedbackEntity),
                 typeof(AssetHealthMaintenanceTrainingLabelEntity),
+                typeof(AssetFailureForecastModelVersionEntity),
+                typeof(AssetFailureForecastEntity),
+                typeof(AssetFailureForecastOutcomeEntity),
                 typeof(TransportConfigurationEntity),
                 typeof(TransportJournalEntity),
                 typeof(TransportGovernedOperationEntity),
@@ -128,9 +132,21 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_MaintFeedback_Reco
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_MaintTrainingLabel_Id' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceTrainingLabel'))
     CREATE UNIQUE INDEX UX_Wcs_MaintTrainingLabel_Id ON Wcs_AssetHealthMaintenanceTrainingLabel(CandidateId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_MaintTrainingLabel_Status' AND object_id = OBJECT_ID('Wcs_AssetHealthMaintenanceTrainingLabel'))
-    CREATE INDEX IX_Wcs_MaintTrainingLabel_Status ON Wcs_AssetHealthMaintenanceTrainingLabel(Status, Sequence DESC);");
+    CREATE INDEX IX_Wcs_MaintTrainingLabel_Status ON Wcs_AssetHealthMaintenanceTrainingLabel(Status, Sequence DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_FailureForecastModel_Version' AND object_id = OBJECT_ID('Wcs_AssetFailureForecastModelVersion'))
+    CREATE UNIQUE INDEX UX_Wcs_FailureForecastModel_Version ON Wcs_AssetFailureForecastModelVersion(Version);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_FailureForecastModel_Hash' AND object_id = OBJECT_ID('Wcs_AssetFailureForecastModelVersion'))
+    CREATE UNIQUE INDEX UX_Wcs_FailureForecastModel_Hash ON Wcs_AssetFailureForecastModelVersion(ManifestHash);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_FailureForecast_Id' AND object_id = OBJECT_ID('Wcs_AssetFailureForecast'))
+    CREATE UNIQUE INDEX UX_Wcs_FailureForecast_Id ON Wcs_AssetFailureForecast(ForecastId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_FailureForecast_Asset' AND object_id = OBJECT_ID('Wcs_AssetFailureForecast'))
+    CREATE INDEX IX_Wcs_FailureForecast_Asset ON Wcs_AssetFailureForecast(AssetId, ForecastedAtUtc DESC, Sequence DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_FailureForecastOutcome_Id' AND object_id = OBJECT_ID('Wcs_AssetFailureForecastOutcomeJournal'))
+    CREATE UNIQUE INDEX UX_Wcs_FailureForecastOutcome_Id ON Wcs_AssetFailureForecastOutcomeJournal(OutcomeId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_FailureForecastOutcome_Forecast' AND object_id = OBJECT_ID('Wcs_AssetFailureForecastOutcomeJournal'))
+    CREATE INDEX IX_Wcs_FailureForecastOutcome_Forecast ON Wcs_AssetFailureForecastOutcomeJournal(ForecastId, Sequence DESC);");
 
-            _logger.LogInformation("数据库和所有表已就绪 (29 张)");
+            _logger.LogInformation("数据库和所有表已就绪 (32 张)");
             await Task.CompletedTask;
             return true;
         }
