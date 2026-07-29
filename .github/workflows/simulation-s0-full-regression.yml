@@ -144,7 +144,7 @@ jobs:
                 -H 'Accept: application/vnd.github+json' \
                 "/repos/$REPOSITORY/actions/runs/$run_id")"
               status="$(jq -r '.status' <<<"$run")"
-              conclusion="$(jq -r '.conclusion // ""' <<<"$run")"
+              conclusion="$(jq -r '.conclusion // "pending"' <<<"$run")"
               head_sha="$(jq -r '.head_sha' <<<"$run")"
               html_url="$(jq -r '.html_url' <<<"$run")"
               printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
