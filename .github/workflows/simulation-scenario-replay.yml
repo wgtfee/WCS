@@ -1,0 +1,67 @@
+name: WCS Simulation Replay Determinism
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/ScenarioEngine/**'
+      - 'src/Wcs.Simulator.Tests/SimulationScenarioEngineTests.cs'
+      - '.github/workflows/simulation-scenario-*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-replay:
+    name: replay, checkpoint, speed invariance, and 10k conservation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s1-replay-restore.log
+
+      - name: Build
+        run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s1-replay-build.log
+
+      - name: Run deterministic replay suite
+        run: |
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~SimulationScenarioEngineTests' \
+            --logger 'trx;LogFileName=simulation-s1-replay-tests.trx' \
+            --results-directory TestResults \
+            2>&1 | tee simulation-s1-replay-tests.log
+
+      - name: Require replay and conservation assertions
+        shell: bash
+        run: |
+          grep -q 'ReplayTwice_WithDifferentSpeed_ProducesIdenticalEvidenceAndState' src/Wcs.Simulator.Tests/SimulationScenarioEngineTests.cs
+          grep -q 'PauseStepCheckpointRestore_MatchesContinuousExecution' src/Wcs.Simulator.Tests/SimulationScenarioEngineTests.cs
+          grep -q 'RandomState_RestoreContinuesTheExactSequence' src/Wcs.Simulator.Tests/SimulationScenarioEngineTests.cs
+          grep -q 'TenThousandTimelineEvents_AreNeitherLostNorDuplicated' src/Wcs.Simulator.Tests/SimulationScenarioEngineTests.cs
+          ! grep -R -E 'DateTime\.(Now|UtcNow)|Task\.Delay|Random\.Shared' src/Wcs.Simulator/ScenarioEngine
+
+      - name: Upload deterministic replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-replay-determinism-${{ github.run_number }}
+          path: |
+            simulation-s1-replay-*.log
+            TestResults/**
+          if-no-files-found: error
+          retention-days: 14

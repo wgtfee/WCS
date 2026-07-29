@@ -1,16 +1,16 @@
 namespace Wcs.Host.Controllers;
 
 using Microsoft.AspNetCore.Mvc;
+using Wcs.Host.Simulation;
 using Wcs.Simulator.Governance;
 
 [ApiController]
 [Route("api/simulation/governance")]
 public sealed class SimulationGovernanceController : ControllerBase
 {
-    private static readonly SimulationScenarioRegistry Registry = new();
-
     private readonly IHostEnvironment _environment;
     private readonly IConfiguration _configuration;
+    private readonly SimulationScenarioCatalog _catalog;
 
     public SimulationGovernanceController(
         IHostEnvironment environment,
@@ -18,6 +18,7 @@ public sealed class SimulationGovernanceController : ControllerBase
     {
         _environment = environment;
         _configuration = configuration;
+        _catalog = SimulationHostRuntime.GetOrCreate(configuration).Catalog;
     }
 
     [HttpGet("status")]
@@ -37,7 +38,7 @@ public sealed class SimulationGovernanceController : ControllerBase
             maximumRegisteredScenarioVersions = options.MaximumRegisteredScenarioVersions,
             maximumEvidenceRecords = options.MaximumEvidenceRecords,
             maximumEvidenceValueCharacters = options.MaximumEvidenceValueCharacters,
-            registeredScenarioVersions = Registry.List().Count,
+            registeredScenarioVersions = _catalog.List().Count,
             productionAllowed = false,
             controlWritesAllowed = false,
             decision.Code
@@ -51,7 +52,7 @@ public sealed class SimulationGovernanceController : ControllerBase
         if (!decision.Allowed)
             return NotFound();
 
-        return Ok(Registry.List());
+        return Ok(_catalog.List());
     }
 
     [HttpPost("scenarios/validate")]
@@ -66,7 +67,7 @@ public sealed class SimulationGovernanceController : ControllerBase
         try
         {
             var content = Convert.FromBase64String(request.ContentBase64);
-            var registered = Registry.Register(
+            var registered = _catalog.Register(
                 new SimulationScenarioPackage(request.Manifest, content),
                 GetOptions());
             return Ok(registered);

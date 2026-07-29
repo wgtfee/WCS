@@ -12,6 +12,7 @@ on:
       - 'src/Wcs.Host/Controllers/AnomalyMaintenance*'
       - 'src/Wcs.Host/appsettings*.json'
       - '.github/workflows/anomaly-maintenance*.yml'
+  workflow_dispatch:
 
 jobs:
   compile:
