@@ -152,12 +152,18 @@ public sealed partial class VirtualPlcRuntime
         var blockTarget = TryParseBlockKey(target, out var blockIdentity);
         if (RequiresBlockTarget(definition.Kind) && !blockTarget)
             throw new InvalidOperationException($"Virtual PLC fault kind '{definition.Kind}' requires a DB block target.");
-        if (blockTarget && !TryReadBlockMeta(blockIdentity.BlockKey, out var blockMeta))
-            throw new KeyNotFoundException($"Virtual PLC block '{blockIdentity.BlockKey}' was not found.");
+
+        BlockMeta? blockMeta = null;
+        if (blockTarget)
+        {
+            if (!TryReadBlockMeta(blockIdentity.BlockKey, out var resolvedBlockMeta))
+                throw new KeyNotFoundException($"Virtual PLC block '{blockIdentity.BlockKey}' was not found.");
+            blockMeta = resolvedBlockMeta;
+        }
 
         if (definition.Offset < 0 || definition.Length < 1 || definition.Length > _options.MaximumFaultPayloadBytes)
             throw new InvalidOperationException("Virtual PLC fault offset/length is outside the configured fault payload limit.");
-        if (blockTarget && checked(definition.Offset + definition.Length) > blockMeta!.Size)
+        if (blockMeta is not null && (long)definition.Offset + definition.Length > blockMeta.Size)
             throw new InvalidOperationException("Virtual PLC fault range exceeds the target block.");
         if (definition.Kind == VirtualPlcFaultKind.BitFlip && definition.BitIndex is < 0 or > 7)
             throw new InvalidOperationException("Virtual PLC BitFlip fault BitIndex must be between 0 and 7.");
@@ -229,8 +235,7 @@ public sealed partial class VirtualPlcRuntime
         DateTimeOffset occurredAtUtc)
     {
         ValidateFaultId(faultId);
-        var stored = ReadRequiredFault(faultId);
-        stored = stored with { Enabled = false };
+        var stored = ReadRequiredFault(faultId) with { Enabled = false };
         SetJson(FaultKey(faultId), stored);
         var sequence = NextOperationSequence();
         AppendAudit(new VirtualPlcAuditRecord(
@@ -459,7 +464,8 @@ public sealed partial class VirtualPlcRuntime
         var input = Encoding.UTF8.GetBytes($"{_deterministicSalt}:{sequence}:{fault.Id}:{blockOffset}");
         var hash = SHA256.HashData(input);
         var width = checked(fault.JitterMaximum - fault.JitterMinimum + 1);
-        return fault.JitterMinimum + (BitConverter.ToUInt32(hash, 0) % width is var value ? checked((int)value) : 0);
+        var value = BitConverter.ToUInt32(hash, 0);
+        return fault.JitterMinimum + checked((int)(value % (uint)width));
     }
 
     private VirtualPlcOperationResult CompleteFailure(
@@ -537,7 +543,7 @@ public sealed partial class VirtualPlcRuntime
     {
         if (offset < 0 || count < 0 || count > _options.MaximumOperationBytes)
             throw new InvalidOperationException("Virtual PLC read/write range is outside MaximumOperationBytes.");
-        if (checked(offset + count) > meta.Size)
+        if ((long)offset + count > meta.Size)
             throw new InvalidOperationException("Virtual PLC read/write range exceeds the target block.");
     }
 
@@ -669,7 +675,7 @@ public sealed partial class VirtualPlcRuntime
     private static string ComputeSha256(ReadOnlySpan<byte> bytes) =>
         Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
-    private static readonly string EmptyHash = ComputeSha256([]);
+    private static readonly string EmptyHash = ComputeSha256(Array.Empty<byte>());
 
     private static (string BlockKey, string PlcName, int DbNumber) ParseBlockKey(string blockKey)
     {
