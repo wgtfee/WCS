@@ -5,7 +5,7 @@ on:
     branches: [ develop ]
     paths:
       - 'src/Wcs.Simulator/VirtualPlc/**'
-      - 'src/Wcs.Simulator.Tests/SimulationVirtualPlcTests.cs'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualPlc*.cs'
       - 'src/Wcs.Host/Controllers/SimulationVirtualPlcController.cs'
       - 'src/Wcs.Host/appsettings.Simulation*.json'
       - '.github/workflows/simulation-plc-fault-injection.yml'
@@ -37,11 +37,11 @@ jobs:
           dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s2-fault-restore.log
           dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s2-fault-build.log
 
-      - name: Run fault matrix and replay tests
+      - name: Run fault matrix, replay, and Host boundary tests
         run: |
           dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
             --configuration Release --no-build \
-            --filter 'FullyQualifiedName~SimulationVirtualPlcTests' \
+            --filter 'FullyQualifiedName~SimulationVirtualPlc' \
             --logger 'trx;LogFileName=simulation-s2-faults.trx' \
             2>&1 | tee simulation-s2-fault-test.log
 
