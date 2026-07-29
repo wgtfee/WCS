@@ -256,7 +256,9 @@ public sealed class CreateSimulationRunRequest : SimulationScenarioContentReques
     public bool StartPaused { get; set; } = true;
 }
 
-public sealed class ReplaySimulationScenarioRequest : SimulationScenarioContentRequest;
+public sealed class ReplaySimulationScenarioRequest : SimulationScenarioContentRequest
+{
+}
 
 public sealed class AdvanceSimulationRunRequest
 {
