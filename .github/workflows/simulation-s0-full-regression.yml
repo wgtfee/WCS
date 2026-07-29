@@ -29,6 +29,7 @@ concurrency:
 
 jobs:
   exact-head-matrix:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/simulation-s0-') }}
     name: reuse or dispatch 27 exact-head workflows
     runs-on: ubuntu-24.04
     timeout-minutes: 240
