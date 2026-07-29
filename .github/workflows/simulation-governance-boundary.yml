@@ -1,0 +1,76 @@
+name: WCS Simulation Governance Boundary
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/Governance/**'
+      - 'src/Wcs.Simulator.Tests/**'
+      - 'src/Wcs.Host/Controllers/SimulationGovernanceController.cs'
+      - 'src/Wcs.Host/BackgroundServices/SimulatorBackgroundService.cs'
+      - 'src/Wcs.Host/appsettings.Production.json'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-governance*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boundary:
+    name: deny production, require dual switches, and prevent control coupling
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Validate environment defaults
+        shell: bash
+        run: |
+          jq -e '.Simulator.Enabled == false' src/Wcs.Host/appsettings.Production.json >/dev/null
+          jq -e '.Simulator.Enabled == true and .SimulationGovernance.Enabled == true' src/Wcs.Host/appsettings.Simulation.json >/dev/null
+          jq -e '.Simulator.Enabled == true and .SimulationGovernance.Enabled == true' src/Wcs.Host/appsettings.SimulationLoadTest.json >/dev/null
+          jq -e '.AnomalyDetection.Enabled == false and .AnomalyDetection.MachineLearning.Enabled == false and .AssetFailureForecast.Enabled == false' src/Wcs.Host/appsettings.Simulation.json >/dev/null
+          jq -e '.SimulationGovernance.AllowedEnvironments == ["Simulation", "SimulationLoadTest"]' src/Wcs.Host/appsettings.Simulation.json >/dev/null
+
+      - name: Validate static safety boundary
+        shell: bash
+        run: |
+          grep -q '_environment.IsProduction()' src/Wcs.Host/BackgroundServices/SimulatorBackgroundService.cs
+          grep -q 'return NotFound()' src/Wcs.Host/Controllers/SimulationGovernanceController.cs
+          grep -q 'controlWritesAllowed = false' src/Wcs.Host/Controllers/SimulationGovernanceController.cs
+          ! grep -R -E 'Wcs\.Core\.(Command|TaskEngine|TransportScheduling|PlcSubsystem)' src/Wcs.Simulator/Governance
+          ! grep -R -E 'WriteAsync|WriteBlock|WriteTag|CancelTask|ReleaseReservation|Dispatch' src/Wcs.Simulator/Governance src/Wcs.Host/Controllers/SimulationGovernanceController.cs
+
+      - name: Restore boundary tests
+        run: dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-boundary-restore.log
+
+      - name: Run controller and governance boundary tests
+        run: |
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release \
+            --filter 'FullyQualifiedName~SimulationGovernance' \
+            --logger 'trx;LogFileName=simulation-boundary-tests.trx' \
+            --results-directory TestResults \
+            2>&1 | tee simulation-boundary-tests.log
+
+      - name: Upload boundary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-governance-boundary-${{ github.run_number }}
+          path: |
+            simulation-boundary-*.log
+            TestResults/**
+          if-no-files-found: error
+          retention-days: 14
