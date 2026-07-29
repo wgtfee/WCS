@@ -14,12 +14,11 @@ public sealed class SimulationGovernanceController : ControllerBase
 
     public SimulationGovernanceController(
         IHostEnvironment environment,
-        IConfiguration configuration,
-        SimulationScenarioCatalog catalog)
+        IConfiguration configuration)
     {
         _environment = environment;
         _configuration = configuration;
-        _catalog = catalog;
+        _catalog = SimulationHostRuntime.GetOrCreate(configuration).Catalog;
     }
 
     [HttpGet("status")]
