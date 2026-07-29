@@ -7,6 +7,11 @@ on:
       - 'src/Wcs.Simulator/ScenarioEngine/**'
       - 'src/Wcs.Simulator/Properties/AssemblyInfo.cs'
       - 'src/Wcs.Simulator.Tests/SimulationScenarioEngineTests.cs'
+      - 'src/Wcs.Simulator.Tests/SimulationScenarioControllerTests.cs'
+      - 'src/Wcs.Host/Controllers/SimulationScenarioController.cs'
+      - 'src/Wcs.Host/Controllers/SimulationGovernanceController.cs'
+      - 'src/Wcs.Host/Simulation/**'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
       - '.github/workflows/simulation-scenario-*.yml'
   workflow_dispatch:
 
@@ -15,7 +20,7 @@ permissions:
 
 jobs:
   scenario-engine:
-    name: compile DSL, clock, timeline, checkpoint, and session contracts
+    name: compile DSL, clock, Host API, run registry, checkpoint, and session contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -36,6 +41,7 @@ jobs:
         run: |
           rm -rf src/Wcs.Simulator/bin src/Wcs.Simulator/obj
           rm -rf src/Wcs.Simulator.Tests/bin src/Wcs.Simulator.Tests/obj
+          rm -rf src/Wcs.Host/bin src/Wcs.Host/obj
 
       - name: Restore
         run: dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s1-restore.log
@@ -43,23 +49,27 @@ jobs:
       - name: Build
         run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s1-build.log
 
-      - name: Run scenario engine contracts
+      - name: Run scenario engine and Host contracts
         run: |
           dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
             --configuration Release \
             --no-build \
-            --filter 'FullyQualifiedName~SimulationScenarioEngineTests' \
+            --filter 'FullyQualifiedName~SimulationScenarioEngineTests|FullyQualifiedName~SimulationScenarioControllerTests' \
             --logger 'trx;LogFileName=simulation-s1-tests.trx' \
             --results-directory TestResults \
             2>&1 | tee simulation-s1-tests.log
 
-      - name: Validate control isolation
+      - name: Validate configuration and control isolation
         shell: bash
         run: |
-          ! grep -R -E 'WriteBlock|WriteTag|CancelTask|ReleaseReservation|VehicleSelector|DispatchEngine' src/Wcs.Simulator/ScenarioEngine
+          jq -e '.SimulationScenarioEngine.MaximumTimelineItems == 100000 and .SimulationRunRegistry.MaximumRuns == 1000' src/Wcs.Host/appsettings.Simulation.json >/dev/null
+          jq -e '.SimulationScenarioEngine.MaximumTimelineItems == 500000 and .SimulationRunRegistry.MaximumRuns == 5000' src/Wcs.Host/appsettings.SimulationLoadTest.json >/dev/null
+          ! grep -R -E 'WriteBlock|WriteTag|CancelTask|ReleaseReservation|VehicleSelector|DispatchEngine' src/Wcs.Simulator/ScenarioEngine src/Wcs.Host/Controllers/SimulationScenarioController.cs src/Wcs.Host/Simulation
           grep -R -q 'MaximumTimelineItems' src/Wcs.Simulator/ScenarioEngine
+          grep -R -q 'MaximumRuns' src/Wcs.Simulator/ScenarioEngine/SimulationRunRegistry.cs
           grep -R -q 'CheckpointHash' src/Wcs.Simulator/ScenarioEngine
           grep -R -q 'SimulationSessionStatus.Paused' src/Wcs.Simulator/ScenarioEngine
+          grep -q 'return NotFound()' src/Wcs.Host/Controllers/SimulationScenarioController.cs
 
       - name: Upload S1 compiler evidence
         if: always()
