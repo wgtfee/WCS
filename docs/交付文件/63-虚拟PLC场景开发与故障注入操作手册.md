@@ -1,6 +1,12 @@
 # 63 虚拟 PLC 场景开发与故障注入操作手册
 
-## 1. 使用前提
+## 1. 阶段状态
+
+S2 功能 Head `2662a88fda8bc460cf0242a6269eeb895e81d905` 已完成首轮仓库自动化验收：两条 S2 专项成功，S2 Full Regression 31/31 exact-head 成功。当前正在对证据回填后的 Evidence Head 执行同等二次复验。
+
+该结论不代表 HIL、真实 PLC 网络协议、现场点位、电气联锁、机械安全或正式投产已验收。
+
+## 2. 使用前提
 
 必须同时满足：
 
@@ -11,16 +17,9 @@
 }
 ```
 
-环境名称必须是：
+环境名称只能是 `Simulation` 或 `SimulationLoadTest`。Production 不允许启动模拟器，其他环境的 Simulation API 返回 404。
 
-```text
-Simulation
-SimulationLoadTest
-```
-
-Production 不允许启动模拟器，其他环境的 Simulation API 返回 404。
-
-## 2. 推荐场景顺序
+## 3. 推荐场景顺序
 
 ```text
 登记受治理场景
@@ -35,7 +34,9 @@ Production 不允许启动模拟器，其他环境的 Simulation API 返回 404�
 → Checkpoint / Replay
 ```
 
-## 3. 定义 DB 块
+## 4. DB 块操作
+
+### 4.1 定义块
 
 ```json
 {
@@ -51,9 +52,9 @@ Production 不允许启动模拟器，其他环境的 Simulation API 返回 404�
 }
 ```
 
-`InitialBase64` 可省略。初始字节少于 Size 时，其余部分补零；超过 Size 时拒绝。
+`InitialBase64` 可省略。初始字节少于 Size 时补零，超过 Size 时拒绝。Target 必须符合 `PLC_NAME.DB<number>`。
 
-## 4. 写入 DB
+### 4.2 写入
 
 ```json
 {
@@ -70,9 +71,9 @@ Production 不允许启动模拟器，其他环境的 Simulation API 返回 404�
 }
 ```
 
-写入结果包含 Success、TimedOut、ErrorCode、Sequence 等字段。失败写入不改变 DB。
+写入结果包含 Success、TimedOut、ErrorCode、ErrorMessage、Sequence 等字段。失败写入不改变 DB。
 
-## 5. 读取 DB
+### 4.3 读取
 
 ```json
 {
@@ -89,9 +90,9 @@ Production 不允许启动模拟器，其他环境的 Simulation API 返回 404�
 }
 ```
 
-读取结果的 Data 在 JSON 中表现为 Base64。
+读取结果的 Data 在 JSON 中表现为 Base64。单次场景传输受 `MaximumScenarioTransferBytes` 限制。
 
-## 6. 连接切换
+## 5. 连接切换
 
 ```json
 {
@@ -100,13 +101,11 @@ Production 不允许启动模拟器，其他环境的 Simulation API 返回 404�
   "Order": 0,
   "Kind": "plc.connection.set",
   "Target": "PLC1",
-  "Payload": {
-    "Connected": false
-  }
+  "Payload": { "Connected": false }
 }
 ```
 
-连接状态可通过以下断言检查：
+连接状态断言：
 
 ```json
 {
@@ -119,20 +118,20 @@ Production 不允许启动模拟器，其他环境的 Simulation API 返回 404�
 }
 ```
 
-## 7. 注入故障
+## 6. 故障注入
 
-### 7.1 Disconnect
+统一动作格式：
 
 ```json
 {
-  "Id": "apply-disconnect",
+  "Id": "apply-fault",
   "AtMilliseconds": 1000,
   "Order": 0,
   "Kind": "plc.fault.apply",
-  "Target": "PLC1",
+  "Target": "PLC1.DB1",
   "Payload": {
-    "Id": "disconnect-01",
-    "Kind": "Disconnect",
+    "Id": "fault-01",
+    "Kind": "Timeout",
     "StartMilliseconds": 1000,
     "EndMilliseconds": 3000,
     "Offset": 0,
@@ -141,85 +140,33 @@ Production 不允许启动模拟器，其他环境的 Simulation API 返回 404�
 }
 ```
 
-### 7.2 Timeout
+支持的故障类型：
 
-```json
-{
-  "Id": "apply-timeout",
-  "AtMilliseconds": 4000,
-  "Order": 0,
-  "Kind": "plc.fault.apply",
-  "Target": "PLC1.DB1",
-  "Payload": {
-    "Id": "timeout-01",
-    "Kind": "Timeout",
-    "StartMilliseconds": 4000,
-    "EndMilliseconds": 5000,
-    "Offset": 0,
-    "Length": 1
-  }
-}
-```
+| Kind | Target | 行为 |
+|---|---|---|
+| `Disconnect` | PLC 或 DB | 返回 Disconnected，不执行真实网络操作 |
+| `Timeout` | PLC 或 DB | 返回 TimedOut，不使用真实等待 |
+| `ReadFailure` | PLC 或 DB | 读取返回失败 |
+| `WriteFailure` | PLC 或 DB | 写入返回失败且不改变 DB |
+| `Stuck` | DB | 读取返回故障建立时冻结值，底层 DB 仍可写 |
+| `BitFlip` | DB | 在指定字节和 BitIndex 上翻转读取结果 |
+| `Jitter` | DB | 按 Seed/Sequence/FaultId/字节位置产生确定性偏移 |
+| `OutOfRange` | DB | 使用 ReplacementBase64 替换指定读取范围 |
 
-Timeout 是结构化结果，不会真的等待指定毫秒数。
-
-### 7.3 Stuck
-
-```json
-{
-  "Id": "apply-stuck",
-  "AtMilliseconds": 6000,
-  "Order": 0,
-  "Kind": "plc.fault.apply",
-  "Target": "PLC1.DB1",
-  "Payload": {
-    "Id": "stuck-speed",
-    "Kind": "Stuck",
-    "StartMilliseconds": 6000,
-    "EndMilliseconds": 9000,
-    "Offset": 4,
-    "Length": 2
-  }
-}
-```
-
-Stuck 保存故障建立时的指定范围。底层 DB 后续仍可写入，但故障时间窗内读取返回冻结值。
-
-### 7.4 BitFlip
-
-```json
-{
-  "Id": "apply-bit-flip",
-  "AtMilliseconds": 10000,
-  "Order": 0,
-  "Kind": "plc.fault.apply",
-  "Target": "PLC1.DB1",
-  "Payload": {
-    "Id": "flip-ready",
-    "Kind": "BitFlip",
-    "StartMilliseconds": 10000,
-    "EndMilliseconds": 12000,
-    "Offset": 0,
-    "Length": 1,
-    "BitIndex": 0
-  }
-}
-```
-
-### 7.5 Jitter
+示例 Jitter：
 
 ```json
 {
   "Id": "apply-jitter",
-  "AtMilliseconds": 13000,
+  "AtMilliseconds": 4000,
   "Order": 0,
   "Kind": "plc.fault.apply",
   "Target": "PLC1.DB1",
   "Payload": {
     "Id": "jitter-speed",
     "Kind": "Jitter",
-    "StartMilliseconds": 13000,
-    "EndMilliseconds": 20000,
+    "StartMilliseconds": 4000,
+    "EndMilliseconds": 8000,
     "Offset": 4,
     "Length": 2,
     "JitterMinimum": -3,
@@ -228,22 +175,20 @@ Stuck 保存故障建立时的指定范围。底层 DB 后续仍可写入，但�
 }
 ```
 
-相同 Seed、Sequence 和字节位置产生相同抖动。
-
-### 7.6 OutOfRange
+示例 OutOfRange：
 
 ```json
 {
   "Id": "apply-out-of-range",
-  "AtMilliseconds": 21000,
+  "AtMilliseconds": 9000,
   "Order": 0,
   "Kind": "plc.fault.apply",
   "Target": "PLC1.DB1",
   "Payload": {
     "Id": "invalid-speed",
     "Kind": "OutOfRange",
-    "StartMilliseconds": 21000,
-    "EndMilliseconds": 23000,
+    "StartMilliseconds": 9000,
+    "EndMilliseconds": 11000,
     "Offset": 4,
     "Length": 2,
     "ReplacementBase64": "//8="
@@ -251,12 +196,12 @@ Stuck 保存故障建立时的指定范围。底层 DB 后续仍可写入，但�
 }
 ```
 
-## 8. 清除故障
+## 7. 清除故障
 
 ```json
 {
   "Id": "clear-invalid-speed",
-  "AtMilliseconds": 23001,
+  "AtMilliseconds": 11001,
   "Order": 0,
   "Kind": "plc.fault.clear",
   "Target": "invalid-speed",
@@ -264,12 +209,16 @@ Stuck 保存故障建立时的指定范围。底层 DB 后续仍可写入，但�
 }
 ```
 
-## 9. 断言 DB 字节
+故障也会在 EndMilliseconds 后自动失效。
+
+## 8. 断言
+
+基础 DB 字节断言：
 
 ```json
 {
   "Id": "speed-bytes-match",
-  "AtMilliseconds": 24000,
+  "AtMilliseconds": 12000,
   "Order": 0,
   "Kind": "plc.block.equals",
   "Target": "PLC1.DB1",
@@ -280,14 +229,12 @@ Stuck 保存故障建立时的指定范围。底层 DB 后续仍可写入，但�
 }
 ```
 
-该断言检查基础 DB 字节，不应用读取故障。故障后的读取结果应通过 `ResultStateKey` 和现有状态断言检查。
-
-## 10. 断言故障状态
+故障状态断言：
 
 ```json
 {
   "Id": "fault-cleared",
-  "AtMilliseconds": 24001,
+  "AtMilliseconds": 12001,
   "Order": 0,
   "Kind": "plc.fault.active",
   "Target": "invalid-speed",
@@ -295,7 +242,20 @@ Stuck 保存故障建立时的指定范围。底层 DB 后续仍可写入，但�
 }
 ```
 
-## 11. 只读检查 API
+`plc.block.equals` 检查基础 DB 字节，不应用读取故障。故障后的读取结果应通过 `ResultStateKey` 和现有状态断言检查。
+
+## 9. Checkpoint 与 Replay
+
+虚拟 DB、连接状态、Fault、OperationSequence 和环形 Audit 都存放在当前运行的 `SimulationStateStore`，因此会自动进入：
+
+- Checkpoint StateJson；
+- Checkpoint SHA-256；
+- Replay EvidenceHash；
+- FinalStateHash。
+
+相同场景、Manifest、Seed 和输入必须获得相同结果。
+
+## 10. 只读检查 API
 
 ```text
 GET /api/simulation/virtual-plc/runs/{runId}/status
@@ -305,9 +265,9 @@ GET /api/simulation/virtual-plc/runs/{runId}/faults
 GET /api/simulation/virtual-plc/runs/{runId}/audit?take=100
 ```
 
-检查接口通过当前运行 Checkpoint 解码状态，不修改场景。终态运行的详细结果应使用运行 Evidence 和最终 State Hash。
+检查接口通过当前运行 Checkpoint 解码状态，不修改场景。没有 Host 直接写 DB 或直接注入 Fault 的 API。
 
-## 12. 常见错误
+## 11. 常见错误
 
 | 错误 | 处理 |
 |---|---|
@@ -315,7 +275,11 @@ GET /api/simulation/virtual-plc/runs/{runId}/audit?take=100
 | Base64 非法 | 重新编码原始字节 |
 | 读写越界 | 检查 Offset + Count/Length |
 | 重复 Block/Fault Id | 使用唯一标识 |
-| 故障范围过大 | 不超过 MaximumFaultPayloadBytes |
-| ResultStateKey 写入失败 | 缩小 Count，保持在 MaximumScenarioTransferBytes 内 |
+| 故障范围过大 | 不超过 `MaximumFaultPayloadBytes` |
+| ResultStateKey 写入失败 | 缩小 Count，保持在 `MaximumScenarioTransferBytes` 内 |
 | 非批准环境 404 | 切换到 Simulation 或 SimulationLoadTest |
-| Production 启动失败 | Production 禁止 Simulator.Enabled=true |
+| Production 启动失败 | Production 禁止 `Simulator.Enabled=true` |
+
+## 12. 回退与安全
+
+回退时先关闭 `SimulationGovernance.Enabled`，再关闭 `Simulator.Enabled`。S2 只用于进程内确定性仿真，不是 S7、OPC UA 或 Modbus 网络服务端，不得连接真实控制链。
