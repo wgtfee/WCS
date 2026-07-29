@@ -40,6 +40,18 @@ public sealed class SimulationGovernanceTests
         Assert.Equal("production-denied", decision.Code);
     }
 
+    [Fact]
+    public void BoundaryGuard_DeniesProductionBeforeEvaluatingInvalidAllowList()
+    {
+        var options = EnabledOptions();
+        options.AllowedEnvironments = ["Simulation", "Production"];
+
+        var decision = SimulationBoundaryGuard.Evaluate("Production", options, simulatorEnabled: true);
+
+        Assert.False(decision.Allowed);
+        Assert.Equal("production-denied", decision.Code);
+    }
+
     [Theory]
     [InlineData(false, true, "simulator-disabled")]
     [InlineData(true, false, "governance-disabled")]
@@ -75,6 +87,17 @@ public sealed class SimulationGovernanceTests
     }
 
     [Fact]
+    public void Options_RejectUnboundedRegistryCapacity()
+    {
+        var options = EnabledOptions();
+        options.MaximumRegisteredScenarioVersions = 100_001;
+
+        var exception = Assert.Throws<InvalidOperationException>(options.Validate);
+
+        Assert.Contains("MaximumRegisteredScenarioVersions", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ValidPackage_RegistersIdempotentlyAndProducesStableHashes()
     {
         var options = EnabledOptions();
@@ -103,6 +126,21 @@ public sealed class SimulationGovernanceTests
     }
 
     [Fact]
+    public void Registry_RejectsNewVersionAfterCapacityIsReached()
+    {
+        var options = EnabledOptions();
+        options.MaximumRegisteredScenarioVersions = 1;
+        var registry = new SimulationScenarioRegistry();
+        registry.Register(BuildPackage("{\"actions\":[]}", "capacity-a"), options);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            registry.Register(BuildPackage("{\"actions\":[]}", "capacity-b"), options));
+
+        Assert.Contains("MaximumRegisteredScenarioVersions", exception.Message, StringComparison.Ordinal);
+        Assert.Single(registry.List());
+    }
+
+    [Fact]
     public void Validator_RejectsPathTraversal()
     {
         var options = EnabledOptions();
@@ -124,6 +162,19 @@ public sealed class SimulationGovernanceTests
 
         Assert.Throws<InvalidOperationException>(() =>
             SimulationScenarioValidator.Validate(package, options));
+    }
+
+    [Fact]
+    public void Validator_RejectsOversizedApprovalMetadata()
+    {
+        var options = EnabledOptions();
+        var package = BuildPackage("{\"actions\":[]}");
+        package.Manifest.ApprovedBy = new string('a', 257);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SimulationScenarioValidator.Validate(package, options));
+
+        Assert.Contains("ApprovedBy", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -174,25 +225,73 @@ public sealed class SimulationGovernanceTests
                 options));
     }
 
+    [Fact]
+    public void Evidence_RejectsOversizedValue()
+    {
+        var options = EnabledOptions();
+        options.MaximumEvidenceValueCharacters = 4;
+        var scenario = new SimulationScenarioRegistry().Register(BuildPackage("{\"actions\":[]}"), options);
+        var records = new[]
+        {
+            new SimulationEvidenceRecord(1, "governance", "value", "12345", CreatedAtUtc)
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SimulationEvidenceEnvelope.Create(
+                scenario,
+                CreatedAtUtc,
+                CreatedAtUtc.AddMinutes(1),
+                records,
+                options));
+
+        Assert.Contains("MaximumEvidenceValueCharacters", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evidence_RejectsOccurrenceOutsideInterval()
+    {
+        var options = EnabledOptions();
+        var scenario = new SimulationScenarioRegistry().Register(BuildPackage("{\"actions\":[]}"), options);
+        var records = new[]
+        {
+            new SimulationEvidenceRecord(1, "governance", "time", "invalid", CreatedAtUtc.AddMinutes(2))
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SimulationEvidenceEnvelope.Create(
+                scenario,
+                CreatedAtUtc,
+                CreatedAtUtc.AddMinutes(1),
+                records,
+                options));
+
+        Assert.Contains("inside the evidence interval", exception.Message, StringComparison.Ordinal);
+    }
+
     private static SimulationGovernanceOptions EnabledOptions() => new()
     {
         Enabled = true,
         MaximumScenarioBytes = 1024 * 1024,
+        MaximumRegisteredScenarioVersions = 100,
         MaximumEvidenceRecords = 100,
+        MaximumEvidenceValueCharacters = 4096,
         AllowedEnvironments = ["Simulation", "SimulationLoadTest"]
     };
 
-    private static SimulationScenarioPackage BuildPackage(string content)
+    private static SimulationScenarioPackage BuildPackage(
+        string content,
+        string scenarioId = "governance-smoke",
+        string version = "1.0.0")
     {
         var bytes = Encoding.UTF8.GetBytes(content);
         return new SimulationScenarioPackage(
             new SimulationScenarioManifest
             {
                 SchemaVersion = 1,
-                ScenarioId = "governance-smoke",
-                Version = "1.0.0",
+                ScenarioId = scenarioId,
+                Version = version,
                 Seed = 20260729,
-                ScenarioFile = "governance-smoke.json",
+                ScenarioFile = $"{scenarioId}.json",
                 ContentSha256 = SimulationScenarioValidator.ComputeSha256(bytes),
                 CreatedAtUtc = CreatedAtUtc,
                 Source = "repository-test",
