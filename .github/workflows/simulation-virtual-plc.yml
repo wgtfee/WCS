@@ -1,0 +1,82 @@
+name: WCS Simulation Virtual PLC
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualPlc/**'
+      - 'src/Wcs.Simulator/ScenarioEngine/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualPlcTests.cs'
+      - 'src/Wcs.Host/Simulation/**'
+      - 'src/Wcs.Host/Controllers/SimulationVirtualPlcController.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - 'docs/交付文件/61-*'
+      - 'docs/交付文件/62-*'
+      - 'docs/交付文件/63-*'
+      - '.github/workflows/simulation-virtual-plc.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  virtual-plc:
+    name: compile virtual DB memory, Host inspection, checkpoint, and replay contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Clean outputs
+        shell: bash
+        run: |
+          rm -rf src/Wcs.Simulator/bin src/Wcs.Simulator/obj
+          rm -rf src/Wcs.Simulator.Tests/bin src/Wcs.Simulator.Tests/obj
+          rm -rf src/Wcs.Host/bin src/Wcs.Host/obj
+
+      - name: Restore
+        run: dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s2-restore.log
+
+      - name: Build
+        run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s2-build.log
+
+      - name: Run virtual PLC tests
+        run: |
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualPlcTests' \
+            --logger 'trx;LogFileName=simulation-s2-virtual-plc.trx' \
+            2>&1 | tee simulation-s2-test.log
+
+      - name: Verify deterministic and isolation boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -nE 'Random\.Shared|Task\.Delay|Thread\.Sleep|System\.Net\.Sockets|S7RealClient|Snap7' src/Wcs.Simulator/VirtualPlc
+          grep -R -n 'SimulationStateStore' src/Wcs.Simulator/VirtualPlc/VirtualPlcRuntime.cs
+          grep -R -n 'MaximumBlocks' src/Wcs.Host/appsettings.Simulation.json
+          test "$(jq -r '.SimulationVirtualPlc.MaximumBlocks' src/Wcs.Host/appsettings.Simulation.json)" = '128'
+          test "$(jq -r '.SimulationVirtualPlc.MaximumBlockBytes' src/Wcs.Host/appsettings.Simulation.json)" = '65536'
+          test "$(jq -r '.SimulationVirtualPlc.MaximumScenarioTransferBytes' src/Wcs.Host/appsettings.Simulation.json)" = '1536'
+          test "$(jq -r '.SimulationVirtualPlc.MaximumAuditRecords' src/Wcs.Host/appsettings.Simulation.json)" = '1000'
+
+      - name: Upload virtual PLC evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-virtual-plc-${{ github.run_number }}
+          path: |
+            simulation-s2-*.log
+            src/Wcs.Simulator.Tests/TestResults/**
+          if-no-files-found: warn
+          retention-days: 14
