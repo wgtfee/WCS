@@ -34,7 +34,9 @@ public sealed class SimulationGovernanceController : ControllerBase
             environment = _environment.EnvironmentName,
             scenarioDirectory = options.ScenarioDirectory,
             maximumScenarioBytes = options.MaximumScenarioBytes,
+            maximumRegisteredScenarioVersions = options.MaximumRegisteredScenarioVersions,
             maximumEvidenceRecords = options.MaximumEvidenceRecords,
+            maximumEvidenceValueCharacters = options.MaximumEvidenceValueCharacters,
             registeredScenarioVersions = Registry.List().Count,
             productionAllowed = false,
             controlWritesAllowed = false,
@@ -79,14 +81,10 @@ public sealed class SimulationGovernanceController : ControllerBase
         }
     }
 
-    private SimulationGovernanceOptions GetOptions()
-    {
-        var options = _configuration
+    private SimulationGovernanceOptions GetOptions() =>
+        _configuration
             .GetSection(SimulationGovernanceOptions.SectionName)
             .Get<SimulationGovernanceOptions>() ?? new SimulationGovernanceOptions();
-        options.Validate();
-        return options;
-    }
 
     private SimulationAccessDecision GetAccessDecision() =>
         SimulationBoundaryGuard.Evaluate(
