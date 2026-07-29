@@ -16,24 +16,32 @@ public sealed class SimulationGovernanceOptions
     public bool Enabled { get; set; }
     public string ScenarioDirectory { get; set; } = "data/simulation-scenarios";
     public int MaximumScenarioBytes { get; set; } = 1_048_576;
+    public int MaximumRegisteredScenarioVersions { get; set; } = 10_000;
     public int MaximumEvidenceRecords { get; set; } = 10_000;
+    public int MaximumEvidenceValueCharacters { get; set; } = 4_096;
     public string[] AllowedEnvironments { get; set; } = ["Simulation", "SimulationLoadTest"];
 
     public void Validate()
     {
         if (MaximumScenarioBytes is < 1 or > 16 * 1024 * 1024)
             throw new InvalidOperationException("SimulationGovernance.MaximumScenarioBytes must be between 1 byte and 16 MB.");
+        if (MaximumRegisteredScenarioVersions is < 1 or > 100_000)
+            throw new InvalidOperationException("SimulationGovernance.MaximumRegisteredScenarioVersions must be between 1 and 100,000.");
         if (MaximumEvidenceRecords is < 1 or > 1_000_000)
             throw new InvalidOperationException("SimulationGovernance.MaximumEvidenceRecords must be between 1 and 1,000,000.");
-        if (string.IsNullOrWhiteSpace(ScenarioDirectory))
-            throw new InvalidOperationException("SimulationGovernance.ScenarioDirectory is required.");
-        if (AllowedEnvironments.Length == 0)
+        if (MaximumEvidenceValueCharacters is < 1 or > 1_048_576)
+            throw new InvalidOperationException("SimulationGovernance.MaximumEvidenceValueCharacters must be between 1 and 1,048,576.");
+        if (string.IsNullOrWhiteSpace(ScenarioDirectory) || ScenarioDirectory.Length > 1_024)
+            throw new InvalidOperationException("SimulationGovernance.ScenarioDirectory is required and cannot exceed 1,024 characters.");
+        if (AllowedEnvironments is null || AllowedEnvironments.Length == 0)
             throw new InvalidOperationException("SimulationGovernance.AllowedEnvironments cannot be empty.");
         if (AllowedEnvironments.Any(static environment =>
                 string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Production can never be an allowed simulation environment.");
         if (AllowedEnvironments.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("SimulationGovernance.AllowedEnvironments cannot contain empty values.");
+        if (AllowedEnvironments.Any(static environment => environment.Length > 128))
+            throw new InvalidOperationException("SimulationGovernance.AllowedEnvironments values cannot exceed 128 characters.");
         if (AllowedEnvironments.Distinct(StringComparer.OrdinalIgnoreCase).Count() != AllowedEnvironments.Length)
             throw new InvalidOperationException("SimulationGovernance.AllowedEnvironments must be unique.");
     }
@@ -75,7 +83,6 @@ public static class SimulationBoundaryGuard
         bool simulatorEnabled)
     {
         ArgumentNullException.ThrowIfNull(options);
-        options.Validate();
 
         if (string.Equals(environmentName, "Production", StringComparison.OrdinalIgnoreCase))
             return new(false, "production-denied", "Simulation is never available in Production.");
@@ -83,9 +90,11 @@ public static class SimulationBoundaryGuard
             return new(false, "simulator-disabled", "Simulator.Enabled is false.");
         if (!options.Enabled)
             return new(false, "governance-disabled", "SimulationGovernance.Enabled is false.");
-        if (!options.AllowedEnvironments.Contains(environmentName, StringComparer.OrdinalIgnoreCase))
+        if (options.AllowedEnvironments is null ||
+            !options.AllowedEnvironments.Contains(environmentName, StringComparer.OrdinalIgnoreCase))
             return new(false, "environment-denied", $"Environment '{environmentName}' is not approved for simulation.");
 
+        options.Validate();
         return new(true, "allowed", "Simulation governance access is allowed.");
     }
 }
@@ -93,6 +102,7 @@ public static class SimulationBoundaryGuard
 public static partial class SimulationScenarioValidator
 {
     private const int Sha256HexLength = 64;
+    private const int MaximumMetadataCharacters = 256;
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex IdentifierRegex();
@@ -102,6 +112,7 @@ public static partial class SimulationScenarioValidator
         SimulationGovernanceOptions options,
         DateTimeOffset? registeredAtUtc = null)
     {
+        ArgumentNullException.ThrowIfNull(package);
         ArgumentNullException.ThrowIfNull(package.Manifest);
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
@@ -116,10 +127,8 @@ public static partial class SimulationScenarioValidator
             throw new InvalidOperationException("Simulation scenario Seed must be non-zero and explicitly versioned.");
         if (manifest.CreatedAtUtc == default)
             throw new InvalidOperationException("Simulation scenario CreatedAtUtc is required.");
-        if (string.IsNullOrWhiteSpace(manifest.Source))
-            throw new InvalidOperationException("Simulation scenario Source is required.");
-        if (string.IsNullOrWhiteSpace(manifest.ApprovedBy))
-            throw new InvalidOperationException("Simulation scenario ApprovedBy is required.");
+        ValidateMetadata(manifest.Source, nameof(manifest.Source));
+        ValidateMetadata(manifest.ApprovedBy, nameof(manifest.ApprovedBy));
         if (manifest.ApprovedAtUtc == default)
             throw new InvalidOperationException("Simulation scenario ApprovedAtUtc is required.");
         if (manifest.ApprovedAtUtc < manifest.CreatedAtUtc)
@@ -147,6 +156,9 @@ public static partial class SimulationScenarioValidator
     public static string ComputeManifestHash(SimulationScenarioManifest manifest, string normalizedContentSha256)
     {
         ArgumentNullException.ThrowIfNull(manifest);
+        if (!IsSha256(normalizedContentSha256))
+            throw new InvalidOperationException("A normalized SHA-256 is required to compute the simulation manifest hash.");
+
         var canonical = string.Join('\n',
             manifest.SchemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture),
             manifest.ScenarioId.Trim(),
@@ -164,19 +176,31 @@ public static partial class SimulationScenarioValidator
     public static string ComputeSha256(ReadOnlySpan<byte> content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 
-    private static void ValidateIdentifier(string value, string name)
+    private static void ValidateIdentifier(string? value, string name)
     {
         if (string.IsNullOrWhiteSpace(value) || !IdentifierRegex().IsMatch(value))
             throw new InvalidOperationException($"Simulation scenario {name} contains unsupported characters.");
     }
 
-    private static bool IsSha256(string value) =>
-        value.Length == Sha256HexLength && value.All(Uri.IsHexDigit);
+    private static void ValidateMetadata(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"Simulation scenario {name} is required.");
+        if (value.Length > MaximumMetadataCharacters)
+            throw new InvalidOperationException($"Simulation scenario {name} cannot exceed {MaximumMetadataCharacters} characters.");
+    }
 
-    private static void ValidateRelativePath(string value)
+    private static bool IsSha256(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Length == Sha256HexLength &&
+        value.All(Uri.IsHexDigit);
+
+    private static void ValidateRelativePath(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             throw new InvalidOperationException("Simulation scenario file is required.");
+        if (value.Length > 1_024)
+            throw new InvalidOperationException("Simulation scenario file cannot exceed 1,024 characters.");
         if (Path.IsPathRooted(value))
             throw new InvalidOperationException("Simulation scenario file must be relative.");
 
@@ -196,6 +220,7 @@ public sealed class SimulationScenarioRegistry
 {
     private readonly ConcurrentDictionary<string, RegisteredSimulationScenario> _versions =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _gate = new();
 
     public RegisteredSimulationScenario Register(
         SimulationScenarioPackage package,
@@ -204,14 +229,27 @@ public sealed class SimulationScenarioRegistry
     {
         var candidate = SimulationScenarioValidator.Validate(package, options, registeredAtUtc);
         var key = $"{candidate.ScenarioId}|{candidate.Version}";
-        var registered = _versions.GetOrAdd(key, candidate);
 
-        if (!string.Equals(registered.ManifestHash, candidate.ManifestHash, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(registered.ContentSha256, candidate.ContentSha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                $"Simulation scenario {candidate.ScenarioId}@{candidate.Version} is immutable and already has different evidence hashes.");
+        lock (_gate)
+        {
+            if (_versions.TryGetValue(key, out var existing))
+            {
+                if (!string.Equals(existing.ManifestHash, candidate.ManifestHash, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(existing.ContentSha256, candidate.ContentSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        $"Simulation scenario {candidate.ScenarioId}@{candidate.Version} is immutable and already has different evidence hashes.");
 
-        return registered;
+                return existing;
+            }
+
+            if (_versions.Count >= options.MaximumRegisteredScenarioVersions)
+                throw new InvalidOperationException("Simulation scenario registry has reached MaximumRegisteredScenarioVersions.");
+
+            if (!_versions.TryAdd(key, candidate))
+                throw new InvalidOperationException("Simulation scenario registry could not atomically register the version.");
+
+            return candidate;
+        }
     }
 
     public IReadOnlyCollection<RegisteredSimulationScenario> List() =>
@@ -272,6 +310,9 @@ public sealed record SimulationEvidenceEnvelope(
     IReadOnlyList<SimulationEvidenceRecord> Records,
     string EvidenceHash)
 {
+    private const int MaximumCategoryCharacters = 128;
+    private const int MaximumNameCharacters = 256;
+
     public static SimulationEvidenceEnvelope Create(
         RegisteredSimulationScenario scenario,
         DateTimeOffset startedAtUtc,
@@ -284,12 +325,32 @@ public sealed record SimulationEvidenceEnvelope(
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
 
+        if (startedAtUtc == default || finishedAtUtc == default)
+            throw new InvalidOperationException("Simulation evidence start and finish timestamps are required.");
         if (finishedAtUtc < startedAtUtc)
             throw new InvalidOperationException("Simulation evidence finish time cannot predate start time.");
 
-        var materialized = records.OrderBy(static item => item.Sequence).ToArray();
-        if (materialized.Length > options.MaximumEvidenceRecords)
+        var unsorted = records.ToArray();
+        if (unsorted.Length > options.MaximumEvidenceRecords)
             throw new InvalidOperationException("Simulation evidence exceeds MaximumEvidenceRecords.");
+        if (unsorted.Any(static item => item is null))
+            throw new InvalidOperationException("Simulation evidence cannot contain null records.");
+
+        foreach (var item in unsorted)
+        {
+            if (item.Sequence < 0)
+                throw new InvalidOperationException("Simulation evidence sequence numbers cannot be negative.");
+            if (string.IsNullOrWhiteSpace(item.Category) || item.Category.Length > MaximumCategoryCharacters)
+                throw new InvalidOperationException($"Simulation evidence Category is required and cannot exceed {MaximumCategoryCharacters} characters.");
+            if (string.IsNullOrWhiteSpace(item.Name) || item.Name.Length > MaximumNameCharacters)
+                throw new InvalidOperationException($"Simulation evidence Name is required and cannot exceed {MaximumNameCharacters} characters.");
+            if (item.Value is null || item.Value.Length > options.MaximumEvidenceValueCharacters)
+                throw new InvalidOperationException("Simulation evidence Value exceeds MaximumEvidenceValueCharacters.");
+            if (item.OccurredAtUtc == default || item.OccurredAtUtc < startedAtUtc || item.OccurredAtUtc > finishedAtUtc)
+                throw new InvalidOperationException("Simulation evidence occurrence time must be inside the evidence interval.");
+        }
+
+        var materialized = unsorted.OrderBy(static item => item.Sequence).ToArray();
         if (materialized.Select(static item => item.Sequence).Distinct().Count() != materialized.Length)
             throw new InvalidOperationException("Simulation evidence sequence numbers must be unique.");
 
