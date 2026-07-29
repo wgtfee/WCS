@@ -6,7 +6,7 @@ on:
     paths:
       - 'src/Wcs.Simulator/VirtualPlc/**'
       - 'src/Wcs.Simulator/ScenarioEngine/**'
-      - 'src/Wcs.Simulator.Tests/SimulationVirtualPlcTests.cs'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualPlc*.cs'
       - 'src/Wcs.Host/Simulation/**'
       - 'src/Wcs.Host/Controllers/SimulationVirtualPlcController.cs'
       - 'src/Wcs.Host/appsettings.Simulation*.json'
@@ -50,11 +50,11 @@ jobs:
       - name: Build
         run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s2-build.log
 
-      - name: Run virtual PLC tests
+      - name: Run virtual PLC and Host controller tests
         run: |
           dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
             --configuration Release --no-build \
-            --filter 'FullyQualifiedName~SimulationVirtualPlcTests' \
+            --filter 'FullyQualifiedName~SimulationVirtualPlc' \
             --logger 'trx;LogFileName=simulation-s2-virtual-plc.trx' \
             2>&1 | tee simulation-s2-test.log
 
@@ -64,7 +64,7 @@ jobs:
           set -euo pipefail
           ! grep -R -nE 'Random\.Shared|Task\.Delay|Thread\.Sleep|System\.Net\.Sockets|S7RealClient|Snap7' src/Wcs.Simulator/VirtualPlc
           grep -R -n 'SimulationStateStore' src/Wcs.Simulator/VirtualPlc/VirtualPlcRuntime.cs
-          grep -R -n 'MaximumBlocks' src/Wcs.Host/appsettings.Simulation.json
+          grep -R -n 'return NotFound()' src/Wcs.Host/Controllers/SimulationVirtualPlcController.cs
           test "$(jq -r '.SimulationVirtualPlc.MaximumBlocks' src/Wcs.Host/appsettings.Simulation.json)" = '128'
           test "$(jq -r '.SimulationVirtualPlc.MaximumBlockBytes' src/Wcs.Host/appsettings.Simulation.json)" = '65536'
           test "$(jq -r '.SimulationVirtualPlc.MaximumScenarioTransferBytes' src/Wcs.Host/appsettings.Simulation.json)" = '1536'
