@@ -11,22 +11,15 @@ public sealed class SimulationScenarioController : ControllerBase
 {
     private readonly IHostEnvironment _environment;
     private readonly IConfiguration _configuration;
-    private readonly SimulationScenarioCatalog _catalog;
-    private readonly SimulationScenarioEngine _engine;
-    private readonly SimulationRunRegistry _runs;
+    private readonly SimulationHostRuntime _runtime;
 
     public SimulationScenarioController(
         IHostEnvironment environment,
-        IConfiguration configuration,
-        SimulationScenarioCatalog catalog,
-        SimulationScenarioEngine engine,
-        SimulationRunRegistry runs)
+        IConfiguration configuration)
     {
         _environment = environment;
         _configuration = configuration;
-        _catalog = catalog;
-        _engine = engine;
-        _runs = runs;
+        _runtime = SimulationHostRuntime.GetOrCreate(configuration);
     }
 
     [HttpGet("runs")]
@@ -34,7 +27,7 @@ public sealed class SimulationScenarioController : ControllerBase
     {
         if (!GetAccessDecision().Allowed)
             return NotFound();
-        return Ok(_runs.List());
+        return Ok(_runtime.Runs.List());
     }
 
     [HttpGet("runs/{runId:guid}")]
@@ -42,7 +35,7 @@ public sealed class SimulationScenarioController : ControllerBase
     {
         if (!GetAccessDecision().Allowed)
             return NotFound();
-        return _runs.TryGet(runId, out var snapshot)
+        return _runtime.Runs.TryGet(runId, out var snapshot)
             ? Ok(snapshot)
             : NotFound();
     }
@@ -56,7 +49,7 @@ public sealed class SimulationScenarioController : ControllerBase
         try
         {
             var (scenario, definition) = ResolveScenario(request);
-            return Ok(_runs.Create(
+            return Ok(_runtime.Runs.Create(
                 scenario,
                 definition,
                 request.SpeedFactor,
@@ -81,7 +74,7 @@ public sealed class SimulationScenarioController : ControllerBase
     {
         if (!GetAccessDecision().Allowed)
             return NotFound();
-        return await ExecuteRunCommand(() => _runs.StepAsync(runId, cancellationToken));
+        return await ExecuteRunCommand(() => _runtime.Runs.StepAsync(runId, cancellationToken));
     }
 
     [HttpPost("runs/{runId:guid}/advance")]
@@ -93,7 +86,7 @@ public sealed class SimulationScenarioController : ControllerBase
         if (!GetAccessDecision().Allowed)
             return NotFound();
         return await ExecuteRunCommand(() =>
-            _runs.AdvanceAsync(runId, request.TargetOffsetMilliseconds, cancellationToken));
+            _runtime.Runs.AdvanceAsync(runId, request.TargetOffsetMilliseconds, cancellationToken));
     }
 
     [HttpPost("runs/{runId:guid}/run")]
@@ -101,7 +94,7 @@ public sealed class SimulationScenarioController : ControllerBase
     {
         if (!GetAccessDecision().Allowed)
             return NotFound();
-        return await ExecuteRunCommand(() => _runs.RunToCompletionAsync(runId, cancellationToken));
+        return await ExecuteRunCommand(() => _runtime.Runs.RunToCompletionAsync(runId, cancellationToken));
     }
 
     [HttpPost("runs/{runId:guid}/pause")]
@@ -109,7 +102,7 @@ public sealed class SimulationScenarioController : ControllerBase
     {
         if (!GetAccessDecision().Allowed)
             return NotFound();
-        return ExecuteRunCommand(() => _runs.Pause(runId));
+        return ExecuteRunCommand(() => _runtime.Runs.Pause(runId));
     }
 
     [HttpPost("runs/{runId:guid}/resume")]
@@ -117,7 +110,7 @@ public sealed class SimulationScenarioController : ControllerBase
     {
         if (!GetAccessDecision().Allowed)
             return NotFound();
-        return ExecuteRunCommand(() => _runs.Resume(runId));
+        return ExecuteRunCommand(() => _runtime.Runs.Resume(runId));
     }
 
     [HttpPost("runs/{runId:guid}/speed")]
@@ -125,7 +118,7 @@ public sealed class SimulationScenarioController : ControllerBase
     {
         if (!GetAccessDecision().Allowed)
             return NotFound();
-        return ExecuteRunCommand(() => _runs.SetSpeed(runId, request.SpeedFactor));
+        return ExecuteRunCommand(() => _runtime.Runs.SetSpeed(runId, request.SpeedFactor));
     }
 
     [HttpPost("runs/{runId:guid}/cancel")]
@@ -133,7 +126,7 @@ public sealed class SimulationScenarioController : ControllerBase
     {
         if (!GetAccessDecision().Allowed)
             return NotFound();
-        return ExecuteRunCommand(() => _runs.Cancel(runId));
+        return ExecuteRunCommand(() => _runtime.Runs.Cancel(runId));
     }
 
     [HttpGet("runs/{runId:guid}/checkpoint")]
@@ -143,7 +136,7 @@ public sealed class SimulationScenarioController : ControllerBase
             return NotFound();
         try
         {
-            return Ok(_runs.CreateCheckpoint(runId));
+            return Ok(_runtime.Runs.CreateCheckpoint(runId));
         }
         catch (KeyNotFoundException)
         {
@@ -166,7 +159,7 @@ public sealed class SimulationScenarioController : ControllerBase
         try
         {
             var (scenario, definition) = ResolveScenario(request);
-            var comparison = await _engine.ReplayTwiceAsync(
+            var comparison = await _runtime.Engine.ReplayTwiceAsync(
                 scenario,
                 definition,
                 cancellationToken);
@@ -196,7 +189,7 @@ public sealed class SimulationScenarioController : ControllerBase
             string.IsNullOrWhiteSpace(request.ContentBase64))
             throw new InvalidOperationException("ScenarioId, Version and ContentBase64 are required.");
 
-        if (!_catalog.TryGet(request.ScenarioId, request.Version, out var scenario))
+        if (!_runtime.Catalog.TryGet(request.ScenarioId, request.Version, out var scenario))
             throw new KeyNotFoundException("The governed scenario version was not found.");
 
         var content = Convert.FromBase64String(request.ContentBase64);
@@ -204,8 +197,7 @@ public sealed class SimulationScenarioController : ControllerBase
         if (!string.Equals(contentHash, scenario.ContentSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Scenario execution content SHA-256 does not match the governed version.");
 
-        var options = GetEngineOptions();
-        var definition = SimulationScenarioDocument.Parse(content, options);
+        var definition = SimulationScenarioDocument.Parse(content, _runtime.EngineOptions);
         return (scenario, definition);
     }
 
@@ -241,11 +233,6 @@ public sealed class SimulationScenarioController : ControllerBase
             return Conflict(new { error = exception.Message });
         }
     }
-
-    private SimulationScenarioEngineOptions GetEngineOptions() =>
-        _configuration
-            .GetSection("SimulationScenarioEngine")
-            .Get<SimulationScenarioEngineOptions>() ?? new SimulationScenarioEngineOptions();
 
     private SimulationAccessDecision GetAccessDecision() =>
         SimulationBoundaryGuard.Evaluate(
