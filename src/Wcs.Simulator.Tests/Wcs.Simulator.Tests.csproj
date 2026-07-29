@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Wcs.Simulator\Wcs.Simulator.csproj" />
+    <ProjectReference Include="..\Wcs.Host\Wcs.Host.csproj" />
   </ItemGroup>
 
 </Project>
