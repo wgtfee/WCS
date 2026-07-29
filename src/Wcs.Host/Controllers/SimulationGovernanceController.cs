@@ -1,28 +1,23 @@
 namespace Wcs.Host.Controllers;
 
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using Wcs.Simulator.Governance;
 
 [ApiController]
 [Route("api/simulation/governance")]
 public sealed class SimulationGovernanceController : ControllerBase
 {
+    private static readonly SimulationScenarioRegistry Registry = new();
+
     private readonly IHostEnvironment _environment;
     private readonly IConfiguration _configuration;
-    private readonly IOptions<SimulationGovernanceOptions> _options;
-    private readonly SimulationScenarioRegistry _registry;
 
     public SimulationGovernanceController(
         IHostEnvironment environment,
-        IConfiguration configuration,
-        IOptions<SimulationGovernanceOptions> options,
-        SimulationScenarioRegistry registry)
+        IConfiguration configuration)
     {
         _environment = environment;
         _configuration = configuration;
-        _options = options;
-        _registry = registry;
     }
 
     [HttpGet("status")]
@@ -32,7 +27,7 @@ public sealed class SimulationGovernanceController : ControllerBase
         if (!decision.Allowed)
             return NotFound();
 
-        var options = _options.Value;
+        var options = GetOptions();
         return Ok(new
         {
             enabled = true,
@@ -40,7 +35,7 @@ public sealed class SimulationGovernanceController : ControllerBase
             scenarioDirectory = options.ScenarioDirectory,
             maximumScenarioBytes = options.MaximumScenarioBytes,
             maximumEvidenceRecords = options.MaximumEvidenceRecords,
-            registeredScenarioVersions = _registry.List().Count,
+            registeredScenarioVersions = Registry.List().Count,
             productionAllowed = false,
             controlWritesAllowed = false,
             decision.Code
@@ -54,7 +49,7 @@ public sealed class SimulationGovernanceController : ControllerBase
         if (!decision.Allowed)
             return NotFound();
 
-        return Ok(_registry.List());
+        return Ok(Registry.List());
     }
 
     [HttpPost("scenarios/validate")]
@@ -69,9 +64,9 @@ public sealed class SimulationGovernanceController : ControllerBase
         try
         {
             var content = Convert.FromBase64String(request.ContentBase64);
-            var registered = _registry.Register(
+            var registered = Registry.Register(
                 new SimulationScenarioPackage(request.Manifest, content),
-                _options.Value);
+                GetOptions());
             return Ok(registered);
         }
         catch (FormatException)
@@ -84,10 +79,19 @@ public sealed class SimulationGovernanceController : ControllerBase
         }
     }
 
+    private SimulationGovernanceOptions GetOptions()
+    {
+        var options = _configuration
+            .GetSection(SimulationGovernanceOptions.SectionName)
+            .Get<SimulationGovernanceOptions>() ?? new SimulationGovernanceOptions();
+        options.Validate();
+        return options;
+    }
+
     private SimulationAccessDecision GetAccessDecision() =>
         SimulationBoundaryGuard.Evaluate(
             _environment.EnvironmentName,
-            _options.Value,
+            GetOptions(),
             _configuration.GetSection("Simulator").GetValue<bool>("Enabled"));
 }
 
