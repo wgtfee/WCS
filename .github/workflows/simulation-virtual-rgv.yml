@@ -1,0 +1,79 @@
+name: WCS Simulation Virtual RGV
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualRgv/**'
+      - 'src/Wcs.Simulator/ScenarioEngine/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualRgv*.cs'
+      - 'src/Wcs.Host/Simulation/**'
+      - 'src/Wcs.Host/Controllers/SimulationVirtualRgvController.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-virtual-rgv.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  virtual-rgv:
+    name: compile vehicle, segment, Host inspection, checkpoint, and replay contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Clean outputs
+        shell: bash
+        run: |
+          rm -rf src/Wcs.Simulator/bin src/Wcs.Simulator/obj
+          rm -rf src/Wcs.Simulator.Tests/bin src/Wcs.Simulator.Tests/obj
+          rm -rf src/Wcs.Host/bin src/Wcs.Host/obj
+
+      - name: Restore
+        run: dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s3-restore.log
+
+      - name: Build
+        run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s3-build.log
+
+      - name: Run virtual RGV and Host controller tests
+        run: |
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualRgv' \
+            --logger 'trx;LogFileName=simulation-s3-virtual-rgv.trx' \
+            2>&1 | tee simulation-s3-test.log
+
+      - name: Verify bounded state and isolation boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -nE 'Random\.Shared|Task\.Delay|Thread\.Sleep|System\.Net\.Sockets|IPlcClient|IPlcConnection|PlcWriter' src/Wcs.Simulator/VirtualRgv
+          grep -R -n 'SimulationStateStore' src/Wcs.Simulator/VirtualRgv/VirtualRgvRuntime.cs
+          grep -R -n 'TransportVehicleSnapshot' src/Wcs.Simulator/VirtualRgv
+          test "$(jq -r '.SimulationVirtualRgv.MaximumVehicles' src/Wcs.Host/appsettings.Simulation.json)" = '256'
+          test "$(jq -r '.SimulationVirtualRgv.MaximumSegments' src/Wcs.Host/appsettings.Simulation.json)" = '2048'
+          test "$(jq -r '.SimulationVirtualRgv.MaximumRouteSegments' src/Wcs.Host/appsettings.Simulation.json)" = '256'
+          test "$(jq -r '.SimulationVirtualRgv.MaximumAuditRecords' src/Wcs.Host/appsettings.Simulation.json)" = '5000'
+
+      - name: Upload virtual RGV evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-virtual-rgv-${{ github.run_number }}
+          path: |
+            simulation-s3-*.log
+            src/Wcs.Simulator.Tests/TestResults/**
+          if-no-files-found: warn
+          retention-days: 14
