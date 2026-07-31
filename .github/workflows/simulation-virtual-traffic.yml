@@ -73,7 +73,7 @@ jobs:
           ! grep -R -nE 'Random\.Shared|Task\.Delay|Thread\.Sleep|System\.Net\.Sockets|IPlcClient|IPlcConnection|PlcWriter|CommandBus|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager' src/Wcs.Simulator/VirtualTraffic
           grep -R -n 'SimulationStateStore' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficRuntime.cs
           grep -R -n 'FindStronglyConnectedComponents' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficRuntime.cs
-          grep -R -n 'SimulationVirtualTraffic' src/Wcs.Host/Simulation/SimulationHostRuntime.cs
+          grep -R -n 'VirtualTrafficOptions' src/Wcs.Host/Simulation/SimulationHostRuntime.cs
           test "$(jq -r '.SimulationVirtualTraffic.MaximumZones' src/Wcs.Host/appsettings.Simulation.json)" = '256'
           test "$(jq -r '.SimulationVirtualTraffic.MaximumReservations' src/Wcs.Host/appsettings.Simulation.json)" = '2048'
           test "$(jq -r '.SimulationVirtualTraffic.MaximumWaitingRequests' src/Wcs.Host/appsettings.Simulation.json)" = '2048'
