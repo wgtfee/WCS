@@ -33,17 +33,22 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore and build
+        shell: bash
         run: |
+          set -euo pipefail
           dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s4-deadlock-restore.log
           dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s4-deadlock-build.log
 
       - name: Run deadlock, replay, and checkpoint tests
+        shell: bash
         run: |
+          set -euo pipefail
           dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
             --configuration Release --no-build \
             --filter 'FullyQualifiedName~SimulationVirtualTrafficTests' \
             --logger 'trx;LogFileName=simulation-s4-deadlock.trx' \
             2>&1 | tee simulation-s4-deadlock-test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+9|Passed:[[:space:]]+9.*Total:[[:space:]]+9' simulation-s4-deadlock-test.log
 
       - name: Verify deterministic policy and no production mutation path
         shell: bash
