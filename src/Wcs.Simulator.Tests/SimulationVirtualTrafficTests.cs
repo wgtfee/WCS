@@ -136,7 +136,6 @@ public sealed class SimulationVirtualTrafficTests
     {
         var engineOptions = EngineOptions();
         var state = new SimulationStateStore(engineOptions);
-        var rgv = new VirtualRgvRuntime(state, RgvOptions());
         var traffic = new VirtualTrafficRuntime(state, TrafficOptions(), RgvOptions());
         PrepareTwoZoneVehicles(traffic);
         traffic.RequestReservation("RGV1", "S1", 10, 10_000, 0, StartTimeUtc);
@@ -145,15 +144,17 @@ public sealed class SimulationVirtualTrafficTests
         traffic.RequestReservation("RGV2", "S1", 20, 10_000, 10, StartTimeUtc);
         traffic.DetectDeadlocks(20, StartTimeUtc);
 
-        var restoredState = SimulationStateStore.FromCanonicalJson(state.ToCanonicalJson(), engineOptions);
+        var canonical = state.ToCanonicalJson();
+        var restoredState = SimulationStateStore.FromCanonicalJson(canonical, engineOptions);
         var restored = new VirtualTrafficRuntime(restoredState, TrafficOptions(), RgvOptions());
 
-        Assert.Equal(traffic.ListZones(), restored.ListZones());
-        Assert.Equal(traffic.ListReservations(false, 20), restored.ListReservations(false, 20));
-        Assert.Equal(traffic.ListWaitingRequests(false), restored.ListWaitingRequests(false));
-        Assert.Equal(traffic.ListWaitEdges(), restored.ListWaitEdges());
-        Assert.Equal(traffic.ListDeadlocks(false), restored.ListDeadlocks(false));
-        Assert.Equal(traffic.ListAudit(), restored.ListAudit());
+        Assert.Equal(canonical, restoredState.ToCanonicalJson());
+        Assert.Equal(JsonSerializer.Serialize(traffic.ListZones()), JsonSerializer.Serialize(restored.ListZones()));
+        Assert.Equal(JsonSerializer.Serialize(traffic.ListReservations(false, 20)), JsonSerializer.Serialize(restored.ListReservations(false, 20)));
+        Assert.Equal(JsonSerializer.Serialize(traffic.ListWaitingRequests(false)), JsonSerializer.Serialize(restored.ListWaitingRequests(false)));
+        Assert.Equal(JsonSerializer.Serialize(traffic.ListWaitEdges()), JsonSerializer.Serialize(restored.ListWaitEdges()));
+        Assert.Equal(JsonSerializer.Serialize(traffic.ListDeadlocks(false)), JsonSerializer.Serialize(restored.ListDeadlocks(false)));
+        Assert.Equal(JsonSerializer.Serialize(traffic.ListAudit()), JsonSerializer.Serialize(restored.ListAudit()));
         Assert.Equal(state.ComputeHash(), restoredState.ComputeHash());
     }
 
@@ -196,24 +197,27 @@ public sealed class SimulationVirtualTrafficTests
     }
 
     [Fact]
-    public void Runtime_EnforcesZoneAndReservationCapacity()
+    public void Runtime_EnforcesZoneAndWaitingRequestCapacity()
     {
         var trafficOptions = TrafficOptions();
         trafficOptions.MaximumZones = 1;
         trafficOptions.MaximumReservations = 1;
+        trafficOptions.MaximumWaitingRequests = 1;
         var state = new SimulationStateStore(EngineOptions());
         var rgv = new VirtualRgvRuntime(state, RgvOptions());
         DefineSegment(rgv, "S1", "N1", "N2");
         DefineSegment(rgv, "S2", "N2", "N3");
         DefineVehicle(rgv, "RGV1", "N1");
         DefineVehicle(rgv, "RGV2", "N2");
+        DefineVehicle(rgv, "RGV3", "N3");
         var traffic = new VirtualTrafficRuntime(state, trafficOptions, RgvOptions());
         DefineZone(traffic, "Z1", "S1");
 
         Assert.Throws<InvalidOperationException>(() => DefineZone(traffic, "Z2", "S2"));
-        traffic.RequestReservation("RGV1", "S1", 10, 10_000, 0, StartTimeUtc);
+        Assert.True(traffic.RequestReservation("RGV1", "S1", 10, 10_000, 0, StartTimeUtc).Granted);
+        Assert.False(traffic.RequestReservation("RGV2", "S1", 20, 10_000, 1, StartTimeUtc).Granted);
         Assert.Throws<InvalidOperationException>(() =>
-            traffic.RequestReservation("RGV2", "S1", 20, 10_000, 1, StartTimeUtc));
+            traffic.RequestReservation("RGV3", "S1", 30, 10_000, 2, StartTimeUtc));
     }
 
     private static (VirtualTrafficRuntime Traffic, SimulationStateStore State) Runtime()
