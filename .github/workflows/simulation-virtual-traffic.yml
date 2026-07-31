@@ -38,23 +38,33 @@ jobs:
       - name: Clean outputs
         shell: bash
         run: |
+          set -euo pipefail
           rm -rf src/Wcs.Simulator/bin src/Wcs.Simulator/obj
           rm -rf src/Wcs.Simulator.Tests/bin src/Wcs.Simulator.Tests/obj
           rm -rf src/Wcs.Host/bin src/Wcs.Host/obj
 
       - name: Restore
-        run: dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s4-restore.log
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s4-restore.log
 
       - name: Build
-        run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s4-build.log
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s4-build.log
 
       - name: Run virtual traffic and Host controller tests
+        shell: bash
         run: |
+          set -euo pipefail
           dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
             --configuration Release --no-build \
             --filter 'FullyQualifiedName~SimulationVirtualTraffic' \
             --logger 'trx;LogFileName=simulation-s4-virtual-traffic.trx' \
             2>&1 | tee simulation-s4-test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+12|Passed:[[:space:]]+12.*Total:[[:space:]]+12' simulation-s4-test.log
 
       - name: Verify bounded state and isolation boundaries
         shell: bash
