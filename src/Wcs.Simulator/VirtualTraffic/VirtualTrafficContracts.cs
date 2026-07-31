@@ -5,7 +5,7 @@ public sealed class VirtualTrafficOptions
     public const string SectionName = "SimulationVirtualTraffic";
 
     public int MaximumZones { get; set; } = 256;
-    public int MaximumSegmentsPerZone { get; set; } = 64;
+    public int MaximumSegmentsPerZone { get; set; } = 16;
     public int MaximumReservations { get; set; } = 2_048;
     public int MaximumWaitingRequests { get; set; } = 2_048;
     public int MaximumDeadlocks { get; set; } = 512;
@@ -18,8 +18,8 @@ public sealed class VirtualTrafficOptions
     {
         if (MaximumZones is < 1 or > 100_000)
             throw new InvalidOperationException("SimulationVirtualTraffic.MaximumZones must be between 1 and 100,000.");
-        if (MaximumSegmentsPerZone is < 1 or > 10_000)
-            throw new InvalidOperationException("SimulationVirtualTraffic.MaximumSegmentsPerZone must be between 1 and 10,000.");
+        if (MaximumSegmentsPerZone is < 1 or > 16)
+            throw new InvalidOperationException("SimulationVirtualTraffic.MaximumSegmentsPerZone must be between 1 and 16 so zone and wait-graph state remains bounded.");
         if (MaximumReservations is < 1 or > 1_000_000)
             throw new InvalidOperationException("SimulationVirtualTraffic.MaximumReservations must be between 1 and 1,000,000.");
         if (MaximumWaitingRequests is < 1 or > 1_000_000)
