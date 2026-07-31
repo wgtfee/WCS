@@ -1,0 +1,81 @@
+name: WCS Simulation Virtual Traffic
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualTraffic/**'
+      - 'src/Wcs.Simulator/VirtualRgv/**'
+      - 'src/Wcs.Simulator/ScenarioEngine/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualTraffic*.cs'
+      - 'src/Wcs.Host/Simulation/**'
+      - 'src/Wcs.Host/Controllers/SimulationVirtualTrafficController.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-virtual-traffic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  virtual-traffic:
+    name: compile traffic zones, reservations, Host inspection, checkpoint, and replay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Clean outputs
+        shell: bash
+        run: |
+          rm -rf src/Wcs.Simulator/bin src/Wcs.Simulator/obj
+          rm -rf src/Wcs.Simulator.Tests/bin src/Wcs.Simulator.Tests/obj
+          rm -rf src/Wcs.Host/bin src/Wcs.Host/obj
+
+      - name: Restore
+        run: dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s4-restore.log
+
+      - name: Build
+        run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s4-build.log
+
+      - name: Run virtual traffic and Host controller tests
+        run: |
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualTraffic' \
+            --logger 'trx;LogFileName=simulation-s4-virtual-traffic.trx' \
+            2>&1 | tee simulation-s4-test.log
+
+      - name: Verify bounded state and isolation boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -nE 'Random\.Shared|Task\.Delay|Thread\.Sleep|System\.Net\.Sockets|IPlcClient|IPlcConnection|PlcWriter|CommandBus|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager' src/Wcs.Simulator/VirtualTraffic
+          grep -R -n 'SimulationStateStore' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficRuntime.cs
+          grep -R -n 'FindStronglyConnectedComponents' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficRuntime.cs
+          grep -R -n 'SimulationVirtualTraffic' src/Wcs.Host/Simulation/SimulationHostRuntime.cs
+          test "$(jq -r '.SimulationVirtualTraffic.MaximumZones' src/Wcs.Host/appsettings.Simulation.json)" = '256'
+          test "$(jq -r '.SimulationVirtualTraffic.MaximumReservations' src/Wcs.Host/appsettings.Simulation.json)" = '2048'
+          test "$(jq -r '.SimulationVirtualTraffic.MaximumWaitingRequests' src/Wcs.Host/appsettings.Simulation.json)" = '2048'
+          test "$(jq -r '.SimulationVirtualTraffic.MaximumDeadlocks' src/Wcs.Host/appsettings.Simulation.json)" = '512'
+
+      - name: Upload virtual traffic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-virtual-traffic-${{ github.run_number }}
+          path: |
+            simulation-s4-*.log
+            src/Wcs.Simulator.Tests/TestResults/**
+          if-no-files-found: warn
+          retention-days: 14
