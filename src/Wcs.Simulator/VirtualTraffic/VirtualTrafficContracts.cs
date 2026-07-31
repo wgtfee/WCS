@@ -63,9 +63,20 @@ public enum VirtualTrafficRequestState
 
 public sealed record VirtualTrafficZoneDefinition
 {
+    private int _capacity = 1;
+
     public string ZoneId { get; init; } = string.Empty;
     public IReadOnlyList<string> SegmentIds { get; init; } = [];
-    public int Capacity { get; init; } = 1;
+    public int Capacity
+    {
+        get => _capacity;
+        init
+        {
+            if (value is < 1 or > 16)
+                throw new InvalidOperationException("Virtual traffic zone capacity must be between 1 and 16 so blocking-vehicle state remains bounded.");
+            _capacity = value;
+        }
+    }
     public VirtualTrafficZoneKind Kind { get; init; } = VirtualTrafficZoneKind.SharedSegment;
 }
 
