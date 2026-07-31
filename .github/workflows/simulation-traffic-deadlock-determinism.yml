@@ -1,0 +1,68 @@
+name: WCS Simulation Traffic Deadlock Determinism
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualTraffic/**'
+      - 'src/Wcs.Simulator/VirtualRgv/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualTrafficTests.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-traffic-deadlock-determinism.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deadlock-determinism:
+    name: verify conflicts, wait graph, leases, rolling reservations, and deterministic resolution
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build
+        run: |
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s4-deadlock-restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s4-deadlock-build.log
+
+      - name: Run deadlock, replay, and checkpoint tests
+        run: |
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualTrafficTests' \
+            --logger 'trx;LogFileName=simulation-s4-deadlock.trx' \
+            2>&1 | tee simulation-s4-deadlock-test.log
+
+      - name: Verify deterministic policy and no production mutation path
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -n 'FindStronglyConnectedComponents' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficRuntime.cs
+          grep -R -n 'SelectVictim' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficRuntime.cs
+          grep -R -n 'ResolveDeadlock' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficRuntime.cs
+          grep -R -n 'traffic.deadlock.detect' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficScenarioHandlers.cs
+          grep -R -n 'traffic.deadlock.resolve' src/Wcs.Simulator/VirtualTraffic/VirtualTrafficScenarioHandlers.cs
+          ! grep -R -nE 'TaskScheduler|TaskOrchestrator|TaskChainEngine|CommandBus|DeviceManager|PlcWriter|ReliableTransportVehicleDriver|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager' src/Wcs.Simulator/VirtualTraffic
+
+      - name: Upload deadlock determinism evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-traffic-deadlock-determinism-${{ github.run_number }}
+          path: |
+            simulation-s4-deadlock-*.log
+            src/Wcs.Simulator.Tests/TestResults/**
+          if-no-files-found: warn
+          retention-days: 14
