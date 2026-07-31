@@ -1,6 +1,7 @@
 namespace Wcs.Simulator.Tests;
 
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
@@ -78,7 +79,8 @@ public sealed class SimulationVirtualTrafficControllerTests
         Assert.Equal("RGV2", deadlock.VictimVehicleId);
 
         var detailResult = Assert.IsType<OkObjectResult>(traffic.GetDeadlock(run.RunId, deadlock.DeadlockId));
-        Assert.Equal(deadlock, Assert.IsType<VirtualTrafficDeadlockSnapshot>(detailResult.Value));
+        var detail = Assert.IsType<VirtualTrafficDeadlockSnapshot>(detailResult.Value);
+        Assert.Equal(JsonSerializer.Serialize(deadlock), JsonSerializer.Serialize(detail));
 
         var auditResult = Assert.IsType<OkObjectResult>(traffic.ListAudit(run.RunId, 20));
         var audit = Assert.IsAssignableFrom<IReadOnlyList<VirtualTrafficAuditRecord>>(auditResult.Value);
