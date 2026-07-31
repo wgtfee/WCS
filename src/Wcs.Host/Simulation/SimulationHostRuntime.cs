@@ -2,11 +2,12 @@ namespace Wcs.Host.Simulation;
 
 using Wcs.Simulator.ScenarioEngine;
 using Wcs.Simulator.VirtualPlc;
+using Wcs.Simulator.VirtualRgv;
 
 /// <summary>
 /// One process-scoped composition root for the governed scenario catalog,
-/// deterministic engine, virtual PLC contracts and bounded run registry. It is
-/// inert until a Simulation-only controller operation is invoked.
+/// deterministic engine, virtual PLC, virtual RGV contracts and bounded run
+/// registry. It is inert until a Simulation-only controller operation is invoked.
 /// </summary>
 public sealed class SimulationHostRuntime
 {
@@ -16,16 +17,22 @@ public sealed class SimulationHostRuntime
     private SimulationHostRuntime(
         SimulationScenarioEngineOptions engineOptions,
         SimulationRunRegistryOptions runOptions,
-        VirtualPlcOptions virtualPlcOptions)
+        VirtualPlcOptions virtualPlcOptions,
+        VirtualRgvOptions virtualRgvOptions)
     {
         Catalog = new SimulationScenarioCatalog();
         EngineOptions = engineOptions;
         RunOptions = runOptions;
         VirtualPlcOptions = virtualPlcOptions;
-        Engine = new SimulationScenarioEngine(
-            VirtualPlcScenarioHandlers.CreateActions(virtualPlcOptions),
-            VirtualPlcScenarioHandlers.CreateAssertions(virtualPlcOptions),
-            engineOptions);
+        VirtualRgvOptions = virtualRgvOptions;
+
+        var actions = VirtualPlcScenarioHandlers.CreateActions(virtualPlcOptions)
+            .Concat(VirtualRgvScenarioHandlers.CreateActions(virtualRgvOptions))
+            .ToArray();
+        var assertions = VirtualPlcScenarioHandlers.CreateAssertions(virtualPlcOptions)
+            .Concat(VirtualRgvScenarioHandlers.CreateAssertions(virtualRgvOptions))
+            .ToArray();
+        Engine = new SimulationScenarioEngine(actions, assertions, engineOptions);
         Runs = new SimulationRunRegistry(Engine, runOptions);
     }
 
@@ -33,6 +40,7 @@ public sealed class SimulationHostRuntime
     public SimulationScenarioEngineOptions EngineOptions { get; }
     public SimulationRunRegistryOptions RunOptions { get; }
     public VirtualPlcOptions VirtualPlcOptions { get; }
+    public VirtualRgvOptions VirtualRgvOptions { get; }
     public SimulationScenarioEngine Engine { get; }
     public SimulationRunRegistry Runs { get; }
 
@@ -53,10 +61,14 @@ public sealed class SimulationHostRuntime
             var virtualPlcOptions = configuration
                 .GetSection(VirtualPlcOptions.SectionName)
                 .Get<VirtualPlcOptions>() ?? new VirtualPlcOptions();
+            var virtualRgvOptions = configuration
+                .GetSection(VirtualRgvOptions.SectionName)
+                .Get<VirtualRgvOptions>() ?? new VirtualRgvOptions();
             engineOptions.Validate();
             runOptions.Validate();
             virtualPlcOptions.Validate();
-            _instance = new SimulationHostRuntime(engineOptions, runOptions, virtualPlcOptions);
+            virtualRgvOptions.Validate();
+            _instance = new SimulationHostRuntime(engineOptions, runOptions, virtualPlcOptions, virtualRgvOptions);
             return _instance;
         }
     }

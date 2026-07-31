@@ -1,0 +1,66 @@
+name: WCS Simulation RGV Motion Determinism
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualRgv/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualRgvTests.cs'
+      - 'src/Wcs.Host/Controllers/SimulationVirtualRgvController.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-rgv-motion-determinism.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rgv-motion:
+    name: verify deterministic movement, topology, occupancy, battery, and unified snapshots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build
+        run: |
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee simulation-s3-motion-restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee simulation-s3-motion-build.log
+
+      - name: Run motion, replay, and checkpoint tests
+        run: |
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualRgvTests' \
+            --logger 'trx;LogFileName=simulation-s3-motion.trx' \
+            2>&1 | tee simulation-s3-motion-test.log
+
+      - name: Verify S3 does not implement S4 control algorithms
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -nE 'UnifiedTransportDispatchEngine|IUnifiedTransportDispatchEngine|ITransportTrafficCoordinator|TransportTrafficCoordinator|IRouteReservationManager|Deadlock|TryAcquire\(' src/Wcs.Simulator/VirtualRgv
+          grep -R -n 'rgv.vehicle.advance' src/Wcs.Simulator/VirtualRgv/VirtualRgvScenarioHandlers.cs
+          grep -R -n 'rgv.segment.occupied-by' src/Wcs.Simulator/VirtualRgv/VirtualRgvScenarioHandlers.cs
+          grep -R -n 'ToTransportSnapshot' src/Wcs.Simulator/VirtualRgv/VirtualRgvContracts.cs
+
+      - name: Upload RGV determinism evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-rgv-motion-determinism-${{ github.run_number }}
+          path: |
+            simulation-s3-motion-*.log
+            src/Wcs.Simulator.Tests/TestResults/**
+          if-no-files-found: warn
+          retention-days: 14

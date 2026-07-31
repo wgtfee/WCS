@@ -1,23 +1,24 @@
-name: WCS Simulation S2 Full Regression
+name: WCS Simulation S3 Full Regression
 
 on:
   pull_request:
     branches: [ develop ]
     paths:
+      - 'src/Wcs.Simulator/VirtualRgv/**'
       - 'src/Wcs.Simulator/VirtualPlc/**'
       - 'src/Wcs.Simulator/ScenarioEngine/**'
-      - 'src/Wcs.Simulator.Tests/SimulationVirtualPlc*.cs'
-      - 'src/Wcs.Host/Controllers/SimulationVirtualPlcController.cs'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualRgv*.cs'
+      - 'src/Wcs.Host/Controllers/SimulationVirtualRgvController.cs'
       - 'src/Wcs.Host/Simulation/**'
       - 'src/Wcs.Host/appsettings.Simulation*.json'
       - 'docs/交付文件/00-交付文档总索引.md'
       - 'docs/交付文件/21-配置参数参考手册.md'
-      - 'docs/交付文件/61-*'
-      - 'docs/交付文件/62-*'
-      - 'docs/交付文件/63-*'
-      - '.github/workflows/simulation-virtual-plc.yml'
-      - '.github/workflows/simulation-plc-fault-injection.yml'
-      - '.github/workflows/simulation-s2-full-regression.yml'
+      - 'docs/交付文件/64-*'
+      - 'docs/交付文件/65-*'
+      - 'docs/交付文件/66-*'
+      - '.github/workflows/simulation-virtual-rgv.yml'
+      - '.github/workflows/simulation-rgv-motion-determinism.yml'
+      - '.github/workflows/simulation-s3-full-regression.yml'
   workflow_dispatch:
 
 permissions:
@@ -26,13 +27,13 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: simulation-s2-full-regression-${{ github.event.pull_request.number || github.ref }}
+  group: simulation-s3-full-regression-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   exact-head-matrix:
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/simulation-s2-') }}
-    name: reuse or dispatch 31 exact-head workflows
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/simulation-s3-') }}
+    name: reuse or dispatch 33 exact-head workflows
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
@@ -46,8 +47,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts/simulation-s2-full-regression
-          cat > artifacts/simulation-s2-full-regression/workflows.tsv <<'EOF'
+          mkdir -p artifacts/simulation-s3-full-regression
+          cat > artifacts/simulation-s3-full-regression/workflows.tsv <<'EOF'
           322269201	WCS Asset Failure Forecast Compile
           322284101	WCS Asset Failure Forecast Runtime
           322286772	WCS Asset Failure Forecast
@@ -79,16 +80,18 @@ jobs:
           322768536	WCS Simulation Replay Determinism
           322964123	WCS Simulation Virtual PLC
           322964120	WCS Simulation PLC Fault Injection
+          323371204	WCS Simulation Virtual RGV
+          323371205	WCS Simulation RGV Motion Determinism
           EOF
-          test "$(wc -l < artifacts/simulation-s2-full-regression/workflows.tsv)" -eq 31
+          test "$(wc -l < artifacts/simulation-s3-full-regression/workflows.tsv)" -eq 33
           printf 'expected_sha=%s\nhead_ref=%s\n' "$EXPECTED_SHA" "$HEAD_REF" \
-            | tee artifacts/simulation-s2-full-regression/context.txt
+            | tee artifacts/simulation-s3-full-regression/context.txt
 
       - name: Reuse or dispatch every workflow for the exact head
         shell: bash
         run: |
           set -euo pipefail
-          output='artifacts/simulation-s2-full-regression/runs.tsv'
+          output='artifacts/simulation-s3-full-regression/runs.tsv'
           printf 'workflow_id\tworkflow_name\trun_id\tevent\n' > "$output"
 
           while IFS=$'\t' read -r workflow_id workflow_name; do
@@ -127,24 +130,24 @@ jobs:
             fi
 
             printf '%s\t%s\t%s\t%s\n' "$workflow_id" "$workflow_name" "$run_id" "$event" >> "$output"
-          done < artifacts/simulation-s2-full-regression/workflows.tsv
+          done < artifacts/simulation-s3-full-regression/workflows.tsv
 
-          test "$(($(wc -l < "$output") - 1))" -eq 31
-          column -t -s $'\t' "$output" | tee artifacts/simulation-s2-full-regression/resolved-runs.txt
+          test "$(($(wc -l < "$output") - 1))" -eq 33
+          column -t -s $'\t' "$output" | tee artifacts/simulation-s3-full-regression/resolved-runs.txt
 
-      - name: Wait for all 31 exact-head workflows
+      - name: Wait for all 33 exact-head workflows
         shell: bash
         run: |
           set -euo pipefail
-          input='artifacts/simulation-s2-full-regression/runs.tsv'
-          results='artifacts/simulation-s2-full-regression/results.tsv'
+          input='artifacts/simulation-s3-full-regression/runs.tsv'
+          results='artifacts/simulation-s3-full-regression/results.tsv'
           printf 'workflow_id\tworkflow_name\trun_id\tstatus\tconclusion\thead_sha\thtml_url\n' > "$results"
           deadline=$(( $(date +%s) + 12600 ))
 
           while true; do
             pending=0
             failed=0
-            : > artifacts/simulation-s2-full-regression/current.tsv
+            : > artifacts/simulation-s3-full-regression/current.tsv
 
             tail -n +2 "$input" | while IFS=$'\t' read -r workflow_id workflow_name run_id event; do
               run="$(gh api \
@@ -156,7 +159,7 @@ jobs:
               html_url="$(jq -r '.html_url' <<<"$run")"
               printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                 "$workflow_id" "$workflow_name" "$run_id" "$status" "$conclusion" "$head_sha" "$html_url" \
-                >> artifacts/simulation-s2-full-regression/current.tsv
+                >> artifacts/simulation-s3-full-regression/current.tsv
             done
 
             while IFS=$'\t' read -r workflow_id workflow_name run_id status conclusion head_sha html_url; do
@@ -169,19 +172,19 @@ jobs:
                 echo "$workflow_name failed with conclusion=$conclusion run=$run_id" >&2
                 failed=$((failed + 1))
               fi
-            done < artifacts/simulation-s2-full-regression/current.tsv
+            done < artifacts/simulation-s3-full-regression/current.tsv
 
             if (( failed > 0 )); then
-              cp artifacts/simulation-s2-full-regression/current.tsv "$results"
+              cp artifacts/simulation-s3-full-regression/current.tsv "$results"
               exit 1
             fi
             if (( pending == 0 )); then
-              cat artifacts/simulation-s2-full-regression/current.tsv >> "$results"
+              cat artifacts/simulation-s3-full-regression/current.tsv >> "$results"
               break
             fi
             if (( $(date +%s) >= deadline )); then
               echo "Timed out waiting for $pending workflows" >&2
-              cp artifacts/simulation-s2-full-regression/current.tsv "$results"
+              cp artifacts/simulation-s3-full-regression/current.tsv "$results"
               exit 1
             fi
 
@@ -189,8 +192,8 @@ jobs:
             sleep 30
           done
 
-          column -t -s $'\t' "$results" | tee artifacts/simulation-s2-full-regression/final-results.txt
-          test "$(($(wc -l < "$results") - 1))" -eq 31
+          column -t -s $'\t' "$results" | tee artifacts/simulation-s3-full-regression/final-results.txt
+          test "$(($(wc -l < "$results") - 1))" -eq 33
 
       - name: Verify PR head did not move
         if: ${{ github.event_name == 'pull_request' }}
@@ -199,7 +202,7 @@ jobs:
           set -euo pipefail
           latest_sha="$(gh api "/repos/$REPOSITORY/pulls/$PR_NUMBER" --jq '.head.sha')"
           printf 'expected=%s\nlatest=%s\n' "$EXPECTED_SHA" "$latest_sha" \
-            | tee artifacts/simulation-s2-full-regression/head-verification.txt
+            | tee artifacts/simulation-s3-full-regression/head-verification.txt
           test "$latest_sha" = "$EXPECTED_SHA"
 
       - name: Build JSON evidence
@@ -225,16 +228,16 @@ jobs:
                })),
                allSuccess: ($rows[1:] | all(.[3] == "completed" and .[4] == "success" and .[5] == $expectedHead))
              }' \
-            < artifacts/simulation-s2-full-regression/results.tsv \
-            > artifacts/simulation-s2-full-regression/evidence.json
-          jq -e '.workflowCount == 31 and .allSuccess == true' \
-            artifacts/simulation-s2-full-regression/evidence.json >/dev/null
+            < artifacts/simulation-s3-full-regression/results.tsv \
+            > artifacts/simulation-s3-full-regression/evidence.json
+          jq -e '.workflowCount == 33 and .allSuccess == true' \
+            artifacts/simulation-s3-full-regression/evidence.json >/dev/null
 
       - name: Upload exact-head matrix evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wcs-simulation-s2-full-regression-${{ github.run_number }}
-          path: artifacts/simulation-s2-full-regression/**
+          name: wcs-simulation-s3-full-regression-${{ github.run_number }}
+          path: artifacts/simulation-s3-full-regression/**
           if-no-files-found: error
           retention-days: 14
