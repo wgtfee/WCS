@@ -1,0 +1,97 @@
+name: WCS Simulation Synthetic Health RUL
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualHealth/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualHealth*.cs'
+      - 'src/Wcs.Host/Controllers/SimulationVirtualHealthController.cs'
+      - 'src/Wcs.Host/Simulation/SimulationHostRuntime.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-synthetic-health-rul.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-health-rul:
+    name: verify synthetic degradation health features RUL outcomes and isolation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-s6-health
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee artifacts/simulation-s6-health/restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s6-health/build-tests.log
+
+      - name: Build host composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee artifacts/simulation-s6-health/restore-host.log
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s6-health/build-host.log
+
+      - name: Run S6 synthetic health and RUL tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualHealth' \
+            --logger 'trx;LogFileName=simulation-s6-health.trx' \
+            2>&1 | tee artifacts/simulation-s6-health/test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+11|Passed:[[:space:]]+11.*Total:[[:space:]]+11' artifacts/simulation-s6-health/test.log
+
+      - name: Verify v3.9 contract reuse and simulation-only boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -n 'AssetFailureForecastFeatureBuilder' src/Wcs.Simulator/VirtualHealth/VirtualHealthRuntime.cs
+          grep -R -n 'AssetFailureForecastManifestValidator.ValidateOutput' src/Wcs.Simulator/VirtualHealth/VirtualHealthRuntime.cs
+          grep -R -n 'SimulationStateStore' src/Wcs.Simulator/VirtualHealth/VirtualHealthRuntime.cs
+          grep -q '"AssetFailureForecast"' src/Wcs.Host/appsettings.Simulation.json
+          grep -A2 '"AssetFailureForecast"' src/Wcs.Host/appsettings.Simulation.json | grep -q '"Enabled": false'
+          if grep -R -n -E 'HttpClient|SqlConnection|Microsoft\.Data\.SqlClient|System\.Data\.SqlClient|SqlSugar|InferenceSession|Microsoft\.ML\.OnnxRuntime|IAssetFailureForecastService|IPlcClient|IPlcConnection|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager' src/Wcs.Simulator/VirtualHealth; then
+            echo 'S6 virtual health runtime must not depend on production forecast execution, SQL/network/model/control implementations.' >&2
+            exit 1
+          fi
+          if grep -R -n -E 'Task\.Delay|Thread\.Sleep|DateTime\.Now|DateTime\.UtcNow|Random\.Shared' src/Wcs.Simulator/VirtualHealth; then
+            echo 'S6 deterministic runtime must not use wall-clock sleeps/time reads or nondeterministic random sources.' >&2
+            exit 1
+          fi
+
+      - name: Verify bounded configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'SimulationVirtualHealth' src/Wcs.Host/appsettings.Simulation.json
+          grep -q 'SimulationVirtualHealth' src/Wcs.Host/appsettings.SimulationLoadTest.json
+          grep -q 'MaximumSamplesPerAsset' src/Wcs.Simulator/VirtualHealth/VirtualHealthContracts.cs
+          grep -q 'MaximumGeneratedSamplesPerAction' src/Wcs.Simulator/VirtualHealth/VirtualHealthContracts.cs
+          grep -q 'MaximumRulHours' src/Wcs.Simulator/VirtualHealth/VirtualHealthContracts.cs
+
+      - name: Upload S6 health evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-synthetic-health-rul-${{ github.run_number }}
+          path: artifacts/simulation-s6-health/**
+          if-no-files-found: error
+          retention-days: 14
