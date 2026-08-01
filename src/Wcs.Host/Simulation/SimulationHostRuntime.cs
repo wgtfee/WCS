@@ -1,15 +1,16 @@
 namespace Wcs.Host.Simulation;
 
 using Wcs.Simulator.ScenarioEngine;
+using Wcs.Simulator.VirtualExternal;
 using Wcs.Simulator.VirtualPlc;
 using Wcs.Simulator.VirtualRgv;
 using Wcs.Simulator.VirtualTraffic;
 
 /// <summary>
 /// One process-scoped composition root for the governed scenario catalog,
-/// deterministic engine, virtual PLC, virtual RGV, virtual traffic contracts
-/// and bounded run registry. It is inert until a Simulation-only controller
-/// operation is invoked.
+/// deterministic engine, virtual PLC, virtual RGV, virtual traffic, virtual
+/// external-system contracts and bounded run registry. It is inert until a
+/// Simulation-only controller operation is invoked.
 /// </summary>
 public sealed class SimulationHostRuntime
 {
@@ -21,7 +22,8 @@ public sealed class SimulationHostRuntime
         SimulationRunRegistryOptions runOptions,
         VirtualPlcOptions virtualPlcOptions,
         VirtualRgvOptions virtualRgvOptions,
-        VirtualTrafficOptions virtualTrafficOptions)
+        VirtualTrafficOptions virtualTrafficOptions,
+        VirtualExternalOptions virtualExternalOptions)
     {
         Catalog = new SimulationScenarioCatalog();
         EngineOptions = engineOptions;
@@ -29,14 +31,17 @@ public sealed class SimulationHostRuntime
         VirtualPlcOptions = virtualPlcOptions;
         VirtualRgvOptions = virtualRgvOptions;
         VirtualTrafficOptions = virtualTrafficOptions;
+        VirtualExternalOptions = virtualExternalOptions;
 
         var actions = VirtualPlcScenarioHandlers.CreateActions(virtualPlcOptions)
             .Concat(VirtualRgvScenarioHandlers.CreateActions(virtualRgvOptions))
             .Concat(VirtualTrafficScenarioHandlers.CreateActions(virtualTrafficOptions, virtualRgvOptions))
+            .Concat(VirtualExternalScenarioHandlers.CreateActions(virtualExternalOptions))
             .ToArray();
         var assertions = VirtualPlcScenarioHandlers.CreateAssertions(virtualPlcOptions)
             .Concat(VirtualRgvScenarioHandlers.CreateAssertions(virtualRgvOptions))
             .Concat(VirtualTrafficScenarioHandlers.CreateAssertions(virtualTrafficOptions, virtualRgvOptions))
+            .Concat(VirtualExternalScenarioHandlers.CreateAssertions(virtualExternalOptions))
             .ToArray();
         Engine = new SimulationScenarioEngine(actions, assertions, engineOptions);
         Runs = new SimulationRunRegistry(Engine, runOptions);
@@ -48,6 +53,7 @@ public sealed class SimulationHostRuntime
     public VirtualPlcOptions VirtualPlcOptions { get; }
     public VirtualRgvOptions VirtualRgvOptions { get; }
     public VirtualTrafficOptions VirtualTrafficOptions { get; }
+    public VirtualExternalOptions VirtualExternalOptions { get; }
     public SimulationScenarioEngine Engine { get; }
     public SimulationRunRegistry Runs { get; }
 
@@ -74,17 +80,22 @@ public sealed class SimulationHostRuntime
             var virtualTrafficOptions = configuration
                 .GetSection(VirtualTrafficOptions.SectionName)
                 .Get<VirtualTrafficOptions>() ?? new VirtualTrafficOptions();
+            var virtualExternalOptions = configuration
+                .GetSection(VirtualExternalOptions.SectionName)
+                .Get<VirtualExternalOptions>() ?? new VirtualExternalOptions();
             engineOptions.Validate();
             runOptions.Validate();
             virtualPlcOptions.Validate();
             virtualRgvOptions.Validate();
             virtualTrafficOptions.Validate();
+            virtualExternalOptions.Validate();
             _instance = new SimulationHostRuntime(
                 engineOptions,
                 runOptions,
                 virtualPlcOptions,
                 virtualRgvOptions,
-                virtualTrafficOptions);
+                virtualTrafficOptions,
+                virtualExternalOptions);
             return _instance;
         }
     }
