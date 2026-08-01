@@ -5,7 +5,8 @@ on:
     branches: [ develop ]
     paths:
       - 'src/Wcs.Simulator/VirtualExternal/**'
-      - 'src/Wcs.Simulator.Tests/SimulationVirtualExternalTests.cs'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualExternal*.cs'
+      - 'src/Wcs.Host/Controllers/SimulationVirtualExternalController.cs'
       - 'src/Wcs.Host/Simulation/SimulationHostRuntime.cs'
       - 'src/Wcs.Host/appsettings.Simulation*.json'
       - '.github/workflows/simulation-external-failures.yml'
@@ -53,10 +54,10 @@ jobs:
           set -euo pipefail
           dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
             --configuration Release --no-build \
-            --filter 'FullyQualifiedName~SimulationVirtualExternalTests' \
+            --filter 'FullyQualifiedName~SimulationVirtualExternal' \
             --logger 'trx;LogFileName=simulation-s5-external.trx' \
             2>&1 | tee artifacts/simulation-s5-external/test.log
-          grep -Eq 'Passed!.*Total:[[:space:]]+7|Passed:[[:space:]]+7.*Total:[[:space:]]+7' artifacts/simulation-s5-external/test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+10|Passed:[[:space:]]+10.*Total:[[:space:]]+10' artifacts/simulation-s5-external/test.log
 
       - name: Verify isolation boundary
         shell: bash
