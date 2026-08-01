@@ -1,0 +1,92 @@
+name: WCS Simulation External Failures
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualExternal/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualExternalTests.cs'
+      - 'src/Wcs.Host/Simulation/SimulationHostRuntime.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-external-failures.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-failures:
+    name: verify MES SQL network faults retries circuits idempotency and replay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-s5-external
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee artifacts/simulation-s5-external/restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s5-external/build-tests.log
+
+      - name: Build host composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee artifacts/simulation-s5-external/restore-host.log
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s5-external/build-host.log
+
+      - name: Run S5 external failure tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualExternalTests' \
+            --logger 'trx;LogFileName=simulation-s5-external.trx' \
+            2>&1 | tee artifacts/simulation-s5-external/test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+7|Passed:[[:space:]]+7.*Total:[[:space:]]+7' artifacts/simulation-s5-external/test.log
+
+      - name: Verify isolation boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir='src/Wcs.Simulator/VirtualExternal'
+          if grep -R -n -E 'HttpClient|SqlConnection|SqlCommand|Socket|TcpClient|UdpClient|IPlcClient|IPlcConnection|CommandBus|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|TaskScheduler|TaskOrchestrator|DeviceManager' "$source_dir"; then
+            echo 'S5 virtual external runtime must not depend on real network, SQL, PLC, task, dispatch, or traffic-control implementations.' >&2
+            exit 1
+          fi
+          if grep -R -n -E 'Task\.Delay|Thread\.Sleep|Random\.Shared' "$source_dir"; then
+            echo 'S5 deterministic runtime must not use wall-clock sleeps or nondeterministic random sources.' >&2
+            exit 1
+          fi
+
+      - name: Verify bounded configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'SimulationVirtualExternal' src/Wcs.Host/appsettings.Simulation.json
+          grep -q 'SimulationVirtualExternal' src/Wcs.Host/appsettings.SimulationLoadTest.json
+          grep -q 'MaximumRetryAttempts' src/Wcs.Simulator/VirtualExternal/VirtualExternalContracts.cs
+          grep -q 'MaximumRequests' src/Wcs.Simulator/VirtualExternal/VirtualExternalContracts.cs
+          grep -q 'MaximumFaults' src/Wcs.Simulator/VirtualExternal/VirtualExternalContracts.cs
+
+      - name: Upload S5 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-external-failures-${{ github.run_number }}
+          path: artifacts/simulation-s5-external/**
+          if-no-files-found: error
+          retention-days: 14
