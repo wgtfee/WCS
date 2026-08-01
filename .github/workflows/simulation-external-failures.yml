@@ -63,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           source_dir='src/Wcs.Simulator/VirtualExternal'
-          if grep -R -n -E 'HttpClient|SqlConnection|SqlCommand|Socket|TcpClient|UdpClient|IPlcClient|IPlcConnection|CommandBus|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|TaskScheduler|TaskOrchestrator|DeviceManager' "$source_dir"; then
+          if grep -R -n -E 'HttpClient|SqlConnection|Microsoft\.Data\.SqlClient|System\.Data\.SqlClient|Socket|TcpClient|UdpClient|IPlcClient|IPlcConnection|CommandBus|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|TaskScheduler|TaskOrchestrator|DeviceManager' "$source_dir"; then
             echo 'S5 virtual external runtime must not depend on real network, SQL, PLC, task, dispatch, or traffic-control implementations.' >&2
             exit 1
           fi
