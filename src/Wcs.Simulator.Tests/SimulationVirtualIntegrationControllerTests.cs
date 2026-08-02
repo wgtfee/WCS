@@ -23,7 +23,7 @@ public sealed class SimulationVirtualIntegrationControllerTests
     }
 
     [Fact]
-    public async Task CompletedRun_CanInspectMissionConsistencyAndAudit()
+    public async Task ActiveAcknowledgedRun_CanInspectMissionConsistencyAndAudit()
     {
         var configuration = BuildConfiguration();
         var environment = new TestHostEnvironment { EnvironmentName = "Simulation" };
@@ -44,9 +44,14 @@ public sealed class SimulationVirtualIntegrationControllerTests
         }));
         var run = Assert.IsType<SimulationRunSnapshot>(create.Value);
         Assert.IsType<OkObjectResult>(scenarios.Resume(run.RunId));
-        var completed = Assert.IsType<OkObjectResult>(await scenarios.RunToCompletion(run.RunId, CancellationToken.None));
-        var snapshot = Assert.IsType<SimulationRunSnapshot>(completed.Value);
-        Assert.Equal(SimulationSessionStatus.Completed, snapshot.Status);
+        var advanced = Assert.IsType<OkObjectResult>(await scenarios.Advance(
+            run.RunId,
+            new AdvanceSimulationRunRequest { TargetOffsetMilliseconds = 2_300 },
+            CancellationToken.None));
+        var snapshot = Assert.IsType<SimulationRunSnapshot>(advanced.Value);
+        Assert.Equal(SimulationSessionStatus.Running, snapshot.Status);
+        Assert.Equal(2_300, snapshot.CurrentOffsetMilliseconds);
+        Assert.Equal(3, snapshot.AssertionCount);
 
         var statusResult = Assert.IsType<OkObjectResult>(integration.GetStatus(run.RunId));
         var status = Assert.IsType<VirtualIntegrationStatus>(statusResult.Value);
@@ -110,7 +115,7 @@ public sealed class SimulationVirtualIntegrationControllerTests
       "Version": "1.0.0",
       "Seed": 20260802,
       "StartTimeUtc": "2026-08-02T00:00:00+00:00",
-      "DurationMilliseconds": 2300,
+      "DurationMilliseconds": 3000,
       "StopOnAssertionFailure": true,
       "Actions": [
         {
@@ -131,7 +136,8 @@ public sealed class SimulationVirtualIntegrationControllerTests
         { "Id":"advance-1", "AtMilliseconds":1010, "Order":0, "Kind":"integration.mission.advance", "Target":"M1", "Payload":{} },
         { "Id":"advance-2", "AtMilliseconds":2010, "Order":0, "Kind":"integration.mission.advance", "Target":"M1", "Payload":{} },
         { "Id":"ack-1", "AtMilliseconds":2100, "Order":0, "Kind":"integration.mission.ack", "Target":"M1", "Payload":{} },
-        { "Id":"ack-2", "AtMilliseconds":2200, "Order":0, "Kind":"integration.mission.ack", "Target":"M1", "Payload":{} }
+        { "Id":"ack-2", "AtMilliseconds":2200, "Order":0, "Kind":"integration.mission.ack", "Target":"M1", "Payload":{} },
+        { "Id":"keep-active", "AtMilliseconds":3000, "Order":0, "Kind":"event.emit", "Target":"host-s7-inspection", "Payload":{"Value":"pending"} }
       ],
       "Assertions": [
         { "Id":"state", "AtMilliseconds":2300, "Order":0, "Kind":"integration.mission.state", "Target":"M1", "Expected":"Acknowledged" },
