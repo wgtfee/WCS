@@ -33,13 +33,18 @@ public sealed class SimulationCapacityReadinessTests
     [Fact]
     public void EightHourVirtualSoak_CompletesWithConservationAndBoundedState()
     {
-        var report = Runtime(State()).Run(Profile("eight", CapacityProfileKind.EightHourVirtualSoak, 12, 4, 2, 28_800_000), Start);
+        var state = State();
+        var runtime = Runtime(state);
+        var report = runtime.Run(Profile("eight", CapacityProfileKind.EightHourVirtualSoak, 12, 4, 2, 28_800_000), Start);
         Assert.True(report.Admission.Accepted);
         Assert.True(report.Profile.ConservationSatisfied);
         Assert.True(report.Profile.BoundedStateSatisfied);
         Assert.True(report.ResourceBudgetSatisfied);
+        Assert.Equal(4, report.Profile.PeakConcurrentMissions);
         Assert.Equal(12, report.Profile.SampleCount);
         Assert.False(string.IsNullOrWhiteSpace(report.Profile.FinalStateHash));
+        Assert.False(string.IsNullOrWhiteSpace(report.Profile.EvidenceHash));
+        Assert.Equal(2, runtime.ListAudit().Count(x => x.ProfileId == "eight"));
     }
 
     [Fact]
@@ -49,7 +54,9 @@ public sealed class SimulationCapacityReadinessTests
         Assert.True(report.Profile.ConservationSatisfied);
         Assert.True(report.Profile.BoundedStateSatisfied);
         Assert.True(report.ResourceBudgetSatisfied);
+        Assert.Equal(6, report.Profile.PeakConcurrentMissions);
         Assert.Equal(18, report.Profile.SampleCount);
+        Assert.False(string.IsNullOrWhiteSpace(report.Profile.EvidenceHash));
     }
 
     [Fact]
@@ -58,6 +65,7 @@ public sealed class SimulationCapacityReadinessTests
         var first = Runtime(State()).Run(Profile("det", CapacityProfileKind.Peak, 8, 4, 2, 120_000), Start);
         var second = Runtime(State()).Run(Profile("det", CapacityProfileKind.Peak, 8, 4, 2, 120_000), Start);
         Assert.Equal(first.Profile.FinalStateHash, second.Profile.FinalStateHash);
+        Assert.Equal(first.Profile.EvidenceHash, second.Profile.EvidenceHash);
         Assert.Equal(first.Samples.Select(x => x.StateHash), second.Samples.Select(x => x.StateHash));
     }
 
@@ -72,6 +80,7 @@ public sealed class SimulationCapacityReadinessTests
         var restored = Runtime(restoredState).TryGetProfileResult("restore");
         Assert.NotNull(restored);
         Assert.Equal(report.Profile.FinalStateHash, restored!.FinalStateHash);
+        Assert.Equal(report.Profile.EvidenceHash, restored.EvidenceHash);
         Assert.Equal(state.ComputeHash(), restoredState.ComputeHash());
     }
 
