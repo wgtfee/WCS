@@ -76,24 +76,24 @@ SiteAccepted=false
 首轮 Functional Head：
 
 ```text
-7638d8b2364a5c46277a74476003ba9b35c480fa
+44e8e877b1daa0a59d19285d3c8f95bafa0e6206
 ```
 
 ### 6.1 Capacity Long Stability
 
 ```text
 Workflow: WCS Simulation Capacity Long Stability
-Run: 30761181440 (#42)
+Run: 30765270280 (#47)
 Tests: 12/12 success
-Artifact ID: 8837654072
-Artifact: wcs-simulation-capacity-long-stability-42
-Digest: sha256:d75faa0b975a9eb995ef9bdfeb5e2ba7486a3613e6efbc8cf4d2818e29e09504
+Artifact ID: 8838739363
+Artifact: wcs-simulation-capacity-long-stability-47
+Digest: sha256:f8320476667e90169917a019fc9c0eeb4857e4c57fb17ce2393e4fe329adf03f
 Expired: false
-Test duration: 703 ms
-Measured wall time: 2.47 s
-Maximum RSS: 109572 KB
-Voluntary context switches: 900
-Involuntary context switches: 2015
+Test duration: 856 ms
+Measured wall time: 3.17 s
+Maximum RSS: 110080 KB
+Voluntary context switches: 1010
+Involuntary context switches: 3011
 ```
 
 该资源证据来自 hosted runner 的 `/usr/bin/time -v`，用于仓库级复验，不代表真实 HIL 设备资源曲线。
@@ -102,29 +102,29 @@ Involuntary context switches: 2015
 
 ```text
 Workflow: WCS Simulation HIL Readiness Gate
-Run: 30761181420 (#41)
+Run: 30765270229 (#46)
 Tests: 5/5 success
-Artifact ID: 8837647299
-Artifact: wcs-simulation-hil-readiness-41
-Digest: sha256:de8dcb512075b5f7add476580a144c43a1b8fa16620c6d6c6db834f326021b29
+Artifact ID: 8838730285
+Artifact: wcs-simulation-hil-readiness-46
+Digest: sha256:1b86ffb7d1599553bf433dd59b8c98ef8a807af505924d886fbce63175e8492e
 Expired: false
-Test duration: 30 ms
+Test duration: 26 ms
 ```
 
 ### 6.3 S8 Full Regression
 
 ```text
 Workflow: WCS Simulation S8 Full Regression
-Run: 30761181383 (#40)
-Artifact ID: 8838270990
-Artifact: wcs-simulation-s8-full-regression-40
-Digest: sha256:94d36f32eefe7830c4b2219ff80156ef507f3ef8fe8bc4cb0f00b5dbdd406fdc
+Run: 30765270288 (#45)
+Artifact ID: 8839461345
+Artifact: wcs-simulation-s8-full-regression-45
+Digest: sha256:af9457b13eb33c475e6e9a8f20d8fedf0aa4229b7739e9e94cc59e2bed096f1a
 Expired: false
 workflowCount=43
 allSuccess=true
 43/43 exact-head success
-One Hour Soak Run 30761181263 success
-Head verification expected == actual == 7638d8b2364a5c46277a74476003ba9b35c480fa
+One Hour Soak Run 30765270222 success
+Head verification expected == actual == 44e8e877b1daa0a59d19285d3c8f95bafa0e6206
 ```
 
 ## 7. 双轮验收
