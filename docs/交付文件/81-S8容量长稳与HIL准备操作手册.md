@@ -155,6 +155,14 @@ SiteAccepted=false
 
 ## 10. 双轮 Evidence 操作
 
+当前已冻结的首轮 Functional Head 为：
+
+```text
+44e8e877b1daa0a59d19285d3c8f95bafa0e6206
+```
+
+该 Head 已通过：Capacity Long Stability #47（12/12）、HIL Readiness Gate #46（5/5）以及 S8 Full Regression #45（43/43 exact-head），其中 One Hour Soak Run `30765270222` 为 success。文档回填完成后的最新 Head 即为 Evidence Head，旧 Head 的成功不能替代 Evidence Head 的第二轮验证。
+
 首轮 Functional Head 全绿后记录三条 S8 workflow 的 Run、Artifact ID/Name/Digest。然后只修改 79～81、00、21 文档形成 Evidence Head。
 
 Evidence Head 形成后：
