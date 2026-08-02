@@ -63,10 +63,12 @@ public sealed record CapacityProfileSnapshot(
     int ConcurrentMissions,
     int SegmentsPerMission,
     long VirtualDurationMilliseconds,
+    int PeakConcurrentMissions,
     int SampleCount,
     bool ConservationSatisfied,
     bool BoundedStateSatisfied,
     string FinalStateHash,
+    string EvidenceHash,
     string? Detail);
 
 public sealed record CapacityRunReport(
