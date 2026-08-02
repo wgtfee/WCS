@@ -7,20 +7,20 @@
 首轮 Functional Head：
 
 ```text
-7638d8b2364a5c46277a74476003ba9b35c480fa
+44e8e877b1daa0a59d19285d3c8f95bafa0e6206
 ```
 
 ## 2. Capacity Long Stability
 
 ```text
 Workflow: WCS Simulation Capacity Long Stability
-Run Number: 42
-Run ID: 30761181440
+Run Number: 47
+Run ID: 30765270280
 Conclusion: success
 Tests: 12/12 passed
-Artifact ID: 8837654072
-Artifact Name: wcs-simulation-capacity-long-stability-42
-Artifact Digest: sha256:d75faa0b975a9eb995ef9bdfeb5e2ba7486a3613e6efbc8cf4d2818e29e09504
+Artifact ID: 8838739363
+Artifact Name: wcs-simulation-capacity-long-stability-47
+Artifact Digest: sha256:f8320476667e90169917a019fc9c0eeb4857e4c57fb17ce2393e4fe329adf03f
 Expired: false
 ```
 
@@ -40,11 +40,11 @@ Expired: false
 Runner 资源 Evidence：
 
 ```text
-Test duration: 703 ms
-Measured wall time: 2.47 s
-Maximum resident set size: 109572 KB
-Voluntary context switches: 900
-Involuntary context switches: 2015
+Test duration: 856 ms
+Measured wall time: 3.17 s
+Maximum resident set size: 110080 KB
+Voluntary context switches: 1010
+Involuntary context switches: 3011
 Exit status: 0
 ```
 
@@ -54,15 +54,15 @@ Exit status: 0
 
 ```text
 Workflow: WCS Simulation HIL Readiness Gate
-Run Number: 41
-Run ID: 30761181420
+Run Number: 46
+Run ID: 30765270229
 Conclusion: success
 Tests: 5/5 passed
-Artifact ID: 8837647299
-Artifact Name: wcs-simulation-hil-readiness-41
-Artifact Digest: sha256:de8dcb512075b5f7add476580a144c43a1b8fa16620c6d6c6db834f326021b29
+Artifact ID: 8838730285
+Artifact Name: wcs-simulation-hil-readiness-46
+Artifact Digest: sha256:1b86ffb7d1599553bf433dd59b8c98ef8a807af505924d886fbce63175e8492e
 Expired: false
-Test duration: 30 ms
+Test duration: 26 ms
 ```
 
 门禁确认：
@@ -80,22 +80,22 @@ Test duration: 30 ms
 
 ```text
 Workflow: WCS Simulation S8 Full Regression
-Run Number: 40
-Run ID: 30761181383
+Run Number: 45
+Run ID: 30765270288
 Conclusion: success
-Artifact ID: 8838270990
-Artifact Name: wcs-simulation-s8-full-regression-40
-Artifact Digest: sha256:94d36f32eefe7830c4b2219ff80156ef507f3ef8fe8bc4cb0f00b5dbdd406fdc
+Artifact ID: 8839461345
+Artifact Name: wcs-simulation-s8-full-regression-45
+Artifact Digest: sha256:af9457b13eb33c475e6e9a8f20d8fedf0aa4229b7739e9e94cc59e2bed096f1a
 Expired: false
 workflowCount=43
 allSuccess=true
 43/43 child status=completed
 43/43 child conclusion=success
-43/43 child headSha=7638d8b2364a5c46277a74476003ba9b35c480fa
+43/43 child headSha=44e8e877b1daa0a59d19285d3c8f95bafa0e6206
 PR Head expected == actual
 ```
 
-完整矩阵保留 S7 的 41 条历史 child，并加入两条 S8 专项，共 43 条。`WCS One Hour Soak Load` 在同一 Head 上 Run `30761181263` 成功，因此虚拟 8h/24h 证据没有替代历史真实墙钟 Soak 门禁。
+完整矩阵保留 S7 的 41 条历史 child，并加入两条 S8 专项，共 43 条。`WCS One Hour Soak Load` 在同一 Head 上 Run `30765270222` 成功，因此虚拟 8h/24h 证据没有替代历史真实墙钟 Soak 门禁。
 
 ## 5. 首轮结论
 
