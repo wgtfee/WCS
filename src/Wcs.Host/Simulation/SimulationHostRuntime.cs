@@ -3,15 +3,15 @@ namespace Wcs.Host.Simulation;
 using Wcs.Simulator.ScenarioEngine;
 using Wcs.Simulator.VirtualExternal;
 using Wcs.Simulator.VirtualHealth;
+using Wcs.Simulator.VirtualIntegration;
 using Wcs.Simulator.VirtualPlc;
 using Wcs.Simulator.VirtualRgv;
 using Wcs.Simulator.VirtualTraffic;
 
 /// <summary>
 /// One process-scoped composition root for the governed scenario catalog,
-/// deterministic engine, virtual PLC, virtual RGV, virtual traffic, virtual
-/// external-system contracts, synthetic health/RUL validation and bounded run
-/// registry. It is inert until a Simulation-only controller operation is invoked.
+/// deterministic engine, S2-S7 virtual runtimes and bounded run registry.
+/// It is inert until a Simulation-only controller operation is invoked.
 /// </summary>
 public sealed class SimulationHostRuntime
 {
@@ -25,7 +25,8 @@ public sealed class SimulationHostRuntime
         VirtualRgvOptions virtualRgvOptions,
         VirtualTrafficOptions virtualTrafficOptions,
         VirtualExternalOptions virtualExternalOptions,
-        VirtualHealthOptions virtualHealthOptions)
+        VirtualHealthOptions virtualHealthOptions,
+        VirtualIntegrationOptions virtualIntegrationOptions)
     {
         Catalog = new SimulationScenarioCatalog();
         EngineOptions = engineOptions;
@@ -35,18 +36,36 @@ public sealed class SimulationHostRuntime
         VirtualTrafficOptions = virtualTrafficOptions;
         VirtualExternalOptions = virtualExternalOptions;
         VirtualHealthOptions = virtualHealthOptions;
+        VirtualIntegrationOptions = virtualIntegrationOptions;
+
+        var integrationActions = VirtualIntegrationScenarioHandlers.CreateActions(
+            virtualIntegrationOptions,
+            virtualPlcOptions,
+            virtualRgvOptions,
+            virtualTrafficOptions,
+            virtualExternalOptions,
+            virtualHealthOptions);
+        var integrationAssertions = VirtualIntegrationScenarioHandlers.CreateAssertions(
+            virtualIntegrationOptions,
+            virtualPlcOptions,
+            virtualRgvOptions,
+            virtualTrafficOptions,
+            virtualExternalOptions,
+            virtualHealthOptions);
 
         var actions = VirtualPlcScenarioHandlers.CreateActions(virtualPlcOptions)
             .Concat(VirtualRgvScenarioHandlers.CreateActions(virtualRgvOptions))
             .Concat(VirtualTrafficScenarioHandlers.CreateActions(virtualTrafficOptions, virtualRgvOptions))
             .Concat(VirtualExternalScenarioHandlers.CreateActions(virtualExternalOptions))
             .Concat(VirtualHealthScenarioHandlers.CreateActions(virtualHealthOptions))
+            .Concat(integrationActions)
             .ToArray();
         var assertions = VirtualPlcScenarioHandlers.CreateAssertions(virtualPlcOptions)
             .Concat(VirtualRgvScenarioHandlers.CreateAssertions(virtualRgvOptions))
             .Concat(VirtualTrafficScenarioHandlers.CreateAssertions(virtualTrafficOptions, virtualRgvOptions))
             .Concat(VirtualExternalScenarioHandlers.CreateAssertions(virtualExternalOptions))
             .Concat(VirtualHealthScenarioHandlers.CreateAssertions(virtualHealthOptions))
+            .Concat(integrationAssertions)
             .ToArray();
         Engine = new SimulationScenarioEngine(actions, assertions, engineOptions);
         Runs = new SimulationRunRegistry(Engine, runOptions);
@@ -60,6 +79,7 @@ public sealed class SimulationHostRuntime
     public VirtualTrafficOptions VirtualTrafficOptions { get; }
     public VirtualExternalOptions VirtualExternalOptions { get; }
     public VirtualHealthOptions VirtualHealthOptions { get; }
+    public VirtualIntegrationOptions VirtualIntegrationOptions { get; }
     public SimulationScenarioEngine Engine { get; }
     public SimulationRunRegistry Runs { get; }
 
@@ -92,6 +112,9 @@ public sealed class SimulationHostRuntime
             var virtualHealthOptions = configuration
                 .GetSection(VirtualHealthOptions.SectionName)
                 .Get<VirtualHealthOptions>() ?? new VirtualHealthOptions();
+            var virtualIntegrationOptions = configuration
+                .GetSection(VirtualIntegrationOptions.SectionName)
+                .Get<VirtualIntegrationOptions>() ?? new VirtualIntegrationOptions();
             engineOptions.Validate();
             runOptions.Validate();
             virtualPlcOptions.Validate();
@@ -99,6 +122,7 @@ public sealed class SimulationHostRuntime
             virtualTrafficOptions.Validate();
             virtualExternalOptions.Validate();
             virtualHealthOptions.Validate();
+            virtualIntegrationOptions.Validate();
             _instance = new SimulationHostRuntime(
                 engineOptions,
                 runOptions,
@@ -106,7 +130,8 @@ public sealed class SimulationHostRuntime
                 virtualRgvOptions,
                 virtualTrafficOptions,
                 virtualExternalOptions,
-                virtualHealthOptions);
+                virtualHealthOptions,
+                virtualIntegrationOptions);
             return _instance;
         }
     }
