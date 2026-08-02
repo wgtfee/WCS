@@ -70,7 +70,7 @@ jobs:
           grep -R -n 'VirtualTrafficRuntime' "$source_dir"
           grep -R -n 'VirtualExternalRuntime' "$source_dir"
           grep -R -n 'VirtualHealthRuntime' "$source_dir"
-          if grep -R -nE 'HttpClient|SqlSugar|SqlConnection|Microsoft\.Data\.SqlClient|System\.Data\.SqlClient|Socket|TcpClient|UdpClient|IPlcClient|IPlcConnection|S7|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|IAssetFailureForecastService|InferenceSession' "$source_dir"; then
+          if grep -R -nE 'HttpClient|SqlSugar|SqlConnection|Microsoft\.Data\.SqlClient|System\.Data\.SqlClient|Socket|TcpClient|UdpClient|IPlcClient|IPlcConnection|S7CommPlusDriver|S7Client|S7RealClient|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|IAssetFailureForecastService|InferenceSession' "$source_dir"; then
             echo 'S7 integration runtime must compose only virtual S2-S6 runtimes and must not enter production I/O or control paths.' >&2
             exit 1
           fi
