@@ -1,5 +1,6 @@
 namespace Wcs.Host.Simulation;
 
+using Wcs.Simulator.CapacityReadiness;
 using Wcs.Simulator.ScenarioEngine;
 using Wcs.Simulator.VirtualExternal;
 using Wcs.Simulator.VirtualHealth;
@@ -10,7 +11,7 @@ using Wcs.Simulator.VirtualTraffic;
 
 /// <summary>
 /// One process-scoped composition root for the governed scenario catalog,
-/// deterministic engine, S2-S7 virtual runtimes and bounded run registry.
+/// deterministic engine, S2-S8 virtual runtimes and bounded run registry.
 /// It is inert until a Simulation-only controller operation is invoked.
 /// </summary>
 public sealed class SimulationHostRuntime
@@ -26,7 +27,8 @@ public sealed class SimulationHostRuntime
         VirtualTrafficOptions virtualTrafficOptions,
         VirtualExternalOptions virtualExternalOptions,
         VirtualHealthOptions virtualHealthOptions,
-        VirtualIntegrationOptions virtualIntegrationOptions)
+        VirtualIntegrationOptions virtualIntegrationOptions,
+        CapacityReadinessOptions capacityReadinessOptions)
     {
         Catalog = new SimulationScenarioCatalog();
         EngineOptions = engineOptions;
@@ -37,6 +39,7 @@ public sealed class SimulationHostRuntime
         VirtualExternalOptions = virtualExternalOptions;
         VirtualHealthOptions = virtualHealthOptions;
         VirtualIntegrationOptions = virtualIntegrationOptions;
+        CapacityReadinessOptions = capacityReadinessOptions;
 
         var integrationActions = VirtualIntegrationScenarioHandlers.CreateActions(
             virtualIntegrationOptions,
@@ -80,6 +83,7 @@ public sealed class SimulationHostRuntime
     public VirtualExternalOptions VirtualExternalOptions { get; }
     public VirtualHealthOptions VirtualHealthOptions { get; }
     public VirtualIntegrationOptions VirtualIntegrationOptions { get; }
+    public CapacityReadinessOptions CapacityReadinessOptions { get; }
     public SimulationScenarioEngine Engine { get; }
     public SimulationRunRegistry Runs { get; }
 
@@ -115,6 +119,9 @@ public sealed class SimulationHostRuntime
             var virtualIntegrationOptions = configuration
                 .GetSection(VirtualIntegrationOptions.SectionName)
                 .Get<VirtualIntegrationOptions>() ?? new VirtualIntegrationOptions();
+            var capacityReadinessOptions = configuration
+                .GetSection(CapacityReadinessOptions.SectionName)
+                .Get<CapacityReadinessOptions>() ?? new CapacityReadinessOptions();
             engineOptions.Validate();
             runOptions.Validate();
             virtualPlcOptions.Validate();
@@ -123,6 +130,7 @@ public sealed class SimulationHostRuntime
             virtualExternalOptions.Validate();
             virtualHealthOptions.Validate();
             virtualIntegrationOptions.Validate();
+            capacityReadinessOptions.Validate();
             _instance = new SimulationHostRuntime(
                 engineOptions,
                 runOptions,
@@ -131,7 +139,8 @@ public sealed class SimulationHostRuntime
                 virtualTrafficOptions,
                 virtualExternalOptions,
                 virtualHealthOptions,
-                virtualIntegrationOptions);
+                virtualIntegrationOptions,
+                capacityReadinessOptions);
             return _instance;
         }
     }

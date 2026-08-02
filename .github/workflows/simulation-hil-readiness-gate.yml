@@ -1,0 +1,96 @@
+name: WCS Simulation HIL Readiness Gate
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/CapacityReadiness/**'
+      - 'src/Wcs.Simulator.Tests/SimulationHilReadinessGateTests.cs'
+      - 'src/Wcs.Host/Controllers/SimulationCapacityReadinessController.cs'
+      - 'src/Wcs.Host/Simulation/SimulationHostRuntime.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-hil-readiness-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hil-readiness:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/simulation-s8-') }}
+    name: verify software-side gate for entering S9 without claiming real HIL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-s8-hil-readiness
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee artifacts/simulation-s8-hil-readiness/restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s8-hil-readiness/build-tests.log
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee artifacts/simulation-s8-hil-readiness/restore-host.log
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s8-hil-readiness/build-host.log
+
+      - name: Run 5 HIL-readiness contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationHilReadinessGateTests' \
+            --logger 'trx;LogFileName=simulation-s8-hil-readiness.trx' \
+            2>&1 | tee artifacts/simulation-s8-hil-readiness/test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+5|Passed:[[:space:]]+5.*Total:[[:space:]]+5' artifacts/simulation-s8-hil-readiness/test.log
+
+      - name: Verify S8 is a readiness gate and not real-HIL acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          contracts='src/Wcs.Simulator/CapacityReadiness/CapacityReadinessContracts.cs'
+          controller='src/Wcs.Host/Controllers/SimulationCapacityReadinessController.cs'
+          grep -q 'RealHilExecuted' "$contracts"
+          grep -q 'MechanicalSafetyAccepted' "$contracts"
+          grep -q 'SiteAccepted' "$contracts"
+          grep -q 'false, false, false' src/Wcs.Simulator/CapacityReadiness/CapacityReadinessRuntime.cs
+          grep -q 'realHilExecuted = false' "$controller"
+          grep -q 'mechanicalSafetyAccepted = false' "$controller"
+          grep -q 'siteAccepted = false' "$controller"
+          grep -q 'controlWritesAllowed = false' "$controller"
+          if grep -R -nE 'S8.*(HIL passed|HIL accepted|site accepted|mechanical safety accepted)' src/Wcs.Simulator/CapacityReadiness src/Wcs.Host/Controllers/SimulationCapacityReadinessController.cs; then
+            echo 'S8 must never claim real HIL, mechanical or site acceptance.' >&2
+            exit 1
+          fi
+
+      - name: Verify Production remains fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'SimulationBoundaryGuard.Evaluate' src/Wcs.Host/Controllers/SimulationCapacityReadinessController.cs
+          grep -q 'AllowedEnvironments' src/Wcs.Host/appsettings.Simulation.json
+          grep -q 'AllowedEnvironments' src/Wcs.Host/appsettings.SimulationLoadTest.json
+          if grep -R -nE 'HttpPost|HttpPut|HttpPatch|HttpDelete' src/Wcs.Host/Controllers/SimulationCapacityReadinessController.cs; then
+            echo 'S8 host API must remain read-only.' >&2
+            exit 1
+          fi
+
+      - name: Upload S8 HIL readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-hil-readiness-${{ github.run_number }}
+          path: artifacts/simulation-s8-hil-readiness/**
+          if-no-files-found: error
+          retention-days: 14
