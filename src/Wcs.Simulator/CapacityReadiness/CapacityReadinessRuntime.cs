@@ -1,7 +1,10 @@
 namespace Wcs.Simulator.CapacityReadiness;
 
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Wcs.Simulator.ScenarioEngine;
 using Wcs.Simulator.VirtualExternal;
 using Wcs.Simulator.VirtualHealth;
@@ -14,7 +17,7 @@ using Wcs.Simulator.VirtualTraffic;
 /// Repository-only S8 capacity harness. It composes the existing S7 runtime on the shared
 /// SimulationStateStore and performs admission before provisioning any S2-S7 virtual resource.
 /// </summary>
-public sealed class CapacityReadinessRuntime
+public sealed partial class CapacityReadinessRuntime
 {
     private const string ProfileCountKey = "__s8.profile.count";
     private readonly SimulationStateStore _state;
@@ -51,11 +54,14 @@ public sealed class CapacityReadinessRuntime
         _traffic.Validate(); _external.Validate(); _health.Validate();
     }
 
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,113}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ProfileIdRegex();
+
     public CapacityAdmissionResult Preflight(CapacityProfileDefinition profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
         var violations = new List<string>();
-        if (string.IsNullOrWhiteSpace(profile.ProfileId) || profile.ProfileId.Length > 128) violations.Add("ProfileId must be 1..128 characters.");
+        if (string.IsNullOrWhiteSpace(profile.ProfileId) || !ProfileIdRegex().IsMatch(profile.ProfileId)) violations.Add("ProfileId must match the S8 identifier contract and be at most 114 characters.");
         if (profile.MissionCount is < 1 || profile.MissionCount > _options.MaximumMissionsPerProfile) violations.Add("MissionCount exceeds S8 profile limit.");
         if (profile.ConcurrentMissions is < 1 || profile.ConcurrentMissions > _options.MaximumConcurrentMissions || profile.ConcurrentMissions > profile.MissionCount) violations.Add("ConcurrentMissions exceeds S8 profile limit.");
         if (profile.SegmentsPerMission is < 1 || profile.SegmentsPerMission > _options.MaximumSegmentsPerMission) violations.Add("SegmentsPerMission exceeds S8 profile limit.");
@@ -65,8 +71,14 @@ public sealed class CapacityReadinessRuntime
         if (_state.Contains(ProfileKey(profile.ProfileId))) violations.Add("ProfileId is already registered in this S8 state store.");
 
         var missions = Math.Max(0, profile.MissionCount);
-        var segments = checked((long)missions * Math.Max(0, profile.SegmentsPerMission));
+        var segmentsPerMission = Math.Max(0, profile.SegmentsPerMission);
+        var concurrent = Math.Max(1, profile.ConcurrentMissions);
+        var segments = checked((long)missions * segmentsPerMission);
         var estimatedStateEntries = checked(64L + missions * 28L + segments * 12L);
+        var batchCount = missions == 0 ? 0 : (missions + concurrent - 1L) / concurrent;
+        var minimumVirtualDuration = checked(batchCount * (segmentsPerMission * 1_000L + 101L));
+        if (profile.VirtualDurationMilliseconds > 0 && profile.VirtualDurationMilliseconds < minimumVirtualDuration) violations.Add("VirtualDurationMilliseconds is too small for deterministic bounded batches.");
+        if (segmentsPerMission * 1_000L + 100L >= _integration.ReservationLeaseMilliseconds) violations.Add("Mission duration would reach or exceed the configured S7 reservation lease.");
         if (missions > _integration.MaximumMissions) violations.Add("MissionCount exceeds SimulationVirtualIntegration.MaximumMissions.");
         if (profile.SegmentsPerMission > _integration.MaximumSegmentsPerMission) violations.Add("SegmentsPerMission exceeds SimulationVirtualIntegration.MaximumSegmentsPerMission.");
         if (missions > _plc.MaximumBlocks) violations.Add("MissionCount exceeds SimulationVirtualPlc.MaximumBlocks.");
@@ -98,46 +110,69 @@ public sealed class CapacityReadinessRuntime
         var samples = new List<CapacitySample>(Math.Min(profile.MissionCount, _options.MaximumSamplesPerProfile));
         Set(ProfileKey(profile.ProfileId), profile);
         var profileOrdinal = _state.Increment(ProfileCountKey, 1);
-
         var runtime = IntegrationRuntime();
         long sequence = 0;
-        for (var i = 0; i < profile.MissionCount; i++)
+        long lastCompletedOffset = 0;
+        var peakConcurrent = 0;
+
+        for (var batchStart = 0; batchStart < profile.MissionCount; batchStart += profile.ConcurrentMissions)
         {
-            var prefix = $"P{profileOrdinal:D4}_{i:D5}";
-            var missionId = $"{profile.ProfileId}-{prefix}";
-            var baseOffset = checked((profile.VirtualDurationMilliseconds * i) / Math.Max(1, profile.MissionCount));
-            var definition = BuildMission(missionId, prefix, profileOrdinal, i, profile.SegmentsPerMission);
-            runtime.DefineMission(definition, baseOffset, startUtc.AddMilliseconds(baseOffset));
-            runtime.DispatchMission(missionId, baseOffset + 1, startUtc.AddMilliseconds(baseOffset + 1));
-            var offset = baseOffset + 1;
+            var batchSize = Math.Min(profile.ConcurrentMissions, profile.MissionCount - batchStart);
+            var proportionalOffset = checked((profile.VirtualDurationMilliseconds * batchStart) / Math.Max(1, profile.MissionCount));
+            var batchOffset = Math.Max(proportionalOffset, lastCompletedOffset);
+            var batch = new List<string>(batchSize);
+
+            for (var local = 0; local < batchSize; local++)
+            {
+                var missionIndex = batchStart + local;
+                var prefix = $"P{profileOrdinal:D4}_{missionIndex:D5}";
+                var missionId = $"{profile.ProfileId}-{prefix}";
+                runtime.DefineMission(BuildMission(missionId, prefix, profileOrdinal, missionIndex, profile.SegmentsPerMission),
+                    batchOffset, startUtc.AddMilliseconds(batchOffset));
+                runtime.DispatchMission(missionId, batchOffset + 1, startUtc.AddMilliseconds(batchOffset + 1));
+                batch.Add(missionId);
+            }
+
+            var active = runtime.ListMissions().Count(x => x.State is VirtualIntegrationMissionState.Dispatched or VirtualIntegrationMissionState.Moving or VirtualIntegrationMissionState.Completed);
+            peakConcurrent = Math.Max(peakConcurrent, active);
+            var operationOffset = batchOffset + 1;
             for (var segment = 0; segment < profile.SegmentsPerMission; segment++)
             {
-                offset += 1_000;
-                runtime.AdvanceMission(missionId, offset, startUtc.AddMilliseconds(offset));
+                operationOffset += 1_000;
+                foreach (var missionId in batch)
+                    runtime.AdvanceMission(missionId, operationOffset, startUtc.AddMilliseconds(operationOffset));
             }
-            runtime.AcknowledgeMission(missionId, offset + 100, startUtc.AddMilliseconds(offset + 100));
-            if (samples.Count < _options.MaximumSamplesPerProfile)
+
+            operationOffset += 100;
+            foreach (var missionId in batch)
             {
-                samples.Add(new CapacitySample(++sequence, offset + 100, runtime.ListMissions().Count,
-                    runtime.ListMissions().Count(x => x.State == VirtualIntegrationMissionState.Acknowledged),
-                    _state.Count, _state.ComputeHash()));
+                runtime.AcknowledgeMission(missionId, operationOffset, startUtc.AddMilliseconds(operationOffset));
+                if (samples.Count < _options.MaximumSamplesPerProfile)
+                {
+                    samples.Add(new CapacitySample(++sequence, operationOffset, runtime.ListMissions().Count,
+                        runtime.ListMissions().Count(x => x.State == VirtualIntegrationMissionState.Acknowledged),
+                        _state.Count, _state.ComputeHash()));
+                }
             }
+            lastCompletedOffset = operationOffset + 1;
         }
 
         var missions = runtime.ListMissions().Where(x => x.MissionId.StartsWith(profile.ProfileId + "-", StringComparison.Ordinal)).ToArray();
         var conservation = missions.Length == profile.MissionCount &&
             missions.All(x => x.State == VirtualIntegrationMissionState.Acknowledged) &&
             missions.All(x => runtime.GetConsistency(x.MissionId, profile.VirtualDurationMilliseconds).IsConsistent);
-        var bounded = _state.Count <= _engineOptions.MaximumStateEntries && samples.Count <= _options.MaximumSamplesPerProfile;
+        var bounded = _state.Count <= _engineOptions.MaximumStateEntries && samples.Count <= _options.MaximumSamplesPerProfile && peakConcurrent <= profile.ConcurrentMissions;
         stopwatch.Stop();
         process.Refresh();
         var rssAfter = process.WorkingSet64;
         var rssGrowth = Math.Max(0, rssAfter - rssBefore);
         var resourceBudget = stopwatch.ElapsedMilliseconds <= _options.MaximumWallClockMilliseconds && rssGrowth <= _options.MaximumRssGrowthBytes;
+        var workloadStateHash = _state.ComputeHash();
+        var evidenceHash = ComputeEvidenceHash(profile, peakConcurrent, samples, workloadStateHash);
         var snapshot = new CapacityProfileSnapshot(profile.ProfileId, profile.Kind, CapacityProfileState.Completed,
             profile.MissionCount, profile.ConcurrentMissions, profile.SegmentsPerMission, profile.VirtualDurationMilliseconds,
-            samples.Count, conservation, bounded, _state.ComputeHash(),
-            $"acknowledged={missions.Count(x => x.State == VirtualIntegrationMissionState.Acknowledged)};stateEntries={_state.Count}");
+            peakConcurrent, samples.Count, conservation, bounded, workloadStateHash, evidenceHash,
+            $"acknowledged={missions.Count(x => x.State == VirtualIntegrationMissionState.Acknowledged)};peakConcurrent={peakConcurrent};stateEntries={_state.Count}");
         Set(ProfileResultKey(profile.ProfileId), snapshot);
         return new CapacityRunReport(snapshot, admission, samples.ToArray(), stopwatch.ElapsedMilliseconds,
             rssBefore, rssAfter, rssGrowth, GC.CollectionCount(0)-gen0, GC.CollectionCount(1)-gen1, GC.CollectionCount(2)-gen2,
@@ -181,13 +216,30 @@ public sealed class CapacityReadinessRuntime
         return new VirtualIntegrationMissionDefinition
         {
             MissionId = missionId,
-            PlcBlockKey = $"PLC8P{profileOrdinal:D4}.DB{1000 + missionIndex}",
+            PlcBlockKey = $"PLC8P{profileOrdinal:D4}.DB{missionIndex}",
             VehicleId = $"RGV-{prefix}", LoadId = $"LOAD-{prefix}",
             SourceNodeId = segments[0].FromNodeId, DestinationNodeId = segments[^1].ToNodeId,
             ExternalEndpointId = $"MES-{prefix}", ExternalSystemKind = VirtualExternalSystemKind.Mes,
             HealthAssetId = $"ASSET-{prefix}", Priority = 100, VehicleSpeedMillimetersPerSecond = 1_000,
             VehicleBatteryPercent = 100, InitialHealthScore = 95, InitialFusionRiskScore = 0.05, Segments = segments
         };
+    }
+
+    private static string ComputeEvidenceHash(CapacityProfileDefinition profile, int peakConcurrent, IReadOnlyList<CapacitySample> samples, string workloadStateHash)
+    {
+        var canonical = JsonSerializer.Serialize(new
+        {
+            profile.ProfileId,
+            Kind = profile.Kind.ToString(),
+            profile.MissionCount,
+            profile.ConcurrentMissions,
+            profile.SegmentsPerMission,
+            profile.VirtualDurationMilliseconds,
+            PeakConcurrentMissions = peakConcurrent,
+            Samples = samples.Select(x => new { x.Sequence, x.VirtualOffsetMilliseconds, x.DefinedMissions, x.AcknowledgedMissions, x.StateEntryCount, x.StateHash }).ToArray(),
+            WorkloadStateHash = workloadStateHash
+        });
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
 
     private long ReadLong(string key) => _state.TryGet(key, out var value) && value.TryGetInt64(out var result) ? result : 0;
