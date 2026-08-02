@@ -55,6 +55,15 @@ public sealed record CapacitySample(
     long StateEntryCount,
     string StateHash);
 
+public sealed record CapacityAuditRecord(
+    long Sequence,
+    DateTimeOffset OccurredAtUtc,
+    long VirtualOffsetMilliseconds,
+    string Operation,
+    string ProfileId,
+    string Detail,
+    bool Success);
+
 public sealed record CapacityProfileSnapshot(
     string ProfileId,
     CapacityProfileKind Kind,
