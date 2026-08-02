@@ -56,14 +56,16 @@ public sealed partial class CapacityReadinessRuntime
         _traffic.Validate(); _external.Validate(); _health.Validate();
     }
 
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,113}$", RegexOptions.CultureInvariant)]
+    // Leaves room for the deterministic S8 mission suffix and S7 "-Z000" zone suffix,
+    // so every composed identifier is validated before any S2-S7 resource is provisioned.
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,109}$", RegexOptions.CultureInvariant)]
     private static partial Regex ProfileIdRegex();
 
     public CapacityAdmissionResult Preflight(CapacityProfileDefinition profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
         var violations = new List<string>();
-        if (string.IsNullOrWhiteSpace(profile.ProfileId) || !ProfileIdRegex().IsMatch(profile.ProfileId)) violations.Add("ProfileId must match the S8 identifier contract and be at most 114 characters.");
+        if (string.IsNullOrWhiteSpace(profile.ProfileId) || !ProfileIdRegex().IsMatch(profile.ProfileId)) violations.Add("ProfileId must match the S8 identifier contract and be at most 110 characters.");
         if (profile.MissionCount is < 1 || profile.MissionCount > _options.MaximumMissionsPerProfile) violations.Add("MissionCount exceeds S8 profile limit.");
         if (profile.ConcurrentMissions is < 1 || profile.ConcurrentMissions > _options.MaximumConcurrentMissions || profile.ConcurrentMissions > profile.MissionCount) violations.Add("ConcurrentMissions exceeds S8 profile limit.");
         if (profile.SegmentsPerMission is < 1 || profile.SegmentsPerMission > _options.MaximumSegmentsPerMission) violations.Add("SegmentsPerMission exceeds S8 profile limit.");
