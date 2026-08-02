@@ -20,6 +20,8 @@ using Wcs.Simulator.VirtualTraffic;
 public sealed partial class CapacityReadinessRuntime
 {
     private const string ProfileCountKey = "__s8.profile.count";
+    private const string AuditSequenceKey = "__s8.audit.sequence";
+    private const string AuditCountKey = "__s8.audit.count";
     private readonly SimulationStateStore _state;
     private readonly SimulationScenarioEngineOptions _engineOptions;
     private readonly CapacityReadinessOptions _options;
@@ -74,26 +76,43 @@ public sealed partial class CapacityReadinessRuntime
         var segmentsPerMission = Math.Max(0, profile.SegmentsPerMission);
         var concurrent = Math.Max(1, profile.ConcurrentMissions);
         var segments = checked((long)missions * segmentsPerMission);
-        var estimatedStateEntries = checked(64L + missions * 28L + segments * 12L);
+        var projectedStateEntries = checked((long)_state.Count + 64L + missions * 28L + segments * 12L);
         var batchCount = missions == 0 ? 0 : (missions + concurrent - 1L) / concurrent;
         var minimumVirtualDuration = checked(batchCount * (segmentsPerMission * 1_000L + 101L));
         if (profile.VirtualDurationMilliseconds > 0 && profile.VirtualDurationMilliseconds < minimumVirtualDuration) violations.Add("VirtualDurationMilliseconds is too small for deterministic bounded batches.");
         if (segmentsPerMission * 1_000L + 100L >= _integration.ReservationLeaseMilliseconds) violations.Add("Mission duration would reach or exceed the configured S7 reservation lease.");
-        if (missions > _integration.MaximumMissions) violations.Add("MissionCount exceeds SimulationVirtualIntegration.MaximumMissions.");
+
+        var integrationRuntime = IntegrationRuntime();
+        var virtualPlc = new VirtualPlcRuntime(_state, _plc);
+        var virtualRgv = new VirtualRgvRuntime(_state, _rgv);
+        var virtualTraffic = new VirtualTrafficRuntime(_state, _traffic, _rgv);
+        var virtualExternal = new VirtualExternalRuntime(_state, _external);
+        var virtualHealth = new VirtualHealthRuntime(_state, _health);
+        var existingMissions = integrationRuntime.ListMissions().Count;
+        var existingBlocks = virtualPlc.ListBlocks().Count;
+        var existingVehicles = virtualRgv.ListVehicles().Count;
+        var existingSegments = virtualRgv.ListSegments().Count;
+        var existingZones = virtualTraffic.ListZones().Count;
+        var existingReservations = virtualTraffic.ListReservations(activeOnly: false).Count;
+        var existingEndpoints = virtualExternal.ListEndpoints().Count;
+        var existingRequests = virtualExternal.ListRequests().Count;
+        var existingAssets = virtualHealth.ListAssets().Count;
+
+        if (existingMissions + missions > _integration.MaximumMissions) violations.Add("Existing plus requested missions exceed SimulationVirtualIntegration.MaximumMissions.");
         if (profile.SegmentsPerMission > _integration.MaximumSegmentsPerMission) violations.Add("SegmentsPerMission exceeds SimulationVirtualIntegration.MaximumSegmentsPerMission.");
-        if (missions > _plc.MaximumBlocks) violations.Add("MissionCount exceeds SimulationVirtualPlc.MaximumBlocks.");
-        if (missions > _rgv.MaximumVehicles) violations.Add("MissionCount exceeds SimulationVirtualRgv.MaximumVehicles.");
-        if (segments > _rgv.MaximumSegments) violations.Add("Aggregate segments exceed SimulationVirtualRgv.MaximumSegments.");
+        if (existingBlocks + missions > _plc.MaximumBlocks) violations.Add("Existing plus requested blocks exceed SimulationVirtualPlc.MaximumBlocks.");
+        if (existingVehicles + missions > _rgv.MaximumVehicles) violations.Add("Existing plus requested vehicles exceed SimulationVirtualRgv.MaximumVehicles.");
+        if (existingSegments + segments > _rgv.MaximumSegments) violations.Add("Existing plus requested segments exceed SimulationVirtualRgv.MaximumSegments.");
         if (profile.SegmentsPerMission > _rgv.MaximumRouteSegments) violations.Add("SegmentsPerMission exceeds SimulationVirtualRgv.MaximumRouteSegments.");
-        if (segments > _traffic.MaximumZones) violations.Add("Aggregate segments exceed SimulationVirtualTraffic.MaximumZones.");
-        if (segments > _traffic.MaximumReservations) violations.Add("Aggregate reservations exceed SimulationVirtualTraffic.MaximumReservations.");
+        if (existingZones + segments > _traffic.MaximumZones) violations.Add("Existing plus requested zones exceed SimulationVirtualTraffic.MaximumZones.");
+        if (existingReservations + segments > _traffic.MaximumReservations) violations.Add("Existing plus requested reservations exceed SimulationVirtualTraffic.MaximumReservations.");
         if (profile.SegmentsPerMission > _traffic.MaximumRollingLookAheadSegments) violations.Add("SegmentsPerMission exceeds SimulationVirtualTraffic.MaximumRollingLookAheadSegments.");
-        if (missions > _external.MaximumEndpoints) violations.Add("MissionCount exceeds SimulationVirtualExternal.MaximumEndpoints.");
-        if (missions > _external.MaximumRequests) violations.Add("MissionCount exceeds SimulationVirtualExternal.MaximumRequests.");
-        if (missions > _health.MaximumAssets) violations.Add("MissionCount exceeds SimulationVirtualHealth.MaximumAssets.");
-        if (estimatedStateEntries > _engineOptions.MaximumStateEntries) violations.Add("Estimated state entries exceed SimulationScenarioEngine.MaximumStateEntries.");
+        if (existingEndpoints + missions > _external.MaximumEndpoints) violations.Add("Existing plus requested endpoints exceed SimulationVirtualExternal.MaximumEndpoints.");
+        if (existingRequests + missions > _external.MaximumRequests) violations.Add("Existing plus requested requests exceed SimulationVirtualExternal.MaximumRequests.");
+        if (existingAssets + missions > _health.MaximumAssets) violations.Add("Existing plus requested assets exceed SimulationVirtualHealth.MaximumAssets.");
+        if (projectedStateEntries > _engineOptions.MaximumStateEntries) violations.Add("Projected state entries exceed SimulationScenarioEngine.MaximumStateEntries.");
         if (ReadLong(ProfileCountKey) >= _options.MaximumProfiles) violations.Add("S8 profile registry has reached MaximumProfiles.");
-        return new CapacityAdmissionResult(violations.Count == 0, violations, estimatedStateEntries);
+        return new CapacityAdmissionResult(violations.Count == 0, violations, projectedStateEntries);
     }
 
     public CapacityRunReport Run(CapacityProfileDefinition profile, DateTimeOffset startUtc)
@@ -110,6 +129,8 @@ public sealed partial class CapacityReadinessRuntime
         var samples = new List<CapacitySample>(Math.Min(profile.MissionCount, _options.MaximumSamplesPerProfile));
         Set(ProfileKey(profile.ProfileId), profile);
         var profileOrdinal = _state.Increment(ProfileCountKey, 1);
+        AppendAudit(startUtc, 0, "profile.start", profile.ProfileId,
+            $"kind={profile.Kind};missions={profile.MissionCount};concurrent={profile.ConcurrentMissions};segments={profile.SegmentsPerMission}", true);
         var runtime = IntegrationRuntime();
         long sequence = 0;
         long lastCompletedOffset = 0;
@@ -162,13 +183,16 @@ public sealed partial class CapacityReadinessRuntime
             missions.All(x => x.State == VirtualIntegrationMissionState.Acknowledged) &&
             missions.All(x => runtime.GetConsistency(x.MissionId, profile.VirtualDurationMilliseconds).IsConsistent);
         var bounded = _state.Count <= _engineOptions.MaximumStateEntries && samples.Count <= _options.MaximumSamplesPerProfile && peakConcurrent <= profile.ConcurrentMissions;
+        AppendAudit(startUtc.AddMilliseconds(Math.Max(0, lastCompletedOffset - 1)), Math.Max(0, lastCompletedOffset - 1),
+            "profile.complete", profile.ProfileId,
+            $"acknowledged={missions.Length};peakConcurrent={peakConcurrent};conservation={conservation};bounded={bounded}", conservation && bounded);
         stopwatch.Stop();
         process.Refresh();
         var rssAfter = process.WorkingSet64;
         var rssGrowth = Math.Max(0, rssAfter - rssBefore);
         var resourceBudget = stopwatch.ElapsedMilliseconds <= _options.MaximumWallClockMilliseconds && rssGrowth <= _options.MaximumRssGrowthBytes;
         var workloadStateHash = _state.ComputeHash();
-        var evidenceHash = ComputeEvidenceHash(profile, peakConcurrent, samples, workloadStateHash);
+        var evidenceHash = ComputeEvidenceHash(profile, peakConcurrent, samples, ListAudit(_options.MaximumAuditRecords), workloadStateHash);
         var snapshot = new CapacityProfileSnapshot(profile.ProfileId, profile.Kind, CapacityProfileState.Completed,
             profile.MissionCount, profile.ConcurrentMissions, profile.SegmentsPerMission, profile.VirtualDurationMilliseconds,
             peakConcurrent, samples.Count, conservation, bounded, workloadStateHash, evidenceHash,
@@ -206,6 +230,26 @@ public sealed partial class CapacityReadinessRuntime
         return value.Deserialize<CapacityProfileSnapshot>();
     }
 
+    public IReadOnlyList<CapacityAuditRecord> ListAudit(int take = 100)
+    {
+        if (take < 1) return [];
+        var latestSequence = ReadLong(AuditSequenceKey);
+        var count = (int)Math.Min(ReadLong(AuditCountKey), _options.MaximumAuditRecords);
+        var wanted = Math.Min(take, count);
+        var records = new List<CapacityAuditRecord>(wanted);
+        for (var offset = 0; offset < wanted; offset++)
+        {
+            var expected = latestSequence - offset;
+            var slot = (int)((expected - 1) % _options.MaximumAuditRecords);
+            if (_state.TryGet(AuditSlotKey(slot), out var value))
+            {
+                var record = value.Deserialize<CapacityAuditRecord>();
+                if (record is not null && record.Sequence == expected) records.Add(record);
+            }
+        }
+        return records;
+    }
+
     private VirtualIntegrationRuntime IntegrationRuntime() => new(_state, _integration, _plc, _rgv, _traffic, _external, _health);
 
     private static VirtualIntegrationMissionDefinition BuildMission(string missionId, string prefix, long profileOrdinal, int missionIndex, int segmentCount)
@@ -225,7 +269,15 @@ public sealed partial class CapacityReadinessRuntime
         };
     }
 
-    private static string ComputeEvidenceHash(CapacityProfileDefinition profile, int peakConcurrent, IReadOnlyList<CapacitySample> samples, string workloadStateHash)
+    private void AppendAudit(DateTimeOffset occurredAtUtc, long virtualOffsetMilliseconds, string operation, string profileId, string detail, bool success)
+    {
+        var sequence = _state.Increment(AuditSequenceKey, 1);
+        _state.Increment(AuditCountKey, 1);
+        var slot = (int)((sequence - 1) % _options.MaximumAuditRecords);
+        Set(AuditSlotKey(slot), new CapacityAuditRecord(sequence, occurredAtUtc, virtualOffsetMilliseconds, operation, profileId, detail, success));
+    }
+
+    private static string ComputeEvidenceHash(CapacityProfileDefinition profile, int peakConcurrent, IReadOnlyList<CapacitySample> samples, IReadOnlyList<CapacityAuditRecord> audit, string workloadStateHash)
     {
         var canonical = JsonSerializer.Serialize(new
         {
@@ -237,6 +289,7 @@ public sealed partial class CapacityReadinessRuntime
             profile.VirtualDurationMilliseconds,
             PeakConcurrentMissions = peakConcurrent,
             Samples = samples.Select(x => new { x.Sequence, x.VirtualOffsetMilliseconds, x.DefinedMissions, x.AcknowledgedMissions, x.StateEntryCount, x.StateHash }).ToArray(),
+            Audit = audit.OrderBy(x => x.Sequence).Select(x => new { x.Sequence, x.OccurredAtUtc, x.VirtualOffsetMilliseconds, x.Operation, x.ProfileId, x.Detail, x.Success }).ToArray(),
             WorkloadStateHash = workloadStateHash
         });
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
@@ -251,4 +304,5 @@ public sealed partial class CapacityReadinessRuntime
     private static int TryGetHandleCount(Process process) { try { return process.HandleCount; } catch { return -1; } }
     private static string ProfileKey(string id) => $"__s8.profile.{id}";
     private static string ProfileResultKey(string id) => $"__s8.result.{id}";
+    private static string AuditSlotKey(int slot) => $"__s8.audit.slot.{slot:D6}";
 }
