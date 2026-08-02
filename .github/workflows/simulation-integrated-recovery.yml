@@ -1,0 +1,99 @@
+name: WCS Simulation Integrated Recovery
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualIntegration/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualIntegration*.cs'
+      - 'src/Wcs.Host/Controllers/SimulationVirtualIntegrationController.cs'
+      - 'src/Wcs.Host/Simulation/SimulationHostRuntime.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-integrated-recovery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integrated-recovery:
+    name: verify S2-S6 integrated mission checkpoint recovery and exactly-once completion
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-s7-integration
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee artifacts/simulation-s7-integration/restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s7-integration/build-tests.log
+
+      - name: Build host composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee artifacts/simulation-s7-integration/restore-host.log
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s7-integration/build-host.log
+
+      - name: Run S7 integrated recovery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualIntegration' \
+            --logger 'trx;LogFileName=simulation-s7-integration.trx' \
+            2>&1 | tee artifacts/simulation-s7-integration/test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+13|Passed:[[:space:]]+13.*Total:[[:space:]]+13' artifacts/simulation-s7-integration/test.log
+
+      - name: Verify integrated recovery isolation boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir='src/Wcs.Simulator/VirtualIntegration'
+          grep -R -n 'SimulationStateStore' "$source_dir"
+          grep -R -n 'VirtualPlcRuntime' "$source_dir"
+          grep -R -n 'VirtualRgvRuntime' "$source_dir"
+          grep -R -n 'VirtualTrafficRuntime' "$source_dir"
+          grep -R -n 'VirtualExternalRuntime' "$source_dir"
+          grep -R -n 'VirtualHealthRuntime' "$source_dir"
+          if grep -R -nE 'HttpClient|SqlSugar|SqlConnection|Microsoft\.Data\.SqlClient|System\.Data\.SqlClient|Socket|TcpClient|UdpClient|IPlcClient|IPlcConnection|S7|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|IAssetFailureForecastService|InferenceSession' "$source_dir"; then
+            echo 'S7 integration runtime must compose only virtual S2-S6 runtimes and must not enter production I/O or control paths.' >&2
+            exit 1
+          fi
+          if grep -R -nE 'DateTime\.Now|DateTime\.UtcNow|Task\.Delay|Thread\.Sleep|Random\.Shared' "$source_dir"; then
+            echo 'S7 deterministic integration runtime must not use wall-clock waits or nondeterministic random sources.' >&2
+            exit 1
+          fi
+
+      - name: Verify bounded S7 configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'SimulationVirtualIntegration' src/Wcs.Host/appsettings.Simulation.json
+          grep -q 'SimulationVirtualIntegration' src/Wcs.Host/appsettings.SimulationLoadTest.json
+          grep -q 'MaximumMissions' src/Wcs.Simulator/VirtualIntegration/VirtualIntegrationContracts.cs
+          grep -q 'MaximumSegmentsPerMission' src/Wcs.Simulator/VirtualIntegration/VirtualIntegrationContracts.cs
+          grep -q 'ExternalAckMaximumAttempts' src/Wcs.Simulator/VirtualIntegration/VirtualIntegrationContracts.cs
+
+      - name: Upload S7 integrated recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-integrated-recovery-${{ github.run_number }}
+          path: artifacts/simulation-s7-integration/**
+          if-no-files-found: error
+          retention-days: 14
