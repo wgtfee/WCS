@@ -62,6 +62,7 @@ public sealed class CapacityReadinessRuntime
         if (profile.VirtualDurationMilliseconds < 1) violations.Add("VirtualDurationMilliseconds must be positive.");
         if (profile.Kind == CapacityProfileKind.EightHourVirtualSoak && profile.VirtualDurationMilliseconds != _options.EightHourVirtualDurationMilliseconds) violations.Add("EightHourVirtualSoak must be exactly 8 virtual hours.");
         if (profile.Kind == CapacityProfileKind.TwentyFourHourVirtualSoak && profile.VirtualDurationMilliseconds != _options.TwentyFourHourVirtualDurationMilliseconds) violations.Add("TwentyFourHourVirtualSoak must be exactly 24 virtual hours.");
+        if (_state.Contains(ProfileKey(profile.ProfileId))) violations.Add("ProfileId is already registered in this S8 state store.");
 
         var missions = Math.Max(0, profile.MissionCount);
         var segments = checked((long)missions * Math.Max(0, profile.SegmentsPerMission));
@@ -96,16 +97,16 @@ public sealed class CapacityReadinessRuntime
         var stopwatch = Stopwatch.StartNew();
         var samples = new List<CapacitySample>(Math.Min(profile.MissionCount, _options.MaximumSamplesPerProfile));
         Set(ProfileKey(profile.ProfileId), profile);
-        _state.Increment(ProfileCountKey, 1);
+        var profileOrdinal = _state.Increment(ProfileCountKey, 1);
 
         var runtime = IntegrationRuntime();
         long sequence = 0;
         for (var i = 0; i < profile.MissionCount; i++)
         {
-            var prefix = $"P{i:D5}";
+            var prefix = $"P{profileOrdinal:D4}_{i:D5}";
             var missionId = $"{profile.ProfileId}-{prefix}";
             var baseOffset = checked((profile.VirtualDurationMilliseconds * i) / Math.Max(1, profile.MissionCount));
-            var definition = BuildMission(missionId, prefix, profile.SegmentsPerMission);
+            var definition = BuildMission(missionId, prefix, profileOrdinal, i, profile.SegmentsPerMission);
             runtime.DefineMission(definition, baseOffset, startUtc.AddMilliseconds(baseOffset));
             runtime.DispatchMission(missionId, baseOffset + 1, startUtc.AddMilliseconds(baseOffset + 1));
             var offset = baseOffset + 1;
@@ -172,7 +173,7 @@ public sealed class CapacityReadinessRuntime
 
     private VirtualIntegrationRuntime IntegrationRuntime() => new(_state, _integration, _plc, _rgv, _traffic, _external, _health);
 
-    private static VirtualIntegrationMissionDefinition BuildMission(string missionId, string prefix, int segmentCount)
+    private static VirtualIntegrationMissionDefinition BuildMission(string missionId, string prefix, long profileOrdinal, int missionIndex, int segmentCount)
     {
         var segments = new List<VirtualIntegrationSegmentDefinition>(segmentCount);
         for (var i = 0; i < segmentCount; i++)
@@ -180,7 +181,7 @@ public sealed class CapacityReadinessRuntime
         return new VirtualIntegrationMissionDefinition
         {
             MissionId = missionId,
-            PlcBlockKey = $"PLC8.DB{1000 + int.Parse(prefix.AsSpan(1))}",
+            PlcBlockKey = $"PLC8P{profileOrdinal:D4}.DB{1000 + missionIndex}",
             VehicleId = $"RGV-{prefix}", LoadId = $"LOAD-{prefix}",
             SourceNodeId = segments[0].FromNodeId, DestinationNodeId = segments[^1].ToNodeId,
             ExternalEndpointId = $"MES-{prefix}", ExternalSystemKind = VirtualExternalSystemKind.Mes,
