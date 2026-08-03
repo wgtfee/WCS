@@ -77,8 +77,11 @@ public sealed class HilVerificationController : ControllerBase
 
     private (HilEnvironmentAccessDecision Decision, HilVerificationOptions Options) GetAccessDecision()
     {
-        var options = _configuration.GetSection(HilVerificationOptions.SectionName).Get<HilVerificationOptions>()
-                      ?? new HilVerificationOptions();
+        // ConfigurationBinder appends array values to initialized arrays. Start the bind target
+        // with an empty allow-list so HIL/TrialRun are not duplicated and rejected by validation.
+        // A missing section remains fail-closed because Enabled=false and the allow-list is empty.
+        var options = new HilVerificationOptions { AllowedEnvironments = [] };
+        _configuration.GetSection(HilVerificationOptions.SectionName).Bind(options);
         return (HilEnvironmentBoundaryGuard.Evaluate(_environment.EnvironmentName, options), options);
     }
 }
