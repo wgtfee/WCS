@@ -7,6 +7,9 @@ on:
       - 'src/Wcs.Simulator/HilVerification/**'
       - 'src/Wcs.Simulator.Tests/SimulationHilVerificationTests.cs'
       - 'docs/交付文件/82-*'
+      - 'docs/交付文件/83-*'
+      - 'docs/交付文件/84-*'
+      - 'docs/交付文件/85-*'
       - '.github/workflows/simulation-s9-hil-contract.yml'
   workflow_dispatch:
 
@@ -34,7 +37,7 @@ jobs:
           dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
           dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
 
-      - name: Run exactly 12 S9 HIL governance tests
+      - name: Run exactly 26 S9 HIL governance tests
         shell: bash
         run: |
           set -euo pipefail
@@ -50,9 +53,9 @@ jobs:
           root=ET.parse(path).getroot()
           results=root.findall('.//{*}UnitTestResult')
           failed=[x for x in results if x.attrib.get('outcome') != 'Passed']
-          assert len(results) == 12, f'expected 12 S9 tests, got {len(results)}'
+          assert len(results) == 26, f'expected 26 S9 tests, got {len(results)}'
           assert not failed, f'failed S9 tests: {[x.attrib.get("testName") for x in failed]}'
-          print('S9 HIL governance tests: 12/12 success')
+          print('S9 HIL governance tests: 26/26 success')
           PY
 
       - name: Verify framework cannot perform real hardware IO
@@ -70,17 +73,23 @@ jobs:
           grep -RIn 'MechanicalSafetyAccepted' "$scope"
           grep -RIn 'SiteAccepted' "$scope"
           grep -RIn 'ProtocolValidated' "$scope"
+          grep -RIn 'RecoveryFromSessionId' "$scope"
+          grep -RIn 'EvidenceSha256' "$scope"
 
-      - name: Verify fail-closed HIL semantics
+      - name: Verify fail-closed HIL and recovery semantics
         shell: bash
         run: |
           set -euo pipefail
           file='src/Wcs.Simulator/HilVerification/HilVerificationRuntime.cs'
+          contracts='src/Wcs.Simulator/HilVerification/HilVerificationContracts.cs'
           grep -q 'HilVerification is disabled' "$file"
           grep -q 'isolated from the production network' "$file"
           grep -q 'must not use production credentials' "$file"
           grep -q 'requires a SelfHostedHil runner attestation' "$file"
-          grep -q 'site acceptance still required' "$file"
+          grep -q 'same session cannot resume' "$file"
+          grep -q 'protocol, mechanical-safety and site acceptance are still required' "$file"
+          grep -q 'AllowedEnvironments' "$contracts"
+          grep -q 'must never include Production' "$contracts"
 
       - name: Upload S9 contract evidence
         if: always()
