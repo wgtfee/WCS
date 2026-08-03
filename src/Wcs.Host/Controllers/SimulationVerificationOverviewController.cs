@@ -54,9 +54,10 @@ public sealed class SimulationVerificationOverviewController : ControllerBase
 
     private SimulationAccessDecision GetSimulationDecision()
     {
-        var options = _configuration
-            .GetSection(SimulationGovernanceOptions.SectionName)
-            .Get<SimulationGovernanceOptions>() ?? new SimulationGovernanceOptions();
+        // ConfigurationBinder appends arrays. Bind into an empty allow-list so the
+        // defaults cannot be duplicated by appsettings or in-memory configuration.
+        var options = new SimulationGovernanceOptions { AllowedEnvironments = [] };
+        _configuration.GetSection(SimulationGovernanceOptions.SectionName).Bind(options);
         return SimulationBoundaryGuard.Evaluate(
             _environment.EnvironmentName,
             options,
