@@ -1,0 +1,120 @@
+name: WCS S10 Unified Verification Console
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - feature/simulation-s9-real-hil-trial
+    paths:
+      - 'src/Wcs.Host/Controllers/SimulationVerificationOverviewController.cs'
+      - 'src/Wcs.Desktop/Services/SimulationVerificationApiService.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationViewModel.cs'
+      - 'src/Wcs.Desktop/Views/SimulationVerificationView.axaml'
+      - 'src/Wcs.Desktop/Views/SimulationVerificationView.axaml.cs'
+      - 'src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs'
+      - 'src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs'
+      - 'src/Wcs.Simulator.Tests/SimulationUnifiedConsoleTests.cs'
+      - '.github/workflows/simulation-s10-unified-console.yml'
+      - 'docs/交付文件/86-*'
+      - 'docs/交付文件/87-*'
+      - 'docs/交付文件/88-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unified-console:
+    name: verify S10 unified read-only console and safety boundary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+
+      - name: Build Avalonia desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore
+
+      - name: Run exactly 10 S10 unified-console tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/s10-unified-console
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            -c Release --no-build \
+            --filter 'FullyQualifiedName~SimulationUnifiedConsoleTests' \
+            --logger 'trx;LogFileName=s10-unified-console.trx' \
+            --results-directory artifacts/s10-unified-console
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          path='artifacts/s10-unified-console/s10-unified-console.trx'
+          root=ET.parse(path).getroot()
+          results=root.findall('.//{*}UnitTestResult')
+          failed=[x for x in results if x.attrib.get('outcome') != 'Passed']
+          assert len(results) == 10, f'expected 10 S10 tests, got {len(results)}'
+          assert not failed, f'failed S10 tests: {[x.attrib.get("testName") for x in failed]}'
+          print('S10 unified console tests: 10/10 success')
+          PY
+
+      - name: Verify unified HTTP surface is read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='src/Wcs.Host/Controllers/SimulationVerificationOverviewController.cs'
+          grep -q '\[HttpGet("overview")\]' "$file"
+          ! grep -Eq '\[Http(Post|Put|Patch|Delete)' "$file"
+          grep -q 'RemoteControlAllowed = false' "$file"
+          grep -q 'RealHilExecuted = false' "$file"
+          grep -q 'MechanicalSafetyAccepted = false' "$file"
+          grep -q 'SiteAccepted = false' "$file"
+
+      - name: Verify desktop route, DI, and safety copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'ISimulationVerificationApiService' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
+          grep -q 'SimulationVerificationViewModel' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
+          grep -q '/SimulationVerification' src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs
+          grep -q 'S10 统一仿真与验证中心' src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+          grep -q '不提供场景执行、故障注入、PLC/RGV 控制、HIL 启动' src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+
+      - name: Write S10 contract evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > artifacts/s10-unified-console/evidence.txt <<EOF
+          head_sha=${GITHUB_SHA}
+          stage=S10
+          test_count=10
+          desktop_build=true
+          host_api_read_only=true
+          remote_control_allowed=false
+          real_hil_claimed=false
+          mechanical_safety_claimed=false
+          site_acceptance_claimed=false
+          EOF
+
+      - name: Upload S10 unified-console evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-s10-unified-verification-console-${{ github.run_number }}
+          path: artifacts/s10-unified-console/**
+          if-no-files-found: error
+          retention-days: 30
