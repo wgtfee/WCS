@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<ITransportResilienceApiService, TransportResilienceApiService>();
         services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>();
         services.AddHttpClient<ISimulationVerificationApiService, SimulationVerificationApiService>();
+        services.AddHttpClient<IModelOpsApiService, ModelOpsApiService>();
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
         services.AddSingleton<IDataProvider, ApiDataProvider>();
         services.AddTransient<LoginViewModel>();
@@ -41,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<TransportResilienceViewModel>();
         services.AddTransient<TransportSimulationViewModel>();
         services.AddTransient<SimulationVerificationViewModel>();
+        services.AddTransient<ModelOpsViewModel>();
         return services;
     }
 }
