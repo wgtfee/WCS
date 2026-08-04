@@ -5,8 +5,16 @@ on:
     branches: [ develop ]
     paths:
       - 'src/Wcs.ModelOps/**'
-      - 'src/Wcs.Infrastructure/IndustrialIntelligence/ModelOpsEntities.cs'
-      - 'src/Wcs.Simulator.Tests/ModelOpsCenterTests.cs'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/ModelOps*'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - 'src/Wcs.Host/Controllers/ModelOpsController.cs'
+      - 'src/Wcs.Desktop/Services/ModelOpsApiService.cs'
+      - 'src/Wcs.Desktop/ViewModels/ModelOpsViewModel.cs'
+      - 'src/Wcs.Desktop/Views/ModelOpsView.axaml*'
+      - 'src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs'
+      - 'src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs'
+      - 'src/Wcs.Desktop/Wcs.Desktop.csproj'
+      - 'src/Wcs.Simulator.Tests/ModelOpsCenter*.cs'
       - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
       - 'src/Wcs.IndustrialIntelligence/**'
       - 'docs/交付文件/89-*'
@@ -14,6 +22,7 @@ on:
       - 'docs/交付文件/94-*'
       - 'docs/交付文件/95-*'
       - 'docs/交付文件/96-*'
+      - 'docs/交付文件/00-*'
       - '.github/workflows/idi-p1-modelops.yml'
       - '.github/workflows/idi-p1-full-regression.yml'
   workflow_dispatch:
@@ -23,9 +32,19 @@ permissions:
 
 jobs:
   modelops-contract:
-    name: verify IDI-P1 ModelOps contracts and zero-control boundary
+    name: verify IDI-P1 ModelOps contracts, persistence and zero-control boundary
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
+    env:
+      IDI_P1_SQL_CONNECTION: 'Server=127.0.0.1,1433;Database=WCS_IdiP1;User Id=sa;Password=Wcs_IdiP1!2026;Encrypt=False;TrustServerCertificate=True;'
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: Wcs_IdiP1!2026
+        ports:
+          - 1433:1433
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,21 +54,44 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore and build P1 contracts
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql_container="$(docker ps --filter 'ancestor=mcr.microsoft.com/mssql/server:2022-latest' --format '{{.ID}}' | head -n1)"
+          test -n "$sql_container"
+          for attempt in {1..90}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 90 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "IF DB_ID('"'"'WCS_IdiP1'"'"') IS NULL CREATE DATABASE [WCS_IdiP1]"
+          '
+
+      - name: Restore and build P1 contracts Host and Desktop
         shell: bash
         run: |
           set -euo pipefail
           dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
           dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore
 
-      - name: Run exactly 16 P1 ModelOps tests
+      - name: Run exactly 32 P1 ModelOps tests
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/idi-p1-modelops
           dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
             -c Release --no-build \
-            --filter 'FullyQualifiedName~ModelOpsCenterTests' \
+            --filter 'FullyQualifiedName~ModelOpsCenter' \
             --logger 'trx;LogFileName=idi-p1-modelops.trx' \
             --results-directory artifacts/idi-p1-modelops
           python3 - <<'PY'
@@ -58,9 +100,9 @@ jobs:
           root=ET.parse(path).getroot()
           results=root.findall('.//{*}UnitTestResult')
           failed=[x for x in results if x.attrib.get('outcome') != 'Passed']
-          assert len(results) == 16, f'expected 16 P1 tests, got {len(results)}'
+          assert len(results) == 32, f'expected 32 P1 tests, got {len(results)}'
           assert not failed, f'failed P1 tests: {[x.attrib.get("testName") for x in failed]}'
-          print('IDI-P1 ModelOps tests: 16/16 success')
+          print('IDI-P1 ModelOps tests: 32/32 success')
           PY
 
       - name: Verify ModelOps zero-control boundary
@@ -77,12 +119,21 @@ jobs:
             echo 'IDI-P1 domain project must remain isolated from network/SQL clients.' >&2
             exit 1
           fi
+          if grep -E "$banned" src/Wcs.Host/Controllers/ModelOpsController.cs; then
+            echo 'IDI-P1 Host ModelOps API references a control mutation type.' >&2
+            exit 1
+          fi
+          grep -q 'controlWriteAllowed = false' src/Wcs.Host/Controllers/ModelOpsController.cs
+          grep -q 'autoPromotionAllowed = false' src/Wcs.Host/Controllers/ModelOpsController.cs
+          grep -q 'autoFallbackPromotion = false' src/Wcs.Host/Controllers/ModelOpsController.cs
+          grep -q '不写 PLC' src/Wcs.Desktop/ViewModels/ModelOpsViewModel.cs
 
-      - name: Verify ModelOps persistence definitions
+      - name: Verify SQL-backed persistence and singleton deployment constraints
         shell: bash
         run: |
           set -euo pipefail
           schema='src/Wcs.Infrastructure/IndustrialIntelligence/ModelOpsEntities.cs'
+          store='src/Wcs.Infrastructure/IndustrialIntelligence/ModelOpsPersistence.cs'
           for table in \
             Wcs_AiModelRegistry \
             Wcs_AiModelPackage \
@@ -92,8 +143,41 @@ jobs:
             Wcs_AiModelAuditJournal; do
             grep -q "$table" "$schema"
           done
+          grep -q 'ManifestJson' "$schema"
           grep -q 'UX_Wcs_AiModelRegistry_ModelVersion' "$schema"
-          grep -q 'IX_Wcs_AiModelDeployment_ScopeStatus' "$schema"
+          grep -q 'UX_Wcs_AiModelDeployment_VersionScope' "$schema"
+          grep -q 'UX_Wcs_AiModelDeployment_ChampionScope' "$schema"
+          grep -q 'UX_Wcs_AiModelDeployment_FallbackScope' "$schema"
+          grep -q "WHERE DeploymentStatus = 'Champion'" "$schema"
+          grep -q "WHERE DeploymentStatus = 'Fallback'" "$schema"
+          grep -q 'class SqlModelRegistry' "$store"
+          grep -q 'class SqlModelDeploymentStore' "$store"
+          grep -q 'class SqlModelOpsAuditJournal' "$store"
+          grep -q 'IsolationLevel.Serializable' "$store"
+
+      - name: Verify governed Shadow and evaluation behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          governance='src/Wcs.ModelOps/ModelOpsGovernance.cs'
+          grep -q 'class ModelDeploymentRecoveryService' "$governance"
+          grep -q 'class GovernedShadowRuntime' "$governance"
+          grep -q 'class ChampionChallengerEvaluator' "$governance"
+          grep -q 'class ModelDriftMonitor' "$governance"
+          grep -q 'AutoPromotionAllowed: false' "$governance"
+          grep -q 'ControlWriteAllowed: false' "$governance"
+          grep -q 'QuarantineChampionFailClosed' "$governance"
+
+      - name: Verify Host and Desktop P1 surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '\[Route("api/modelops")\]' src/Wcs.Host/Controllers/ModelOpsController.cs
+          grep -q 'IModelOpsApiService' src/Wcs.Desktop/Services/ModelOpsApiService.cs
+          grep -q 'class ModelOpsViewModel' src/Wcs.Desktop/ViewModels/ModelOpsViewModel.cs
+          grep -q 'x:Class="Wcs.Desktop.Views.ModelOpsView"' src/Wcs.Desktop/Views/ModelOpsView.axaml
+          grep -q 'Url = "/ModelOps"' src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs
+          grep -q 'AddHttpClient<IModelOpsApiService, ModelOpsApiService>()' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
 
       - name: Verify P0 safety ceiling remains intact
         shell: bash
@@ -110,9 +194,21 @@ jobs:
           stage=IDI-P1
           capability=ModelOpsCenter
           head_sha=${GITHUB_SHA}
-          tests=16
+          tests=32
           all_success=true
+          sql_backed_registry=true
+          restart_recovery=true
+          single_champion=true
+          single_fallback=true
+          quarantine_fail_closed=true
+          shadow_runtime=true
+          champion_challenger_evaluation=true
+          drift_evidence=true
+          append_only_audit=true
+          host_surface=true
+          desktop_surface=true
           default_deployment=shadow
+          auto_promotion_allowed=false
           control_write_allowed=false
           maximum_automation_level=L1
           production_automation_allowed=false
