@@ -27,5 +27,6 @@
     <ProjectReference Include="..\Wcs.Infrastructure\Wcs.Infrastructure.csproj" />
     <ProjectReference Include="..\Wcs.Application\Wcs.Application.csproj" />
     <ProjectReference Include="..\Wcs.Simulator\Wcs.Simulator.csproj" />
+    <ProjectReference Include="..\Wcs.IndustrialIntelligence\Wcs.IndustrialIntelligence.csproj" />
   </ItemGroup>
 </Project>
