@@ -1,5 +1,6 @@
 namespace Wcs.Host.Controllers;
 
+using Industrial.Security.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Wcs.Core.TransportScheduling;
 
@@ -28,22 +29,26 @@ public sealed class TransportAdministrationController : ControllerBase
     }
 
     [HttpGet("configuration")]
+    [Permission("WCS.Task.View")]
     public async Task<ActionResult<TransportRuntimeConfiguration>> GetConfiguration(CancellationToken cancellationToken) =>
         Ok(await _configuration.GetAsync(cancellationToken));
 
     [HttpGet("operations")]
+    [Permission("WCS.Task.View")]
     public async Task<ActionResult<IReadOnlyList<TransportGovernedOperation>>> GetOperations(
         [FromQuery] int maxCount = 200,
         CancellationToken cancellationToken = default) =>
         Ok(await _governance.GetOperationsAsync(Math.Clamp(maxCount, 1, 1000), cancellationToken));
 
     [HttpGet("audits")]
+    [Permission("WCS.Task.View")]
     public async Task<ActionResult<IReadOnlyList<TransportAuditRecord>>> GetAudits(
         [FromQuery] int maxCount = 500,
         CancellationToken cancellationToken = default) =>
         Ok(await _governance.GetAuditsAsync(Math.Clamp(maxCount, 1, 2000), cancellationToken));
 
     [HttpGet("journal")]
+    [Permission("WCS.Task.View")]
     public async Task<ActionResult<IReadOnlyList<TransportJournalRecord>>> GetJournal(
         [FromQuery] TransportJournalCategory? category = null,
         [FromQuery] int maxCount = 500,
@@ -51,6 +56,7 @@ public sealed class TransportAdministrationController : ControllerBase
         Ok(await _journal.QueryAsync(category, Math.Clamp(maxCount, 1, 2000), cancellationToken));
 
     [HttpPost("operations")]
+    [Permission("WCS.Task.Edit")]
     public async Task<ActionResult<TransportGovernedOperation>> RequestOperation(
         [FromBody] RequestTransportOperation request,
         CancellationToken cancellationToken)
@@ -73,6 +79,7 @@ public sealed class TransportAdministrationController : ControllerBase
     }
 
     [HttpPost("operations/{operationId}/approve")]
+    [Permission("WCS.Task.Edit")]
     public async Task<ActionResult<TransportGovernedOperation>> ApproveOperation(
         string operationId,
         [FromBody] ApproveTransportOperation request,
@@ -89,6 +96,7 @@ public sealed class TransportAdministrationController : ControllerBase
     }
 
     [HttpPost("operations/{operationId}/reject")]
+    [Permission("WCS.Task.Edit")]
     public async Task<ActionResult<TransportGovernedOperation>> RejectOperation(
         string operationId,
         [FromBody] RejectTransportOperation request,
@@ -105,6 +113,7 @@ public sealed class TransportAdministrationController : ControllerBase
     }
 
     [HttpPut("configuration/{operationId}")]
+    [Permission("WCS.Task.Edit")]
     public async Task<IActionResult> SaveConfiguration(
         string operationId,
         [FromBody] SaveTransportConfigurationRequest request,
@@ -142,6 +151,7 @@ public sealed class TransportAdministrationController : ControllerBase
     }
 
     [HttpPost("operations/{operationId}/execute/traffic/{ownerId}/force-release")]
+    [Permission("WCS.RGV.ForceRelease")]
     public async Task<IActionResult> ForceReleaseTraffic(
         string operationId,
         string ownerId,
@@ -171,6 +181,7 @@ public sealed class TransportAdministrationController : ControllerBase
     }
 
     [HttpPost("operations/{operationId}/execute/driver/{vehicleId}/command")]
+    [Permission("WCS.RGV.Dispatch")]
     public async Task<IActionResult> SendManualDriverCommand(
         string operationId,
         string vehicleId,

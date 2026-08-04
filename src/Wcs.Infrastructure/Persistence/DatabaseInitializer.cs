@@ -74,11 +74,14 @@ public class DatabaseInitializer : IDatabaseInitializer
                 typeof(TransportPlcSignalMapEntity),
                 typeof(TransportRuntimeStateEntity),
                 typeof(TransportCommissioningEntity)
+                ,typeof(WcsShadowUserEntity)
             );
 
             db.Ado.ExecuteCommand(@"
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcTelemetry_Time' AND object_id = OBJECT_ID('Wcs_PlcTelemetry'))
     CREATE INDEX IX_Wcs_PlcTelemetry_Time ON Wcs_PlcTelemetry(TimestampUtc);
+IF OBJECT_ID('Wcs_ShadowUser') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_ShadowUser_IamUserId' AND object_id = OBJECT_ID('Wcs_ShadowUser'))
+    CREATE UNIQUE INDEX UX_Wcs_ShadowUser_IamUserId ON Wcs_ShadowUser(IamUserId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcTelemetry_Signal' AND object_id = OBJECT_ID('Wcs_PlcTelemetry'))
     CREATE INDEX IX_Wcs_PlcTelemetry_Signal ON Wcs_PlcTelemetry(PlcName, DeviceId, SignalName, TimestampUtc);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_PlcAnomaly_Time' AND object_id = OBJECT_ID('Wcs_PlcAnomaly'))

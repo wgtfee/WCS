@@ -28,12 +28,33 @@ using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Industrial.Security.Abstractions;
+using Industrial.Security.AspNetCore;
+using Wcs.Host.IndustrialSecurity;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddIndustrialSecurity(builder.Configuration);
+    builder.Services.AddScoped<IShadowUserResolver, WcsShadowUserResolver>();
+    builder.Services.AddScoped<WcsCurrentUser>();
+    builder.Services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<WcsCurrentUser>());
+    builder.Services.AddScoped<IIdentityProvider, WcsIdentityProvider>();
+    builder.Services.AddScoped<ILocalPermissionSource, WcsLocalPermissionSource>();
+    builder.Services.AddScoped<IPermissionCodeMapper, WcsPermissionCodeMapper>();
+    builder.Services.AddScoped<IUserPermissionProvider, WcsLocalPermissionProvider>();
+    builder.Services.AddScoped<IPermissionProvider, WcsLocalPermissionProvider>();
+    var centralizedAuthentication = builder.Configuration.GetValue<string>("Security:Authentication:Mode")
+        ?.Equals("Centralized", StringComparison.OrdinalIgnoreCase) == true;
+    if (centralizedAuthentication)
+    {
+        builder.Services.AddAuthentication().AddIndustrialJwt(builder.Configuration);
+        builder.Services.AddAuthorization();
+    }
 
     builder.Services.AddSerilog(Log.Logger, dispose: true);
     builder.Services.AddWcsApplication();
@@ -260,11 +281,21 @@ try
     RegisterPlcValidators(app.Services, logger);
 
     app.UseMiddleware<TransportTraceContextMiddleware>();
+    app.UseRouting();
+    if (centralizedAuthentication)
+    {
+        app.UseAuthentication();
+        app.UseAuthorization();
+    }
+    app.UseIndustrialSecurity();
     if (transportObservability.EnablePrometheusEndpoint)
         app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
     app.MapHub<WcsHub>("/wcs");
     app.MapControllers();
+    app.MapIndustrialSecurityCacheInvalidation();
+    app.MapIndustrialLocalUserManagementInfo();
+    app.MapIndustrialEmergencyValidation();
     app.MapHealthChecks("/health/ready", new() { Predicate = r => r.Name == "readiness" });
     app.MapHealthChecks("/health/live", new() { Predicate = r => r.Name == "liveness" });
     app.MapHealthChecks("/health");
