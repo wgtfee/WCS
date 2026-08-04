@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
     <ProjectReference Include="..\Wcs.ModelOps\Wcs.ModelOps.csproj" />
+    <ProjectReference Include="..\Wcs.FeatureCenter\Wcs.FeatureCenter.csproj" />
   </ItemGroup>
 
   <ItemGroup>
