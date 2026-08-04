@@ -20,6 +20,9 @@ public sealed class AiModelRegistryEntity
     [SugarColumn(Length = 64, IsNullable = false)]
     public string ManifestHash { get; set; } = string.Empty;
 
+    [SugarColumn(ColumnDataType = "nvarchar(max)", IsNullable = false)]
+    public string ManifestJson { get; set; } = string.Empty;
+
     [SugarColumn(Length = 120, IsNullable = false)]
     public string LifecycleStatus { get; set; } = string.Empty;
 
@@ -219,6 +222,12 @@ public static class ModelOpsSchema
         db.Ado.ExecuteCommand(@"
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_AiModelRegistry_ModelVersion' AND object_id = OBJECT_ID('Wcs_AiModelRegistry'))
     CREATE UNIQUE INDEX UX_Wcs_AiModelRegistry_ModelVersion ON Wcs_AiModelRegistry(ModelId, ModelVersion);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_AiModelDeployment_VersionScope' AND object_id = OBJECT_ID('Wcs_AiModelDeployment'))
+    CREATE UNIQUE INDEX UX_Wcs_AiModelDeployment_VersionScope ON Wcs_AiModelDeployment(ModelId, ModelVersion, AssetType, Profile);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_AiModelDeployment_ChampionScope' AND object_id = OBJECT_ID('Wcs_AiModelDeployment'))
+    CREATE UNIQUE INDEX UX_Wcs_AiModelDeployment_ChampionScope ON Wcs_AiModelDeployment(ModelId, AssetType, Profile) WHERE DeploymentStatus = 'Champion';
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Wcs_AiModelDeployment_FallbackScope' AND object_id = OBJECT_ID('Wcs_AiModelDeployment'))
+    CREATE UNIQUE INDEX UX_Wcs_AiModelDeployment_FallbackScope ON Wcs_AiModelDeployment(ModelId, AssetType, Profile) WHERE DeploymentStatus = 'Fallback';
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AiModelDeployment_ScopeStatus' AND object_id = OBJECT_ID('Wcs_AiModelDeployment'))
     CREATE INDEX IX_Wcs_AiModelDeployment_ScopeStatus ON Wcs_AiModelDeployment(ModelId, AssetType, Profile, DeploymentStatus);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Wcs_AiModelRegistry_CreatedAt' AND object_id = OBJECT_ID('Wcs_AiModelRegistry'))
