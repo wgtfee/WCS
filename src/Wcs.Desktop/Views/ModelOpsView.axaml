@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:Class="Wcs.Desktop.Views.ModelOpsView"
+             x:DataType="vm:ModelOpsViewModel"
+             Background="{DynamicResource BgPrimary}">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,*" Margin="24" RowSpacing="14">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <StackPanel>
+                <TextBlock Text="IDI-P1 ModelOps Center" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" />
+                <TextBlock Text="模型注册、Shadow/Champion/Fallback/Quarantine、重启恢复与 append-only Evidence"
+                           Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" />
+                <TextBlock Text="{Binding StatusText}" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="刷新" Command="{Binding RefreshCommand}" Padding="20,8" />
+        </Grid>
+
+        <Border Grid.Row="1" Padding="14" CornerRadius="8" BorderThickness="1" BorderBrush="#D97706" Background="#22D97706">
+            <StackPanel>
+                <TextBlock Text="安全边界" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" />
+                <TextBlock Text="{Binding SafetyText}" TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*,*,Auto" ColumnSpacing="8">
+            <StackPanel><TextBlock Text="ModelId" /><TextBox Text="{Binding ModelId}" /></StackPanel>
+            <StackPanel Grid.Column="1"><TextBlock Text="AssetType" /><TextBox Text="{Binding AssetType}" /></StackPanel>
+            <StackPanel Grid.Column="2"><TextBlock Text="Profile" /><TextBox Text="{Binding Profile}" /></StackPanel>
+            <StackPanel Grid.Column="3"><TextBlock Text="Version" /><TextBox Text="{Binding ModelVersion}" /></StackPanel>
+            <StackPanel Grid.Column="4"><TextBlock Text="Actor" /><TextBox Text="{Binding Actor}" /></StackPanel>
+            <StackPanel Grid.Column="5" VerticalAlignment="Bottom"><Button Content="进入 Shadow" Command="{Binding EnterShadowCommand}" Padding="14,8" /></StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="3" ColumnDefinitions="2*,*" ColumnSpacing="14">
+            <Border Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                        <StackPanel>
+                            <TextBlock Text="部署状态" FontSize="18" FontWeight="Bold" />
+                            <TextBlock Text="{Binding RecoveryText}" Foreground="{DynamicResource TextSecondary}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Margin="4,0" Content="批准 Champion" Command="{Binding PromoteChampionCommand}" />
+                        <Button Grid.Column="2" Margin="4,0" Content="回滚 Fallback" Command="{Binding RollbackCommand}" />
+                        <Button Grid.Column="3" Margin="4,0" Content="Quarantine" Command="{Binding QuarantineCommand}" />
+                    </Grid>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Deployments}" SelectedItem="{Binding SelectedDeployment}"
+                              AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="版本" Binding="{Binding ModelVersion}" Width="120" />
+                            <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="110" />
+                            <DataGridTextColumn Header="AssetType" Binding="{Binding AssetType}" Width="110" />
+                            <DataGridTextColumn Header="Profile" Binding="{Binding Profile}" Width="110" />
+                            <DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="140" />
+                            <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+            <Border Grid.Column="1" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="操作理由" FontSize="18" FontWeight="Bold" />
+                    <TextBox Text="{Binding Reason}" AcceptsReturn="True" MinHeight="90" TextWrapping="Wrap" />
+                    <TextBlock Text="环境" FontWeight="Bold" />
+                    <TextBlock Text="{Binding Environment}" />
+                    <TextBlock Text="治理模式" FontWeight="Bold" />
+                    <TextBlock Text="{Binding ModeText}" />
+                    <TextBlock Text="所有按钮仅改变 ModelOps 治理状态；不存在 PLC/CommandBus/调度写入。"
+                               TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="4" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+            <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                <TextBlock Text="Append-only Audit Journal" FontSize="18" FontWeight="Bold" />
+                <DataGrid Grid.Row="1" ItemsSource="{Binding AuditEntries}" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="时间" Binding="{Binding OccurredAtUtc}" Width="190" />
+                        <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="180" />
+                        <DataGridTextColumn Header="版本" Binding="{Binding ModelVersion}" Width="100" />
+                        <DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="120" />
+                        <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*" />
+                        <DataGridTextColumn Header="Payload SHA-256" Binding="{Binding PayloadHash}" Width="260" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
