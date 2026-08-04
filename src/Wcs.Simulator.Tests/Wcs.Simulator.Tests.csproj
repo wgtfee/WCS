@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Wcs.Simulator\Wcs.Simulator.csproj" />
     <ProjectReference Include="..\Wcs.Host\Wcs.Host.csproj" />
+    <ProjectReference Include="..\Wcs.IndustrialIntelligence\Wcs.IndustrialIntelligence.csproj" />
   </ItemGroup>
 
 </Project>
