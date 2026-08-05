@@ -35,12 +35,22 @@ public sealed class DecisionProposalJournal
     private readonly Dictionary<string, DecisionApprovalEntry> _idempotency = new(StringComparer.Ordinal);
     private readonly List<DecisionApprovalEntry> _audit = [];
     private readonly Dictionary<string, DecisionOutcome> _outcomes = new(StringComparer.Ordinal);
+    private readonly DecisionGovernanceLimits _limits;
+
+    public DecisionProposalJournal(DecisionGovernanceLimits? limits = null)
+    {
+        _limits = limits ?? new DecisionGovernanceLimits();
+        _limits.Validate();
+    }
 
     public DecisionProposal Add(DecisionProposal proposal)
     {
+        ArgumentNullException.ThrowIfNull(proposal);
         lock (_gate)
         {
             if (_proposals.TryGetValue(proposal.ProposalId, out var existing)) return existing;
+            var pending = _proposals.Values.Count(x => x.Status is DecisionProposalStatus.Shadow or DecisionProposalStatus.PendingApproval);
+            if (pending >= _limits.MaximumPendingProposals) throw new InvalidOperationException("Maximum pending proposal bound reached.");
             _proposals.Add(proposal.ProposalId, proposal);
             return proposal;
         }
@@ -68,6 +78,7 @@ public sealed class DecisionProposalJournal
         lock (_gate)
         {
             if (!_proposals.TryGetValue(outcome.ProposalId, out var proposal)) throw new KeyNotFoundException("Proposal not found.");
+            DecisionGovernancePolicy.ValidateOutcome(outcome, proposal.CreatedAtUtc);
             if (_outcomes.TryGetValue(outcome.ProposalId, out var existing)) return existing;
             _outcomes.Add(outcome.ProposalId, outcome);
             _proposals[outcome.ProposalId] = proposal with { Status = DecisionProposalStatus.OutcomeRecorded };
