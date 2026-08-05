@@ -8,7 +8,7 @@ on:
       - 'src/Wcs.Infrastructure/IndustrialIntelligence/FeatureCenter*.cs'
       - 'src/Wcs.Host/**'
       - 'src/Wcs.Desktop/**'
-      - 'src/Wcs.Simulator.Tests/FeatureCenterContractTests.cs'
+      - 'src/Wcs.Simulator.Tests/FeatureCenter*Tests.cs'
       - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
       - '.github/workflows/idi-p2-feature-center.yml'
   workflow_dispatch:
@@ -32,14 +32,14 @@ jobs:
           dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
           dotnet build src/Wcs.FeatureCenter/Wcs.FeatureCenter.csproj -c Release --no-restore
           dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
-      - name: Run exactly 21 P2 contract tests
+      - name: Run exactly 25 P2 contract tests
         run: |
           set -euo pipefail
           mkdir -p artifacts/idi-p2-feature-center
           dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build \
-            --filter 'FullyQualifiedName~FeatureCenterContractTests' \
+            --filter 'FullyQualifiedName~FeatureCenter' \
             --logger 'trx;LogFileName=feature-center.trx' | tee artifacts/idi-p2-feature-center/test-output.txt
-          grep -Eq 'Passed![[:space:]]+- Failed:[[:space:]]+0,[[:space:]]+Passed:[[:space:]]+21,[[:space:]]+Skipped:[[:space:]]+0,[[:space:]]+Total:[[:space:]]+21' artifacts/idi-p2-feature-center/test-output.txt
+          grep -Eq 'Passed![[:space:]]+- Failed:[[:space:]]+0,[[:space:]]+Passed:[[:space:]]+25,[[:space:]]+Skipped:[[:space:]]+0,[[:space:]]+Total:[[:space:]]+25' artifacts/idi-p2-feature-center/test-output.txt
       - name: Verify zero-control and bounded Feature Center boundary
         shell: bash
         run: |
@@ -53,7 +53,7 @@ jobs:
       - name: Write software evidence
         run: |
           set -euo pipefail
-          printf 'stage=IDI-P2\nhead_sha=%s\ntest_count=21\ncontrol_write_allowed=false\nmaximum_automation_level=L1\nproduction_automation_allowed=false\n' "$GITHUB_SHA" | tee artifacts/idi-p2-feature-center/evidence.txt
+          printf 'stage=IDI-P2\nhead_sha=%s\ntest_count=25\ncontrol_write_allowed=false\nmaximum_automation_level=L1\nproduction_automation_allowed=false\n' "$GITHUB_SHA" | tee artifacts/idi-p2-feature-center/evidence.txt
       - name: Upload P2 contract evidence
         uses: actions/upload-artifact@v4
         with:
