@@ -1,0 +1,188 @@
+name: WCS IDI P2 Full Regression
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.FeatureCenter/**'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/FeatureCenter*'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - 'src/Wcs.Host/Controllers/FeatureCenterController.cs'
+      - 'src/Wcs.Desktop/**'
+      - 'src/Wcs.Simulator.Tests/FeatureCenter*.cs'
+      - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
+      - 'docs/交付文件/97-*'
+      - 'docs/交付文件/98-*'
+      - 'docs/交付文件/99-*'
+      - 'docs/交付文件/00-*'
+      - '.github/workflows/idi-p2-feature-center.yml'
+      - '.github/workflows/idi-p2-full-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  pull-requests: read
+
+concurrency:
+  group: idi-p2-full-regression-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-head-matrix:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/idi-p2-') }}
+    name: reuse or dispatch 49 exact-head software workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      HEAD_REF: ${{ github.head_ref || github.ref_name }}
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+    steps:
+      - name: Prepare exact-head workflow catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/idi-p2-full-regression
+          cat > artifacts/idi-p2-full-regression/workflows.tsv <<'EOF'
+          322269201	WCS Asset Failure Forecast Compile
+          322284101	WCS Asset Failure Forecast Runtime
+          322286772	WCS Asset Failure Forecast
+          322126437	WCS PLC ML Model Adapter Compile
+          322134665	WCS PLC ML Model Adapter E2E
+          322150196	WCS PLC ML Model Adapter Host E2E
+          320303096	WCS PLC Anomaly ML
+          320307910	WCS PLC Anomaly ML E2E
+          320527677	WCS PLC Anomaly ML Governance
+          320774629	WCS PLC Anomaly ML Context Peer
+          320321148	WCS PLC Anomaly ML Version Throughput
+          319233205	WCS PLC Anomaly Engine Load
+          319245691	WCS PLC Anomaly Engine Soak
+          319063564	WCS PLC Telemetry Storage Load
+          317547860	WCS Windows CI
+          318741322	WCS End-to-End Load
+          318963917	WCS One Hour Soak Load
+          320799156	WCS Transport Cycle Analysis
+          321434743	WCS Anomaly Health Scoring
+          321494642	WCS Anomaly Health Scoring SQL
+          321814576	WCS Asset Health Governance Compile
+          321806852	WCS Asset Health Governance
+          321923376	WCS Asset Health Root Cause
+          322018928	WCS Asset Health Maintenance Compile
+          322029922	WCS Asset Health Maintenance
+          322680873	WCS Simulation Governance Compile
+          322680874	WCS Simulation Governance Boundary
+          322768537	WCS Simulation Scenario Engine
+          322768536	WCS Simulation Replay Determinism
+          322964123	WCS Simulation Virtual PLC
+          322964120	WCS Simulation PLC Fault Injection
+          323371204	WCS Simulation Virtual RGV
+          323371205	WCS Simulation RGV Motion Determinism
+          324142246	WCS Simulation Virtual Traffic
+          324142431	WCS Simulation Traffic Deadlock Determinism
+          324973501	WCS Simulation External Failures
+          324975100	WCS Simulation External Determinism
+          325142724	WCS Simulation Synthetic Health RUL
+          325142725	WCS Simulation Health RUL Determinism
+          325451175	WCS Simulation Integrated Recovery
+          325451174	WCS Simulation Recovery Determinism
+          325695459	WCS Simulation Capacity Long Stability
+          325695697	WCS Simulation HIL Readiness Gate
+          325864129	WCS S9 HIL Governance Contract
+          326037270	WCS S9 Software Trial Readiness
+          326133872	WCS S10 Unified Verification Console
+          326621289	WCS IDI P0 Governance Contract
+          326891419	WCS IDI P1 ModelOps Contract
+          327052672	WCS IDI P2 Feature Center Contract
+          EOF
+          test "$(wc -l < artifacts/idi-p2-full-regression/workflows.tsv)" -eq 49
+          printf 'expected_sha=%s\nhead_ref=%s\nworkflow_count=49\nreal_hil_gate_included=false\n' "$EXPECTED_SHA" "$HEAD_REF" | tee artifacts/idi-p2-full-regression/context.txt
+
+      - name: Reuse or dispatch every software workflow for the exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          output='artifacts/idi-p2-full-regression/runs.tsv'
+          printf 'workflow_id\tworkflow_name\trun_id\tevent\n' > "$output"
+          while IFS=$'\t' read -r workflow_id workflow_name; do
+            response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_id/runs?branch=$HEAD_REF&per_page=100")"
+            run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.id) | last | .id // empty' <<<"$response")"
+            event='existing'
+            if [[ -z "$run_id" ]]; then
+              gh api --method POST -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_id/dispatches" -f ref="$HEAD_REF"
+              event='workflow_dispatch'
+              for _ in $(seq 1 60); do
+                sleep 2
+                response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_id/runs?branch=$HEAD_REF&event=workflow_dispatch&per_page=20")"
+                run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.id) | last | .id // empty' <<<"$response")"
+                [[ -n "$run_id" ]] && break
+              done
+            fi
+            [[ -n "$run_id" ]] || { echo "Unable to resolve exact-head run for $workflow_name" >&2; exit 1; }
+            printf '%s\t%s\t%s\t%s\n' "$workflow_id" "$workflow_name" "$run_id" "$event" >> "$output"
+          done < artifacts/idi-p2-full-regression/workflows.tsv
+          test "$(($(wc -l < "$output") - 1))" -eq 49
+
+      - name: Wait for all 49 exact-head software workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          input='artifacts/idi-p2-full-regression/runs.tsv'
+          results='artifacts/idi-p2-full-regression/results.tsv'
+          printf 'workflow_id\tworkflow_name\trun_id\tstatus\tconclusion\thead_sha\thtml_url\n' > "$results"
+          deadline=$(( $(date +%s) + 19800 ))
+          while true; do
+            pending=0
+            failed=0
+            : > artifacts/idi-p2-full-regression/current.tsv
+            tail -n +2 "$input" | while IFS=$'\t' read -r workflow_id workflow_name run_id event; do
+              run="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/runs/$run_id")"
+              printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$workflow_id" "$workflow_name" "$run_id" "$(jq -r '.status' <<<"$run")" "$(jq -r '.conclusion // "pending"' <<<"$run")" "$(jq -r '.head_sha' <<<"$run")" "$(jq -r '.html_url' <<<"$run")" >> artifacts/idi-p2-full-regression/current.tsv
+            done
+            while IFS=$'\t' read -r workflow_id workflow_name run_id status conclusion head_sha html_url; do
+              if [[ "$head_sha" != "$EXPECTED_SHA" ]]; then failed=$((failed + 1)); echo "$workflow_name resolved to stale head $head_sha" >&2
+              elif [[ "$status" != 'completed' ]]; then pending=$((pending + 1))
+              elif [[ "$conclusion" != 'success' ]]; then failed=$((failed + 1)); echo "$workflow_name failed with conclusion=$conclusion run=$run_id" >&2
+              fi
+            done < artifacts/idi-p2-full-regression/current.tsv
+            (( failed == 0 )) || exit 1
+            if (( pending == 0 )); then cat artifacts/idi-p2-full-regression/current.tsv >> "$results"; break; fi
+            (( $(date +%s) < deadline )) || { echo "Timed out waiting for $pending workflows" >&2; exit 1; }
+            sleep 40
+          done
+          test "$(($(wc -l < "$results") - 1))" -eq 49
+          column -t -s $'\t' "$results" | tee artifacts/idi-p2-full-regression/final-results.txt
+
+      - name: Verify PR head did not move
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/pulls/$PR_NUMBER" --jq '.head.sha')"
+          test "$actual" = "$EXPECTED_SHA"
+          printf 'expected=%s\nactual=%s\n' "$EXPECTED_SHA" "$actual" | tee artifacts/idi-p2-full-regression/head-verification.txt
+
+      - name: Build JSON software evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -Rn --arg expectedHeadSha "$EXPECTED_SHA" --arg headRef "$HEAD_REF" '[inputs | split("\t") | {workflowId:(.[0]|tonumber),workflowName:.[1],runId:(.[2]|tonumber),status:.[3],conclusion:.[4],headSha:.[5],htmlUrl:.[6]}] | {stage:"IDI-P2",expectedHeadSha:$expectedHeadSha,headRef:$headRef,workflowCount:length,allSuccess:all(.[]; .status=="completed" and .conclusion=="success" and .headSha==$expectedHeadSha),maximumAutomationLevel:"L1",controlWriteAllowed:false,productionAutomationAllowed:false,realHilGateIncluded:false,workflows:.}' < <(tail -n +2 artifacts/idi-p2-full-regression/results.tsv) | tee artifacts/idi-p2-full-regression/evidence.json
+          test "$(jq -r '.workflowCount' artifacts/idi-p2-full-regression/evidence.json)" = '49'
+          test "$(jq -r '.allSuccess' artifacts/idi-p2-full-regression/evidence.json)" = 'true'
+          test "$(jq -r '.controlWriteAllowed' artifacts/idi-p2-full-regression/evidence.json)" = 'false'
+          test "$(jq -r --arg sha "$EXPECTED_SHA" '[.workflows[] | select(.headSha != $sha)] | length' artifacts/idi-p2-full-regression/evidence.json)" = '0'
+          test "$(jq -r '[.workflows[] | select(.workflowName == "WCS IDI P0 Governance Contract" and .conclusion == "success")] | length' artifacts/idi-p2-full-regression/evidence.json)" = '1'
+          test "$(jq -r '[.workflows[] | select(.workflowName == "WCS IDI P1 ModelOps Contract" and .conclusion == "success")] | length' artifacts/idi-p2-full-regression/evidence.json)" = '1'
+          test "$(jq -r '[.workflows[] | select(.workflowName == "WCS IDI P2 Feature Center Contract" and .conclusion == "success")] | length' artifacts/idi-p2-full-regression/evidence.json)" = '1'
+          test "$(jq -r '[.workflows[] | select(.workflowName == "WCS One Hour Soak Load" and .conclusion == "success")] | length' artifacts/idi-p2-full-regression/evidence.json)" = '1'
+
+      - name: Upload exact-head P2 software matrix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-idi-p2-full-regression-${{ github.run_number }}
+          path: artifacts/idi-p2-full-regression/**
+          if-no-files-found: error
+          retention-days: 30

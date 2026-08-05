@@ -24,6 +24,7 @@
     <ProjectReference Include="..\Wcs.Infrastructure\Wcs.Infrastructure.csproj" />
     <ProjectReference Include="..\Wcs.IndustrialIntelligence\Wcs.IndustrialIntelligence.csproj" />
     <ProjectReference Include="..\Wcs.ModelOps\Wcs.ModelOps.csproj" />
+    <ProjectReference Include="..\Wcs.FeatureCenter\Wcs.FeatureCenter.csproj" />
   </ItemGroup>
 
 </Project>
