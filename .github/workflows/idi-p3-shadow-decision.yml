@@ -7,6 +7,9 @@ on:
       - 'src/Wcs.DecisionIntelligence/**'
       - 'src/Wcs.Simulator.Tests/DecisionIntelligence*Tests.cs'
       - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
+      - 'docs/交付文件/97-*'
+      - 'docs/交付文件/98-*'
+      - 'docs/交付文件/99-*'
       - '.github/workflows/idi-p3-shadow-decision.yml'
   workflow_dispatch:
 
