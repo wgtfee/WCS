@@ -30,6 +30,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Industrial.Security.Abstractions;
 using Industrial.Security.AspNetCore;
+using Wcs.Host.Health;
 using Wcs.Host.IndustrialSecurity;
 
 Log.Logger = LoggingSetup.CreateLogger();
@@ -296,8 +297,8 @@ try
     app.MapIndustrialSecurityCacheInvalidation();
     app.MapIndustrialLocalUserManagementInfo();
     app.MapIndustrialEmergencyValidation();
+    app.MapV071Health("wcs");
     app.MapHealthChecks("/health/ready", new() { Predicate = r => r.Name == "readiness" });
-    app.MapHealthChecks("/health/live", new() { Predicate = r => r.Name == "liveness" });
     app.MapHealthChecks("/health");
     app.MapGet("/", () => "WCS Runtime Engine is running.");
 

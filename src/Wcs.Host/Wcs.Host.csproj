@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.16" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
@@ -26,6 +27,7 @@
     <Content Update="appsettings.Centralized.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\..\Industrial.Security\src\Industrial.Security.Abstractions\Industrial.Security.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\Industrial.Security\src\Industrial.Security.AspNetCore\Industrial.Security.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\..\Industrial.Health\src\Industrial.Health.Abstractions\Industrial.Health.Abstractions.csproj" />
     <ProjectReference Include="..\Wcs.Entity\Wcs.Entity.csproj" />
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
     <ProjectReference Include="..\Wcs.Entity\Wcs.Entity.csproj" />
