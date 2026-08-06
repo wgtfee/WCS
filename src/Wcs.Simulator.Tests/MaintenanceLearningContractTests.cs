@@ -28,10 +28,84 @@ public sealed class MaintenanceLearningContractTests
     [Fact] public void Outbox_retry_limit_is_enforced() { var o = new MaintenanceMesOutbox(new MaintenanceLearningLimits(10, 10, 2)); o.Enqueue("o1", "i-1", "k1", Hash, T0); o.MarkAttempt("k1", T0, false, "down"); o.MarkAttempt("k1", T0.AddMinutes(1), false, "down"); Assert.Throws<InvalidOperationException>(() => o.MarkAttempt("k1", T0.AddMinutes(2), false, "down")); }
     [Fact] public void Delivered_outbox_is_removed_from_pending() { var o = new MaintenanceMesOutbox(); o.Enqueue("o1", "i-1", "k1", Hash, T0); o.MarkAttempt("k1", T0.AddMinutes(1), true, null); Assert.Empty(o.Pending()); }
 
+    [Fact]
+    public async Task Workflow_persists_intervention_and_outbox_without_control_write()
+    {
+        var store = new MemoryStore();
+        var workflow = new MaintenanceLearningWorkflow(store);
+        await workflow.RecordInterventionAsync(Intervention(), Hash, "ob-1", "mes-key-1", T0);
+        Assert.Single(store.Interventions);
+        Assert.Single(store.Outbox);
+        Assert.False(MaintenanceLearningSafetyBoundary.ControlWriteAllowed);
+    }
+
+    [Fact]
+    public async Task Workflow_persists_mes_outcome_idempotently()
+    {
+        var store = new MemoryStore();
+        var workflow = new MaintenanceLearningWorkflow(store);
+        await workflow.RecordInterventionAsync(Intervention(), Hash, "ob-1", "mes-key-1", T0);
+        var first = await workflow.RecordOutcomeAsync(Outcome());
+        var replay = await workflow.RecordOutcomeAsync(Outcome() with { OutcomeId = "different" });
+        Assert.Equal(first.OutcomeId, replay.OutcomeId);
+        Assert.Equal(2, store.Outcomes.Count);
+        Assert.All(store.Outcomes, x => Assert.Equal(first.OutcomeId, x.OutcomeId));
+    }
+
+    [Fact]
+    public async Task Workflow_requires_explicit_label_approval_before_dataset_admission()
+    {
+        var store = new MemoryStore();
+        var workflow = new MaintenanceLearningWorkflow(store);
+        await workflow.RecordInterventionAsync(Intervention(), Hash, "ob-1", "mes-key-1", T0);
+        await workflow.AddLabelCandidateAsync(Label());
+        Assert.Empty(workflow.ApprovedDatasetLabels("ds"));
+        var approved = await workflow.DecideLabelAsync("l-1", Approval(TrainingLabelApprovalState.Approved), "approval-corr", "approval-key");
+        Assert.True(TrainingDatasetAdmission.CanEnterDataset(approved));
+        Assert.Single(workflow.ApprovedDatasetLabels("ds"));
+        Assert.Single(store.Approvals);
+    }
+
+    [Fact]
+    public async Task Closed_loop_sample_links_intervention_outcome_effectiveness_and_approved_label()
+    {
+        var store = new MemoryStore();
+        var workflow = new MaintenanceLearningWorkflow(store);
+        var intervention = await workflow.RecordInterventionAsync(Intervention(), Hash, "ob-1", "mes-key-1", T0);
+        var outcome = await workflow.RecordOutcomeAsync(Outcome());
+        var evaluation = await workflow.EvaluateAsync(intervention.InterventionId, Window(), T0.AddDays(2));
+        await workflow.AddLabelCandidateAsync(Label());
+        var label = await workflow.DecideLabelAsync("l-1", Approval(TrainingLabelApprovalState.Approved), "approval-corr", "approval-key");
+        var sample = MaintenanceLearningWorkflow.BuildClosedLoopSample(intervention, outcome, evaluation, label);
+        Assert.True(sample.DatasetAdmitted);
+        Assert.False(sample.ControlWriteAllowed);
+        Assert.False(sample.AutoTrainingAllowed);
+        Assert.False(sample.AutoModelActivationAllowed);
+    }
+
     private static MaintenanceLearningJournal Journal() { var j = new MaintenanceLearningJournal(); j.RecordIntervention(Intervention()); return j; }
     private static MaintenanceIntervention Intervention() => new("i-1", "asset-1", "RGV", T0, T0.AddMinutes(30), "snap-before", "snap-after", "inspect", 100m, "operator", "corr-i");
     private static MaintenanceOutcome Outcome() => new("o-1", "i-1", T0.AddHours(3), false, 5m, 20m, null, "mes-event-1");
     private static VersionedEvaluationWindow Window() => new("RGV", "v1", TimeSpan.FromMinutes(30), TimeSpan.FromHours(2), TimeSpan.FromHours(8), TimeSpan.FromHours(24), "approver", T0);
     private static TrainingLabelCandidate Label() => new("l-1", "i-1", "ds", "effective", TrainingLabelApprovalState.Pending, Hash, T0.AddDays(2));
     private static TrainingLabelApproval Approval(TrainingLabelApprovalState state) => new("l-1", state, "reviewer", "verified outcome", T0.AddDays(2));
+
+    private sealed class MemoryStore : IMaintenanceLearningStore
+    {
+        public List<MaintenanceIntervention> Interventions { get; } = [];
+        public List<MaintenanceOutcome> Outcomes { get; } = [];
+        public List<MaintenanceEvaluationResult> Evaluations { get; } = [];
+        public List<TrainingLabelCandidate> Labels { get; } = [];
+        public List<TrainingLabelApproval> Approvals { get; } = [];
+        public List<MesOutboxEntry> Outbox { get; } = [];
+
+        public Task SaveInterventionAsync(MaintenanceIntervention intervention, CancellationToken ct = default) { Interventions.Add(intervention); return Task.CompletedTask; }
+        public Task SaveOutcomeAsync(MaintenanceOutcome outcome, CancellationToken ct = default) { Outcomes.Add(outcome); return Task.CompletedTask; }
+        public Task SaveEvaluationAsync(MaintenanceEvaluationResult evaluation, CancellationToken ct = default) { Evaluations.Add(evaluation); return Task.CompletedTask; }
+        public Task SaveLabelAsync(TrainingLabelCandidate label, CancellationToken ct = default) { Labels.Add(label); return Task.CompletedTask; }
+        public Task SaveApprovalAsync(TrainingLabelApproval approval, string correlationId, string idempotencyKey, CancellationToken ct = default) { Approvals.Add(approval); return Task.CompletedTask; }
+        public Task SaveOutboxAsync(MesOutboxEntry entry, CancellationToken ct = default) { Outbox.Add(entry); return Task.CompletedTask; }
+        public Task<MaintenanceIntervention?> GetInterventionAsync(string interventionId, CancellationToken ct = default) => Task.FromResult(Interventions.FirstOrDefault(x => x.InterventionId == interventionId));
+        public Task<IReadOnlyList<MesOutboxEntry>> LoadPendingOutboxAsync(int take, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MesOutboxEntry>>(Outbox.Where(x => !x.Delivered).Take(take).ToArray());
+    }
 }
