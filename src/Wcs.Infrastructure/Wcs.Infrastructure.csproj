@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Wcs.ModelOps\Wcs.ModelOps.csproj" />
     <ProjectReference Include="..\Wcs.FeatureCenter\Wcs.FeatureCenter.csproj" />
     <ProjectReference Include="..\Wcs.DecisionIntelligence\Wcs.DecisionIntelligence.csproj" />
+    <ProjectReference Include="..\Wcs.MaintenanceLearning\Wcs.MaintenanceLearning.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,82 @@
+name: WCS IDI P4 Maintenance Learning Contract
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.MaintenanceLearning/**'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearning*.cs'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - 'src/Wcs.Host/**'
+      - 'src/Wcs.Desktop/**'
+      - 'src/Wcs.Simulator.Tests/MaintenanceLearning*Tests.cs'
+      - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
+      - 'docs/交付文件/103-*'
+      - 'docs/交付文件/104-*'
+      - 'docs/交付文件/105-*'
+      - '.github/workflows/idi-p4-maintenance-learning.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  maintenance-learning-contract:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/idi-p4-') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore and build P4
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj
+          dotnet build src/Wcs.MaintenanceLearning/Wcs.MaintenanceLearning.csproj -c Release --no-restore
+          dotnet build src/Wcs.Infrastructure/Wcs.Infrastructure.csproj -c Release --no-restore
+          dotnet build src/Wcs.Host/Wcs.Host.csproj -c Release --no-restore
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+      - name: Run exactly 24 P4 contract tests
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/idi-p4-maintenance-learning
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~MaintenanceLearningContractTests' --logger 'trx;LogFileName=idi-p4.trx' | tee artifacts/idi-p4-maintenance-learning/test-output.txt
+          grep -Eq 'Passed![[:space:]]+- Failed:[[:space:]]+0,[[:space:]]+Passed:[[:space:]]+24,[[:space:]]+Skipped:[[:space:]]+0,[[:space:]]+Total:[[:space:]]+24' artifacts/idi-p4-maintenance-learning/test-output.txt
+      - name: Verify learning-only zero-control boundary
+        run: |
+          set -euo pipefail
+          if grep -RInE 'IPlcConnection|S7Client|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|HttpClient|SqlSugar|SqlConnection' src/Wcs.MaintenanceLearning; then
+            echo 'P4 domain contains forbidden control/network/SQL dependency.' >&2
+            exit 1
+          fi
+          grep -RIn 'ControlWriteAllowed => false' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'AutoTrainingAllowed => false' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'AutoModelActivationAllowed => false' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'Maximum retry bound reached' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'TrainingDatasetAdmission' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'class SqlMaintenanceLearningStore' src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearningPersistence.cs >/dev/null
+          grep -RIn 'Wcs_MaintenanceEvaluationWindow' src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearningEntities.cs >/dev/null
+          grep -RIn 'Wcs_MaintenanceCausalCandidate' src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearningEntities.cs >/dev/null
+          grep -RIn 'Wcs_MaintenanceCounterfactualEstimate' src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearningEntities.cs >/dev/null
+          grep -RIn '\[Route("api/maintenance-learning")\]' src/Wcs.Host/Controllers/MaintenanceLearningController.cs >/dev/null
+          grep -RIn 'EffectiveMaximumAutomationLevel <= AutomationLevel.L1' src/Wcs.Host/Controllers/MaintenanceLearningController.cs >/dev/null
+          grep -RIn 'IDI-P4 Maintenance Learning' src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs >/dev/null
+          grep -RIn 'SafetyText' src/Wcs.Desktop/ViewModels/MaintenanceLearningViewModel.cs >/dev/null
+          if grep -RInE 'CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager' src/Wcs.Host/Controllers/MaintenanceLearningController.cs src/Wcs.Desktop/ViewModels/MaintenanceLearningViewModel.cs; then
+            echo 'P4 Host/Desktop surface contains a production control-path dependency.' >&2
+            exit 1
+          fi
+      - name: Write software evidence
+        run: |
+          printf 'stage=IDI-P4\nhead_sha=%s\ntest_count=24\ncontrol_write_allowed=false\nauto_training_allowed=false\nauto_model_activation_allowed=false\nproduction_automation_allowed=false\nsql_persistence=true\nhost_api=true\ndesktop_surface=true\nclosed_loop_sample=true\n' "$GITHUB_SHA" | tee artifacts/idi-p4-maintenance-learning/evidence.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wcs-idi-p4-maintenance-learning-${{ github.run_number }}
+          path: artifacts/idi-p4-maintenance-learning/**
+          if-no-files-found: error
+          retention-days: 30
