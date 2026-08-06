@@ -35,6 +35,7 @@ public sealed class MaintenanceLearningPersistenceFactory
     }
 
     public SqlMaintenanceLearningStore CreateStore() => new(_connectionString);
-
     public IMaintenanceLearningRecovery CreateRecovery() => CreateStore();
+    public IMaintenanceEvaluationWindowStore CreateEvaluationWindowStore() => new SqlMaintenanceEvaluationWindowStore(_connectionString);
+    public IMaintenanceCausalEvidenceStore CreateCausalEvidenceStore() => new SqlMaintenanceCausalEvidenceStore(_connectionString);
 }
