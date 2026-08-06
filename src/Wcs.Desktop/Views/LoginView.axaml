@@ -22,10 +22,7 @@
         </Style>
     </UserControl.Styles>
 
-    <!-- 左右分栏：左边图片，右边登录表单 -->
     <Grid ColumnDefinitions="*,1.2*">
-
-        <!-- 左边：图片区域 -->
         <Border Grid.Column="0" Background="{DynamicResource AccentBlue}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="40">
                 <TextBlock Text="工业智能管理系统"
@@ -41,24 +38,22 @@
             </StackPanel>
         </Border>
 
-        <!-- 右边：登录表单 -->
         <Grid Grid.Column="1"
               RowDefinitions="Auto,*,Auto"
               Margin="50,40">
+            <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                <TextBlock Text="用户登录"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Left"
+                           Foreground="{DynamicResource TextPrimary}"/>
+                <TextBlock Text="{Binding LoginModeText}"
+                           Margin="0,8,0,0"
+                           Foreground="{DynamicResource TextSecondary}"
+                           FontSize="13"/>
+            </StackPanel>
 
-            <!-- 标题 -->
-            <TextBlock Grid.Row="0"
-                       Text="用户登录"
-                       FontSize="24"
-                       FontWeight="Bold"
-                       HorizontalAlignment="Left"
-                       Margin="0,0,0,30"
-                       Foreground="{DynamicResource TextPrimary}"/>
-
-            <!-- 登录表单 -->
             <StackPanel Grid.Row="1" Spacing="15">
-
-                <!-- 用户名 -->
                 <StackPanel Spacing="5">
                     <TextBlock Text="用户名" Foreground="{DynamicResource TextSecondary}"/>
                     <TextBox Text="{Binding UserName, Mode=TwoWay}"
@@ -73,7 +68,6 @@
                     </TextBox>
                 </StackPanel>
 
-                <!-- 密码 -->
                 <StackPanel Spacing="5">
                     <TextBlock Text="密码" Foreground="{DynamicResource TextSecondary}"/>
                     <TextBox Text="{Binding Password, Mode=TwoWay}"
@@ -89,10 +83,8 @@
                     </TextBox>
                 </StackPanel>
 
-                <!-- 验证码 -->
-                <StackPanel Spacing="5">
+                <StackPanel Spacing="5" IsVisible="{Binding UseLocalLogin}">
                     <TextBlock Text="验证码" Foreground="{DynamicResource TextSecondary}"/>
-                    <!-- 使用固定列宽避免图片加载导致布局抖动 -->
                     <Grid ColumnDefinitions="*,130,60" ColumnSpacing="8">
                         <TextBox Grid.Column="0"
                                  Text="{Binding Captcha, Mode=TwoWay}"
@@ -123,7 +115,16 @@
                     </Grid>
                 </StackPanel>
 
-                <!-- 错误信息 -->
+                <Border Background="#EFF6FF"
+                        CornerRadius="4"
+                        Padding="10,8"
+                        IsVisible="{Binding UseIam}">
+                    <TextBlock Text="使用平台统一身份认证。登录成功后 WCS 只获得管理面 AccessToken，PLC、任务编排和 EMS/RGV Runtime 不依赖 IAM。"
+                               Foreground="#1D4ED8"
+                               TextWrapping="Wrap"
+                               FontSize="12"/>
+                </Border>
+
                 <Border Background="#FEE2E2"
                         CornerRadius="4"
                         Padding="10,6"
@@ -135,7 +136,6 @@
                 </Border>
             </StackPanel>
 
-            <!-- 登录按钮 -->
             <atom:Button Grid.Row="2"
                     Content="登 录"
                     Command="{Binding LoginCommand}"
