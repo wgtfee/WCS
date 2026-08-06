@@ -1,0 +1,49 @@
+name: WCS IDI P5 Digital Twin Optimizer Contract
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Optimization/**'
+      - 'src/Wcs.Simulator.Tests/DigitalTwinOptimizerContractTests.cs'
+      - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
+      - '.github/workflows/idi-p5-digital-twin-optimizer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  optimizer-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore and build P5
+        run: dotnet build src/Wcs.Optimization/Wcs.Optimization.csproj -c Release
+      - name: Run exactly 12 P5 contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --filter 'FullyQualifiedName~DigitalTwinOptimizerContractTests' --logger 'console;verbosity=normal')
+          printf '%s\n' "$OUT"
+          echo "$OUT" | grep -Eq 'Passed:[[:space:]]+12.*Failed:[[:space:]]+0|Passed![[:space:]]+- Failed:[[:space:]]+0, Passed:[[:space:]]+12'
+      - name: Verify recommendation-only zero-control boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -n 'ControlWriteAllowed => false' src/Wcs.Optimization
+          grep -R -n 'AutoProductionPolicyReplacementAllowed => false' src/Wcs.Optimization
+          grep -R -n 'MaximumAutomationLevel => "L1"' src/Wcs.Optimization
+          ! grep -R -n -E 'S7Client|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|RouteReservationManager|TrafficCoordinator|WriteAsync\(' src/Wcs.Optimization
+      - name: Write software evidence
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          printf '{"schema":"wcs-idi-p5-specialty/v1","head_sha":"%s","testCount":12,"allSuccess":true,"controlWriteAllowed":false,"autoProductionPolicyReplacementAllowed":false,"maximumAutomationLevel":"L1"}\n' "$GITHUB_SHA" > artifacts/idi-p5-specialty.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wcs-idi-p5-digital-twin-optimizer-${{ github.run_number }}
+          path: artifacts/idi-p5-specialty.json
