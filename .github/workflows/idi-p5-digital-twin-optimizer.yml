@@ -12,6 +12,7 @@ on:
       - 'src/Wcs.Desktop/ViewModels/DigitalTwinOptimizerViewModel.cs'
       - 'src/Wcs.Desktop/Views/DigitalTwinOptimizerView.axaml*'
       - 'src/Wcs.Simulator.Tests/DigitalTwinOptimizerContractTests.cs'
+      - 'src/Wcs.Simulator.Tests/DigitalTwinOptimizerIntegrationTests.cs'
       - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
       - '.github/workflows/idi-p5-digital-twin-optimizer.yml'
   workflow_dispatch:
@@ -28,15 +29,17 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       - name: Restore and build P5
-        run: dotnet build src/Wcs.Optimization/Wcs.Optimization.csproj -c Release
-      - name: Run exactly 18 P5 contract tests
+        run: |
+          dotnet build src/Wcs.Optimization/Wcs.Optimization.csproj -c Release
+          dotnet build src/Wcs.Simulator/Wcs.Simulator.csproj -c Release
+      - name: Run exactly 24 P5 specialty tests
         shell: bash
         run: |
           set -euo pipefail
-          OUT=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --filter 'FullyQualifiedName~DigitalTwinOptimizerContractTests' --logger 'console;verbosity=normal')
+          OUT=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --filter 'FullyQualifiedName~DigitalTwinOptimizer' --logger 'console;verbosity=normal')
           printf '%s\n' "$OUT"
-          echo "$OUT" | grep -Eq 'Total tests:[[:space:]]+18'
-          echo "$OUT" | grep -Eq 'Passed:[[:space:]]+18'
+          echo "$OUT" | grep -Eq 'Total tests:[[:space:]]+24'
+          echo "$OUT" | grep -Eq 'Passed:[[:space:]]+24'
           ! echo "$OUT" | grep -Eq 'Failed:[[:space:]]+[1-9][0-9]*'
       - name: Verify recommendation-only zero-control boundary
         shell: bash
@@ -46,12 +49,12 @@ jobs:
           grep -R -n 'AutoProductionPolicyReplacementAllowed => false' src/Wcs.Optimization
           grep -R -n 'ProductionAutomationAllowed => false' src/Wcs.Optimization
           grep -R -n 'MaximumAutomationLevel => "L1"' src/Wcs.Optimization
-          ! grep -R -n -E 'S7Client|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|RouteReservationManager|TrafficCoordinator|WriteAsync\(' src/Wcs.Optimization
+          ! grep -R -n -E 'S7Client|S7RealClient|S7CommPlusDriver|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|RouteReservationManager|IRouteReservationManager|WriteAsync\(|HttpClient|SqlSugar' src/Wcs.Optimization src/Wcs.Simulator/Optimization
       - name: Write software evidence
         shell: bash
         run: |
           mkdir -p artifacts
-          printf '{"schema":"wcs-idi-p5-specialty/v2","head_sha":"%s","testCount":18,"allSuccess":true,"controlWriteAllowed":false,"autoProductionPolicyReplacementAllowed":false,"productionAutomationAllowed":false,"maximumAutomationLevel":"L1","requiredSimulationStages":11,"determinismRoundsPerInput":2}\n' "$GITHUB_SHA" > artifacts/idi-p5-specialty.json
+          printf '{"schema":"wcs-idi-p5-specialty/v3","head_sha":"%s","testCount":24,"allSuccess":true,"controlWriteAllowed":false,"autoProductionPolicyReplacementAllowed":false,"productionAutomationAllowed":false,"maximumAutomationLevel":"L1","requiredSimulationStages":11,"determinismRoundsPerInput":2,"standardCandidateCount":6}\n' "$GITHUB_SHA" > artifacts/idi-p5-specialty.json
       - uses: actions/upload-artifact@v4
         with:
           name: wcs-idi-p5-digital-twin-optimizer-${{ github.run_number }}
