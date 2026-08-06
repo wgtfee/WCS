@@ -111,8 +111,40 @@ jobs:
           set -euo pipefail
           output='artifacts/idi-p5-full-regression/runs.tsv'
           printf 'workflow_ref\tworkflow_name\trun_id\tevent\n' > "$output"
+
+          get_runs() {
+            local workflow_ref="$1"
+            local event_filter="${2:-}"
+            local suffix="?branch=$HEAD_REF&per_page=100"
+            [[ -n "$event_filter" ]] && suffix="?branch=$HEAD_REF&event=$event_filter&per_page=100"
+            local response=''
+            for attempt in 1 2 3 4 5 6; do
+              if response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_ref/runs$suffix")"; then
+                printf '%s' "$response"
+                return 0
+              fi
+              echo "GET runs transient failure workflow=$workflow_ref attempt=$attempt/6" >&2
+              sleep $((attempt * 2))
+            done
+            echo "GET runs exhausted retries workflow=$workflow_ref" >&2
+            return 1
+          }
+
+          dispatch_workflow() {
+            local workflow_ref="$1"
+            for attempt in 1 2 3 4 5 6; do
+              if gh api --method POST -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_ref/dispatches" -f ref="$HEAD_REF"; then
+                return 0
+              fi
+              echo "workflow_dispatch transient failure workflow=$workflow_ref attempt=$attempt/6" >&2
+              sleep $((attempt * 3))
+            done
+            echo "workflow_dispatch exhausted retries workflow=$workflow_ref" >&2
+            return 1
+          }
+
           while IFS=$'\t' read -r workflow_ref workflow_name; do
-            response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_ref/runs?branch=$HEAD_REF&per_page=100")"
+            response="$(get_runs "$workflow_ref")"
 
             # A skipped/cancelled/failed pull_request run is never valid reusable evidence.
             # Reuse only a completed success. The one-hour soak is allowed to reuse its
@@ -126,11 +158,11 @@ jobs:
 
             event='existing-success'
             if [[ -z "$run_id" ]]; then
-              gh api --method POST -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_ref/dispatches" -f ref="$HEAD_REF"
+              dispatch_workflow "$workflow_ref"
               event='workflow_dispatch'
               for _ in $(seq 1 60); do
                 sleep 2
-                response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_ref/runs?branch=$HEAD_REF&event=workflow_dispatch&per_page=20")"
+                response="$(get_runs "$workflow_ref" workflow_dispatch)"
                 run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.id) | last | .id // empty' <<<"$response")"
                 [[ -n "$run_id" ]] && break
               done
@@ -153,7 +185,15 @@ jobs:
             pending=0; failed=0
             : > artifacts/idi-p5-full-regression/current.tsv
             tail -n +2 "$input" | while IFS=$'\t' read -r workflow_ref workflow_name run_id event; do
-              run="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/runs/$run_id")"
+              run=''
+              for attempt in 1 2 3 4 5 6; do
+                if run="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/runs/$run_id")"; then
+                  break
+                fi
+                echo "GET run transient failure run=$run_id attempt=$attempt/6" >&2
+                sleep $((attempt * 2))
+              done
+              [[ -n "$run" ]] || { echo "Unable to read run=$run_id after retries" >&2; exit 1; }
               printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$workflow_ref" "$workflow_name" "$run_id" "$(jq -r '.status' <<<"$run")" "$(jq -r '.conclusion // "pending"' <<<"$run")" "$(jq -r '.head_sha' <<<"$run")" "$(jq -r '.html_url' <<<"$run")" >> artifacts/idi-p5-full-regression/current.tsv
             done
             while IFS=$'\t' read -r workflow_ref workflow_name run_id status conclusion head_sha html_url; do
@@ -173,7 +213,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          actual="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/pulls/$PR_NUMBER" --jq '.head.sha')"
+          actual=''
+          for attempt in 1 2 3 4 5 6; do
+            if actual="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/pulls/$PR_NUMBER" --jq '.head.sha')"; then
+              break
+            fi
+            echo "PR head verification transient failure attempt=$attempt/6" >&2
+            sleep $((attempt * 2))
+          done
           test "$actual" = "$EXPECTED_SHA"
           printf 'expected=%s\nactual=%s\n' "$EXPECTED_SHA" "$actual" | tee artifacts/idi-p5-full-regression/head-verification.txt
 
