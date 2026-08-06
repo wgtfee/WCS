@@ -4,6 +4,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Options;
 using Wcs.Desktop.Models;
 using Wcs.Desktop.Services;
 using Wcs.Desktop.Interface;
@@ -14,13 +15,25 @@ public partial class LoginViewModel : ObservableObject
 {
     private readonly IAuthState _authState;
     private readonly IDataProvider _dataProvider;
+    private readonly IDesktopIamAuthService _iamAuth;
 
-    public LoginViewModel(IAuthState authState, IDataProvider dataProvider)
+    public LoginViewModel(
+        IAuthState authState,
+        IDataProvider dataProvider,
+        IDesktopIamAuthService iamAuth,
+        IOptions<DesktopIamOptions> iamOptions)
     {
         _authState = authState;
         _dataProvider = dataProvider;
-        GenerateCaptcha();
+        _iamAuth = iamAuth;
+        UseIam = iamOptions.Value.Enabled;
+        if (!UseIam)
+            _ = GenerateCaptcha();
     }
+
+    public bool UseIam { get; }
+    public bool UseLocalLogin => !UseIam;
+    public string LoginModeText => UseIam ? "统一身份认证（IAM + PKCE）" : "本地兼容登录";
 
     [ObservableProperty]
     private string _userName = "admin";
@@ -55,6 +68,7 @@ public partial class LoginViewModel : ObservableObject
     [RelayCommand]
     private async Task GenerateCaptcha()
     {
+        if (UseIam) return;
         try
         {
             var result = await _dataProvider.getVierificationCode();
@@ -105,7 +119,7 @@ public partial class LoginViewModel : ObservableObject
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(Captcha))
+        if (!UseIam && string.IsNullOrWhiteSpace(Captcha))
         {
             ErrorMessage = "请输入验证码";
             return;
@@ -115,45 +129,74 @@ public partial class LoginViewModel : ObservableObject
         IsLoading = true;
         try
         {
-            // Phase 6 safety rule: the desktop must never treat the presence of a login
-            // window as authentication. Until the native IAM PKCE client is introduced,
-            // retain the proven local/MES login flow and require a real token response.
-            var loginData = new LoginInfo
+            if (UseIam)
             {
-                UserName = UserName,
-                Password = Password,
-                VerificationCode = Captcha,
-                UUID = CaptchaKey
-            };
-
-            var token = await _dataProvider.GetToken(loginData);
-            if (!token.Status || token.Data is null || string.IsNullOrWhiteSpace(token.Data.token))
-            {
-                ErrorMessage = string.IsNullOrWhiteSpace(token.Message)
-                    ? "登录失败，用户名、密码或验证码错误"
-                    : token.Message;
-                await GenerateCaptcha();
+                await LoginWithIamAsync();
                 return;
             }
 
-            _authState.Token = token.Data.token;
-            _authState.UserName = token.Data.userName;
-            UserInfo.User = new UserDto
-            {
-                Name = token.Data.userName,
-                RoleId = token.Data.Role_Id,
-            };
-            UserInfo.UserName = token.Data.userName;
-            LoginSuccess?.Invoke();
+            await LoginWithLocalCompatibilityAsync();
         }
         catch (Exception ex)
         {
             ErrorMessage = $"登录异常: {ex.Message}";
-            await GenerateCaptcha();
+            if (!UseIam)
+                await GenerateCaptcha();
         }
         finally
         {
             IsLoading = false;
         }
+    }
+
+    private async Task LoginWithIamAsync()
+    {
+        var result = await _iamAuth.LoginAsync(UserName, Password);
+        if (!result.Success || string.IsNullOrWhiteSpace(result.AccessToken))
+        {
+            ErrorMessage = result.Error ?? "IAM 登录失败";
+            return;
+        }
+
+        _authState.Token = result.AccessToken;
+        _authState.UserName = result.UserName ?? result.DisplayName ?? UserName;
+        UserInfo.User = new UserDto
+        {
+            Name = result.DisplayName ?? result.UserName ?? UserName,
+            RoleId = 0,
+        };
+        UserInfo.UserName = result.UserName ?? result.DisplayName ?? UserName;
+        LoginSuccess?.Invoke();
+    }
+
+    private async Task LoginWithLocalCompatibilityAsync()
+    {
+        var loginData = new LoginInfo
+        {
+            UserName = UserName,
+            Password = Password,
+            VerificationCode = Captcha,
+            UUID = CaptchaKey
+        };
+
+        var token = await _dataProvider.GetToken(loginData);
+        if (!token.Status || token.Data is null || string.IsNullOrWhiteSpace(token.Data.token))
+        {
+            ErrorMessage = string.IsNullOrWhiteSpace(token.Message)
+                ? "登录失败，用户名、密码或验证码错误"
+                : token.Message;
+            await GenerateCaptcha();
+            return;
+        }
+
+        _authState.Token = token.Data.token;
+        _authState.UserName = token.Data.userName;
+        UserInfo.User = new UserDto
+        {
+            Name = token.Data.userName,
+            RoleId = token.Data.Role_Id,
+        };
+        UserInfo.UserName = token.Data.userName;
+        LoginSuccess?.Invoke();
     }
 }
