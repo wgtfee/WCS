@@ -25,7 +25,11 @@ permissions:
 
 jobs:
   shadow-decision-contract:
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/idi-p3-') }}
+    # P3 is a cumulative governance gate for later IDI stages as well.  A
+    # workflow_dispatch is always allowed, and PR runs on P3+ IDI feature
+    # branches must execute instead of producing a misleading skipped run that
+    # a later exact-head matrix could accidentally select.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/idi-p') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
