@@ -10,9 +10,15 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddWcsDesktop(this IServiceCollection services)
     {
-        var config = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory).AddJsonFile("appsettings.json", optional: false).Build();
+        var config = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false)
+            .AddEnvironmentVariables()
+            .Build();
         services.AddSingleton<IConfiguration>(config);
         services.Configure<WcsDesktopOptions>(config.GetSection("WcsDesktop"));
+        services.Configure<DesktopIamOptions>(config.GetSection("Iam"));
+        services.AddSingleton<IDesktopIamAuthService, DesktopIamAuthService>();
         services.AddHttpClient<IWcsApiService, WcsApiService>();
         services.AddHttpClient<ITransportResilienceApiService, TransportResilienceApiService>();
         services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>();
