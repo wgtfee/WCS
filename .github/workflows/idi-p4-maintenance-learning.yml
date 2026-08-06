@@ -1,0 +1,64 @@
+name: WCS IDI P4 Maintenance Learning Contract
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.MaintenanceLearning/**'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearning*.cs'
+      - 'src/Wcs.Host/**'
+      - 'src/Wcs.Desktop/**'
+      - 'src/Wcs.Simulator.Tests/MaintenanceLearning*Tests.cs'
+      - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
+      - 'docs/交付文件/103-*'
+      - 'docs/交付文件/104-*'
+      - 'docs/交付文件/105-*'
+      - '.github/workflows/idi-p4-maintenance-learning.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  maintenance-learning-contract:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/idi-p4-') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore and build P4
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet build src/Wcs.MaintenanceLearning/Wcs.MaintenanceLearning.csproj -c Release --no-restore
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+      - name: Run exactly 20 P4 contract tests
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/idi-p4-maintenance-learning
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~MaintenanceLearningContractTests' --logger 'trx;LogFileName=idi-p4.trx' | tee artifacts/idi-p4-maintenance-learning/test-output.txt
+          grep -Eq 'Passed![[:space:]]+- Failed:[[:space:]]+0,[[:space:]]+Passed:[[:space:]]+20,[[:space:]]+Skipped:[[:space:]]+0,[[:space:]]+Total:[[:space:]]+20' artifacts/idi-p4-maintenance-learning/test-output.txt
+      - name: Verify learning-only zero-control boundary
+        run: |
+          set -euo pipefail
+          if grep -RInE 'IPlcConnection|S7Client|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|HttpClient|SqlSugar|SqlConnection' src/Wcs.MaintenanceLearning; then
+            echo 'P4 domain contains forbidden control/network/SQL dependency.' >&2
+            exit 1
+          fi
+          grep -RIn 'ControlWriteAllowed => false' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'AutoTrainingAllowed => false' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'AutoModelActivationAllowed => false' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'Maximum retry bound reached' src/Wcs.MaintenanceLearning >/dev/null
+          grep -RIn 'TrainingDatasetAdmission' src/Wcs.MaintenanceLearning >/dev/null
+      - name: Write software evidence
+        run: |
+          printf 'stage=IDI-P4\nhead_sha=%s\ntest_count=20\ncontrol_write_allowed=false\nauto_training_allowed=false\nauto_model_activation_allowed=false\nproduction_automation_allowed=false\n' "$GITHUB_SHA" | tee artifacts/idi-p4-maintenance-learning/evidence.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wcs-idi-p4-maintenance-learning-${{ github.run_number }}
+          path: artifacts/idi-p4-maintenance-learning/**
+          if-no-files-found: error
+          retention-days: 30
