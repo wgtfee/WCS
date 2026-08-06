@@ -20,6 +20,8 @@ jobs:
   optimizer-stress-soak:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    env:
+      EVIDENCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -60,11 +62,12 @@ jobs:
           grep -R -n 'AutoProductionPolicyReplacementAllowed => false' src/Wcs.Optimization
           ! grep -R -n -E 'S7Client|S7RealClient|S7CommPlusDriver|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|RouteReservationManager|IRouteReservationManager|WriteAsync\(|HttpClient|SqlSugar' src/Wcs.Optimization src/Wcs.Simulator/Optimization
 
-      - name: Write stress-soak evidence
+      - name: Write stress-soak evidence for exact PR head
         shell: bash
         run: |
           set -euo pipefail
-          printf '{"schema":"wcs-idi-p5-stress-soak/v1","head_sha":"%s","integrationRepetitions":3,"integrationTestsPerRepetition":6,"integrationPassedTotal":18,"s8CapacityReadinessTests":12,"includesEightHourVirtualSoak":true,"includesTwentyFourHourVirtualSoak":true,"realHilExecuted":false,"controlWriteAllowed":false,"autoProductionPolicyReplacementAllowed":false,"productionAutomationAllowed":false,"oneHourSoakIsSeparateCumulativeGate":true}\n' "$GITHUB_SHA" > artifacts/idi-p5-stress-soak/evidence.json
+          printf '{"schema":"wcs-idi-p5-stress-soak/v2","head_sha":"%s","integrationRepetitions":3,"integrationTestsPerRepetition":6,"integrationPassedTotal":18,"s8CapacityReadinessTests":12,"includesEightHourVirtualSoak":true,"includesTwentyFourHourVirtualSoak":true,"realHilExecuted":false,"controlWriteAllowed":false,"autoProductionPolicyReplacementAllowed":false,"productionAutomationAllowed":false,"oneHourSoakIsSeparateCumulativeGate":true}\n' "$EVIDENCE_HEAD_SHA" > artifacts/idi-p5-stress-soak/evidence.json
+          test "$(jq -r '.head_sha' artifacts/idi-p5-stress-soak/evidence.json)" = "$EVIDENCE_HEAD_SHA"
 
       - uses: actions/upload-artifact@v4
         if: always()
