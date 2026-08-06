@@ -14,6 +14,9 @@ on:
       - 'docs/交付文件/97-*'
       - 'docs/交付文件/98-*'
       - 'docs/交付文件/99-*'
+      - 'docs/交付文件/100-*'
+      - 'docs/交付文件/101-*'
+      - 'docs/交付文件/102-*'
       - '.github/workflows/idi-p3-shadow-decision.yml'
   workflow_dispatch:
 
