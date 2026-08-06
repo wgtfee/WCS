@@ -48,6 +48,44 @@ public sealed class MaintenanceEffectivenessEntity
     [SugarColumn(Length = 64, IsNullable = false)] public string EvidenceHash { get; set; } = string.Empty;
 }
 
+[SugarTable("Wcs_MaintenanceEvaluationWindow")]
+public sealed class MaintenanceEvaluationWindowEntity
+{
+    [SugarColumn(IsPrimaryKey = true, IsIdentity = true)] public long Id { get; set; }
+    [SugarColumn(Length = 80, IsNullable = false)] public string AssetType { get; set; } = string.Empty;
+    [SugarColumn(Length = 80, IsNullable = false)] public string Version { get; set; } = string.Empty;
+    public long ImmediateTicks { get; set; }
+    public long ShortTicks { get; set; }
+    public long MediumTicks { get; set; }
+    public long LongTicks { get; set; }
+    [SugarColumn(Length = 200, IsNullable = false)] public string ApprovedBy { get; set; } = string.Empty;
+    public DateTime ApprovedAtUtc { get; set; }
+    [SugarColumn(Length = 64, IsNullable = false)] public string DefinitionHash { get; set; } = string.Empty;
+}
+
+[SugarTable("Wcs_MaintenanceCausalCandidate")]
+public sealed class MaintenanceCausalCandidateEntity
+{
+    [SugarColumn(IsPrimaryKey = true, IsIdentity = true)] public long Id { get; set; }
+    [SugarColumn(Length = 64, IsNullable = false)] public string CandidateId { get; set; } = string.Empty;
+    [SugarColumn(Length = 64, IsNullable = false)] public string InterventionId { get; set; } = string.Empty;
+    [SugarColumn(Length = 160, IsNullable = false)] public string Treatment { get; set; } = string.Empty;
+    [SugarColumn(Length = 160, IsNullable = false)] public string OutcomeMetric { get; set; } = string.Empty;
+    [SugarColumn(Length = 64, IsNullable = false)] public string EvidenceHash { get; set; } = string.Empty;
+}
+
+[SugarTable("Wcs_MaintenanceCounterfactualEstimate")]
+public sealed class MaintenanceCounterfactualEstimateEntity
+{
+    [SugarColumn(IsPrimaryKey = true, IsIdentity = true)] public long Id { get; set; }
+    [SugarColumn(Length = 64, IsNullable = false)] public string CandidateId { get; set; } = string.Empty;
+    public decimal ObservedValue { get; set; }
+    public decimal CounterfactualValue { get; set; }
+    public decimal EstimatedEffect { get; set; }
+    [SugarColumn(Length = 120, IsNullable = false)] public string MethodVersion { get; set; } = string.Empty;
+    [SugarColumn(Length = 64, IsNullable = false)] public string EvidenceHash { get; set; } = string.Empty;
+}
+
 [SugarTable("Wcs_MaintenanceTrainingLabel")]
 public sealed class MaintenanceTrainingLabelEntity
 {
@@ -94,14 +132,20 @@ public static class MaintenanceLearningSchema
     public static void Ensure(SqlSugarClient db)
     {
         ArgumentNullException.ThrowIfNull(db);
-        db.CodeFirst.InitTables(typeof(MaintenanceInterventionEntity), typeof(MaintenanceLearningOutcomeEntity),
-            typeof(MaintenanceEffectivenessEntity), typeof(MaintenanceTrainingLabelEntity),
-            typeof(MaintenanceTrainingLabelApprovalEntity), typeof(MaintenanceMesOutboxEntity));
+        db.CodeFirst.InitTables(
+            typeof(MaintenanceInterventionEntity), typeof(MaintenanceLearningOutcomeEntity),
+            typeof(MaintenanceEffectivenessEntity), typeof(MaintenanceEvaluationWindowEntity),
+            typeof(MaintenanceCausalCandidateEntity), typeof(MaintenanceCounterfactualEstimateEntity),
+            typeof(MaintenanceTrainingLabelEntity), typeof(MaintenanceTrainingLabelApprovalEntity),
+            typeof(MaintenanceMesOutboxEntity));
         db.Ado.ExecuteCommand(@"
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceIntervention_Id' AND object_id=OBJECT_ID('Wcs_MaintenanceIntervention')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceIntervention_Id ON Wcs_MaintenanceIntervention(InterventionId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceOutcome_Id' AND object_id=OBJECT_ID('Wcs_MaintenanceLearningOutcome')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceOutcome_Id ON Wcs_MaintenanceLearningOutcome(OutcomeId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceOutcome_Source' AND object_id=OBJECT_ID('Wcs_MaintenanceLearningOutcome')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceOutcome_Source ON Wcs_MaintenanceLearningOutcome(SourceEventId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceEffectiveness_InterventionWindow' AND object_id=OBJECT_ID('Wcs_MaintenanceEffectiveness')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceEffectiveness_InterventionWindow ON Wcs_MaintenanceEffectiveness(InterventionId,EvaluationWindowVersion);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceWindow_AssetVersion' AND object_id=OBJECT_ID('Wcs_MaintenanceEvaluationWindow')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceWindow_AssetVersion ON Wcs_MaintenanceEvaluationWindow(AssetType,Version);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceCausal_Id' AND object_id=OBJECT_ID('Wcs_MaintenanceCausalCandidate')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceCausal_Id ON Wcs_MaintenanceCausalCandidate(CandidateId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceCounterfactual_Candidate' AND object_id=OBJECT_ID('Wcs_MaintenanceCounterfactualEstimate')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceCounterfactual_Candidate ON Wcs_MaintenanceCounterfactualEstimate(CandidateId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceLabel_Id' AND object_id=OBJECT_ID('Wcs_MaintenanceTrainingLabel')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceLabel_Id ON Wcs_MaintenanceTrainingLabel(LabelId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceLabelApproval_Idempotency' AND object_id=OBJECT_ID('Wcs_MaintenanceTrainingLabelApproval')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceLabelApproval_Idempotency ON Wcs_MaintenanceTrainingLabelApproval(IdempotencyKey);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_MaintenanceOutbox_Idempotency' AND object_id=OBJECT_ID('Wcs_MaintenanceMesOutbox')) CREATE UNIQUE INDEX UX_Wcs_MaintenanceOutbox_Idempotency ON Wcs_MaintenanceMesOutbox(IdempotencyKey);
