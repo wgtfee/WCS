@@ -23,10 +23,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Wcs.Entity\Wcs.Entity.csproj" />
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
-    <ProjectReference Include="..\Wcs.Entity\Wcs.Entity.csproj" />
     <ProjectReference Include="..\Wcs.Infrastructure\Wcs.Infrastructure.csproj" />
     <ProjectReference Include="..\Wcs.Application\Wcs.Application.csproj" />
     <ProjectReference Include="..\Wcs.Simulator\Wcs.Simulator.csproj" />
     <ProjectReference Include="..\Wcs.IndustrialIntelligence\Wcs.IndustrialIntelligence.csproj" />
+    <ProjectReference Include="..\Wcs.MaintenanceLearning\Wcs.MaintenanceLearning.csproj" />
   </ItemGroup>
 </Project>
