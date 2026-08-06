@@ -1,5 +1,6 @@
 using Avalonia.Threading;
 using Microsoft.AspNetCore.SignalR.Client;
+using Wcs.Desktop.Interface;
 
 namespace Wcs.Desktop.Services;
 
@@ -8,13 +9,17 @@ namespace Wcs.Desktop.Services;
 /// </summary>
 public class WcsRealtimeService : IWcsRealtimeService, IAsyncDisposable
 {
+    private readonly IAuthState _authState;
     private HubConnection? _connection;
     private bool _isConnected;
 
+    public WcsRealtimeService(IAuthState authState)
+    {
+        _authState = authState;
+    }
+
     public bool IsConnected => _isConnected;
     public event Action<bool>? ConnectionStateChanged;
-
-    // SignalR server push events
     public event Action<DeviceStateChangedMessage>? DeviceStateChanged;
     public event Action<DeviceStateChangedMessage>? DeviceStateBroadcast;
     public event Action<TaskStateChangedMessage>? TaskStateChanged;
@@ -25,7 +30,14 @@ public class WcsRealtimeService : IWcsRealtimeService, IAsyncDisposable
     public async Task ConnectAsync(string serverUrl, CancellationToken ct = default)
     {
         _connection = new HubConnectionBuilder()
-            .WithUrl($"{serverUrl.TrimEnd('/')}/wcs")
+            .WithUrl($"{serverUrl.TrimEnd('/')}/wcs", options =>
+            {
+                // SignalR transports use AccessTokenProvider for HTTP negotiation and
+                // automatically map the token to the access_token query parameter when
+                // WebSockets/SSE require it.
+                options.AccessTokenProvider = () => Task.FromResult<string?>(
+                    string.IsNullOrWhiteSpace(_authState.Token) ? null : _authState.Token);
+            })
             .WithAutomaticReconnect()
             .Build();
 
