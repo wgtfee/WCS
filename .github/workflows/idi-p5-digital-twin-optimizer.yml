@@ -29,7 +29,9 @@ jobs:
           set -euo pipefail
           OUT=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --filter 'FullyQualifiedName~DigitalTwinOptimizerContractTests' --logger 'console;verbosity=normal')
           printf '%s\n' "$OUT"
-          echo "$OUT" | grep -Eq 'Passed:[[:space:]]+12.*Failed:[[:space:]]+0|Passed![[:space:]]+- Failed:[[:space:]]+0, Passed:[[:space:]]+12'
+          echo "$OUT" | grep -Eq 'Total tests:[[:space:]]+12'
+          echo "$OUT" | grep -Eq 'Passed:[[:space:]]+12'
+          ! echo "$OUT" | grep -Eq 'Failed:[[:space:]]+[1-9][0-9]*'
       - name: Verify recommendation-only zero-control boundary
         shell: bash
         run: |
