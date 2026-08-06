@@ -19,9 +19,18 @@ public static class ServiceCollectionExtensions
         services.Configure<WcsDesktopOptions>(config.GetSection("WcsDesktop"));
         services.Configure<DesktopIamOptions>(config.GetSection("Iam"));
         services.AddSingleton<IDesktopIamAuthService, DesktopIamAuthService>();
-        services.AddHttpClient<IWcsApiService, WcsApiService>();
-        services.AddHttpClient<ITransportResilienceApiService, TransportResilienceApiService>();
-        services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>();
+
+        // All WCS HTTP clients share the same bearer-token handler. In IAM mode the
+        // token comes from DesktopIamAuthService; in Local compatibility mode the
+        // existing local token in IAuthState is forwarded unchanged.
+        services.AddTransient<WcsBearerTokenHandler>();
+        services.AddHttpClient<IWcsApiService, WcsApiService>()
+            .AddHttpMessageHandler<WcsBearerTokenHandler>();
+        services.AddHttpClient<ITransportResilienceApiService, TransportResilienceApiService>()
+            .AddHttpMessageHandler<WcsBearerTokenHandler>();
+        services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>()
+            .AddHttpMessageHandler<WcsBearerTokenHandler>();
+
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
         services.AddSingleton<IDataProvider, ApiDataProvider>();
         services.AddTransient<LoginViewModel>();
