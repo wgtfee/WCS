@@ -34,6 +34,11 @@ public sealed class SqlOptimizationExperimentStore : IOptimizationExperimentStor
             ExperimentId = definition.ExperimentId,
             DefinitionHash = definition.DefinitionHash,
             SoftwareHead = definition.SoftwareHead,
+            ScenarioEvidenceHash = definition.ScenarioEvidenceHash,
+            TopologyEvidenceHash = definition.TopologyEvidenceHash,
+            OrderDatasetEvidenceHash = definition.OrderDatasetEvidenceHash,
+            ObjectiveWeightsEvidenceHash = definition.ObjectiveWeightsEvidenceHash,
+            ConstraintProfileHash = definition.ConstraintProfileHash.ToLowerInvariant(),
             DefinitionJson = JsonSerializer.Serialize(definition, JsonOptions),
             Status = "Defined",
             CreatedAtUtc = DateTime.UtcNow
@@ -43,17 +48,22 @@ public sealed class SqlOptimizationExperimentStore : IOptimizationExperimentStor
     public async Task SaveResultAsync(OptimizationExperimentResult result, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!OptimizationHash.IsSha256(result.DefinitionHash) || !OptimizationHash.IsSha256(result.EvidenceHash) ||
-            result.ControlWriteAllowed || result.AutoProductionPolicyReplacementAllowed)
-            throw new InvalidOperationException("Optimization result violates governed evidence/control invariants.");
+        ValidateResultEvidence(result);
 
         using var db = CreateDb();
-        var definition = await db.Queryable<OptimizationExperimentEntity>()
+        var definitionRow = await db.Queryable<OptimizationExperimentEntity>()
             .Where(x => x.ExperimentId == result.ExperimentId)
             .FirstAsync() ?? throw new InvalidOperationException("Experiment definition must be persisted before its result.");
-        if (!string.Equals(definition.DefinitionHash, result.DefinitionHash, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(definition.SoftwareHead, result.SoftwareHead, StringComparison.OrdinalIgnoreCase))
+        var definition = JsonSerializer.Deserialize<OptimizationExperimentDefinition>(definitionRow.DefinitionJson, JsonOptions)
+            ?? throw new InvalidOperationException("Persisted experiment definition cannot be deserialized.");
+        DigitalTwinOptimizer.ValidateDefinition(definition);
+        if (!string.Equals(definitionRow.DefinitionHash, result.DefinitionHash, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(definitionRow.SoftwareHead, result.SoftwareHead, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(definition.DefinitionHash, result.DefinitionHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Result does not match persisted experiment definition.");
+        var recomputedEvidence = OptimizationHash.ComputeResultEvidenceHash(definition, result.Runs);
+        if (!string.Equals(recomputedEvidence, result.EvidenceHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Result EvidenceHash does not match its governed definition and run evidence.");
 
         var existing = await db.Queryable<OptimizationExperimentResultEntity>()
             .Where(x => x.ExperimentId == result.ExperimentId)
@@ -77,26 +87,51 @@ public sealed class SqlOptimizationExperimentStore : IOptimizationExperimentStor
                 ResultJson = JsonSerializer.Serialize(result, JsonOptions),
                 ControlWriteAllowed = false,
                 AutoProductionPolicyReplacementAllowed = false,
+                ProductionAutomationAllowed = false,
                 CompletedAtUtc = DateTime.UtcNow
             }).ExecuteCommandAsync();
 
-            foreach (var score in result.Ranking)
+            for (var index = 0; index < result.Ranking.Count; index++)
             {
+                var score = result.Ranking[index];
                 await db.Insertable(new OptimizationPolicyEvidenceEntity
                 {
                     ExperimentId = result.ExperimentId,
                     PolicyId = score.PolicyId,
                     PolicyHash = score.PolicyHash,
+                    Rank = index + 1,
                     Score = score.Score,
                     ParetoEfficient = score.ParetoEfficient,
+                    HardConstraintQualified = score.HardConstraintQualified,
                     SuccessfulRuns = score.SuccessfulRuns,
-                    FailedRuns = score.FailedRuns
+                    FailedRuns = score.FailedRuns,
+                    AggregateJson = JsonSerializer.Serialize(score.Aggregate, JsonOptions)
                 }).ExecuteCommandAsync();
             }
 
-            definition.Status = "Completed";
-            definition.CompletedAtUtc = DateTime.UtcNow;
-            await db.Updateable(definition).ExecuteCommandAsync();
+            foreach (var run in result.Runs)
+            {
+                await db.Insertable(new OptimizationRunEvidenceEntity
+                {
+                    ExperimentId = result.ExperimentId,
+                    PolicyId = run.PolicyId,
+                    PolicyHash = run.PolicyHash,
+                    LoadCase = run.LoadCase.ToString(),
+                    Seed = run.Seed,
+                    DeterminismRound = run.DeterminismRound,
+                    ScenarioHash = run.ScenarioHash,
+                    FinalStateHash = run.FinalStateHash,
+                    EvidenceHash = run.EvidenceHash,
+                    HardConstraintsSatisfied = run.HardConstraintsSatisfied,
+                    FailureReason = run.FailureReason,
+                    MetricsJson = JsonSerializer.Serialize(run.Metrics, JsonOptions),
+                    StageEvidenceJson = JsonSerializer.Serialize(run.StageEvidence, JsonOptions)
+                }).ExecuteCommandAsync();
+            }
+
+            definitionRow.Status = "Completed";
+            definitionRow.CompletedAtUtc = DateTime.UtcNow;
+            await db.Updateable(definitionRow).ExecuteCommandAsync();
             db.Ado.CommitTran();
         }
         catch
@@ -127,15 +162,29 @@ public sealed class SqlOptimizationExperimentStore : IOptimizationExperimentStor
         cancellationToken.ThrowIfCancellationRequested();
         if (limit is < 1 or > 500) throw new ArgumentOutOfRangeException(nameof(limit));
         using var db = CreateDb();
-        var rows = await db.Queryable<OptimizationExperimentEntity>().OrderBy(x => x.CreatedAtUtc, OrderByType.Desc).Take(limit).ToListAsync();
-        var resultRows = await db.Queryable<OptimizationExperimentResultEntity>().Where(x => rows.Select(r => r.ExperimentId).Contains(x.ExperimentId)).ToListAsync();
+        var rows = await db.Queryable<OptimizationExperimentEntity>()
+            .OrderBy(x => x.CreatedAtUtc, OrderByType.Desc)
+            .Take(limit)
+            .ToListAsync();
+        if (rows.Count == 0) return [];
+        var ids = rows.Select(static row => row.ExperimentId).ToArray();
+        var resultRows = await db.Queryable<OptimizationExperimentResultEntity>()
+            .Where(x => ids.Contains(x.ExperimentId))
+            .ToListAsync();
         var byExperiment = resultRows.ToDictionary(x => x.ExperimentId, StringComparer.Ordinal);
         return rows.Select(row =>
         {
             byExperiment.TryGetValue(row.ExperimentId, out var result);
-            return new OptimizationExperimentSummary(row.ExperimentId, row.DefinitionHash, row.SoftwareHead, row.Status,
-                row.CreatedAtUtc, row.CompletedAtUtc, result?.EvidenceHash,
-                result?.ControlWriteAllowed ?? false, result?.AutoProductionPolicyReplacementAllowed ?? false);
+            return new OptimizationExperimentSummary(
+                row.ExperimentId,
+                row.DefinitionHash,
+                row.SoftwareHead,
+                row.Status,
+                row.CreatedAtUtc,
+                row.CompletedAtUtc,
+                result?.EvidenceHash,
+                result?.ControlWriteAllowed ?? false,
+                result?.AutoProductionPolicyReplacementAllowed ?? false);
         }).ToArray();
     }
 
@@ -145,7 +194,10 @@ public sealed class SqlOptimizationExperimentStore : IOptimizationExperimentStor
         using var db = CreateDb();
         var definitions = await db.Queryable<OptimizationExperimentEntity>().ToListAsync();
         var results = await db.Queryable<OptimizationExperimentResultEntity>().ToListAsync();
+        var runRows = await db.Queryable<OptimizationRunEvidenceEntity>().ToListAsync();
         var errors = new List<string>();
+        var definitionById = new Dictionary<string, OptimizationExperimentDefinition>(StringComparer.Ordinal);
+
         foreach (var row in definitions)
         {
             try
@@ -154,8 +206,14 @@ public sealed class SqlOptimizationExperimentStore : IOptimizationExperimentStor
                     ?? throw new InvalidOperationException("DefinitionJson is empty.");
                 DigitalTwinOptimizer.ValidateDefinition(definition);
                 if (!string.Equals(definition.DefinitionHash, row.DefinitionHash, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(definition.SoftwareHead, row.SoftwareHead, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Persisted definition hash/head mismatch.");
+                    !string.Equals(definition.SoftwareHead, row.SoftwareHead, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(definition.ScenarioEvidenceHash, row.ScenarioEvidenceHash, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(definition.TopologyEvidenceHash, row.TopologyEvidenceHash, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(definition.OrderDatasetEvidenceHash, row.OrderDatasetEvidenceHash, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(definition.ObjectiveWeightsEvidenceHash, row.ObjectiveWeightsEvidenceHash, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(definition.ConstraintProfileHash, row.ConstraintProfileHash, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Persisted definition evidence/head mismatch.");
+                definitionById[row.ExperimentId] = definition;
             }
             catch (Exception ex)
             {
@@ -163,13 +221,58 @@ public sealed class SqlOptimizationExperimentStore : IOptimizationExperimentStor
             }
         }
 
-        foreach (var result in results)
+        foreach (var row in results)
         {
-            if (result.ControlWriteAllowed || result.AutoProductionPolicyReplacementAllowed || !OptimizationHash.IsSha256(result.EvidenceHash))
-                errors.Add($"{result.ExperimentId}: persisted result violates zero-control evidence invariants.");
+            try
+            {
+                if (row.ControlWriteAllowed || row.AutoProductionPolicyReplacementAllowed || row.ProductionAutomationAllowed ||
+                    !OptimizationHash.IsSha256(row.EvidenceHash))
+                    throw new InvalidOperationException("persisted result violates zero-control evidence invariants.");
+                var result = JsonSerializer.Deserialize<OptimizationExperimentResult>(row.ResultJson, JsonOptions)
+                    ?? throw new InvalidOperationException("ResultJson is empty.");
+                ValidateResultEvidence(result);
+                if (!definitionById.TryGetValue(row.ExperimentId, out var definition))
+                    throw new InvalidOperationException("matching valid definition is unavailable.");
+                var recomputed = OptimizationHash.ComputeResultEvidenceHash(definition, result.Runs);
+                if (!string.Equals(recomputed, row.EvidenceHash, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(recomputed, result.EvidenceHash, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("persisted result evidence hash mismatch.");
+                var persistedRunCount = runRows.Count(run => string.Equals(run.ExperimentId, row.ExperimentId, StringComparison.Ordinal));
+                if (persistedRunCount != result.Runs.Count)
+                    throw new InvalidOperationException($"persisted run evidence count mismatch: expected {result.Runs.Count}, actual {persistedRunCount}.");
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{row.ExperimentId}: {ex.Message}");
+            }
+        }
+
+        foreach (var run in runRows)
+        {
+            if (!OptimizationHash.IsSha256(run.PolicyHash) || !OptimizationHash.IsSha256(run.ScenarioHash) ||
+                !OptimizationHash.IsSha256(run.FinalStateHash) || !OptimizationHash.IsSha256(run.EvidenceHash) ||
+                run.DeterminismRound is < 1 or > OptimizationGovernance.DeterminismRoundsPerInput)
+                errors.Add($"{run.ExperimentId}/{run.PolicyId}/{run.LoadCase}/{run.Seed}/{run.DeterminismRound}: invalid run evidence row.");
         }
 
         return new OptimizationRecoveryResult(definitions.Count, results.Count, errors.Count, errors.Count == 0, errors);
+    }
+
+    private static void ValidateResultEvidence(OptimizationExperimentResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (!OptimizationHash.IsSha256(result.DefinitionHash) || !OptimizationHash.IsSha256(result.EvidenceHash) ||
+            result.ControlWriteAllowed || result.AutoProductionPolicyReplacementAllowed || result.ProductionAutomationAllowed)
+            throw new InvalidOperationException("Optimization result violates governed evidence/control invariants.");
+        if (result.Ranking.Count < OptimizationGovernance.MinimumCandidateCount)
+            throw new InvalidOperationException("Optimization result does not contain the minimum governed candidate count.");
+        if (result.Runs.Count == 0 || result.Runs.Any(static run => !OptimizationHash.IsSha256(run.EvidenceHash) ||
+                                                       !OptimizationHash.IsSha256(run.ScenarioHash) ||
+                                                       !OptimizationHash.IsSha256(run.FinalStateHash)))
+            throw new InvalidOperationException("Optimization result contains invalid run evidence.");
+        if (result.Ranking.Any(static score => !OptimizationHash.IsSha256(score.PolicyHash) ||
+                                                   !double.IsFinite(score.Score)))
+            throw new InvalidOperationException("Optimization ranking contains invalid policy evidence or non-finite score.");
     }
 
     private SqlSugarClient CreateDb() => new(new ConnectionConfig
