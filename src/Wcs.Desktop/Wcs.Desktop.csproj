@@ -30,6 +30,7 @@
     <ProjectReference Include="..\Wcs.Entity\Wcs.Entity.csproj" />
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
     <ProjectReference Include="..\Wcs.ModelOps\Wcs.ModelOps.csproj" />
+    <ProjectReference Include="..\Wcs.MaintenanceLearning\Wcs.MaintenanceLearning.csproj" />
   </ItemGroup>
 
   <ItemGroup>
