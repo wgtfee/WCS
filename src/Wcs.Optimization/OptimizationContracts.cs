@@ -26,6 +26,21 @@ public enum OptimizationLoadCase
     DeterminismReplay = 7
 }
 
+public enum OptimizationSimulationStage
+{
+    S0Governance = 0,
+    S1ScenarioEngine = 1,
+    S2VirtualPlc = 2,
+    S3VirtualRgv = 3,
+    S4VirtualTraffic = 4,
+    S5VirtualExternal = 5,
+    S6VirtualHealth = 6,
+    S7IntegratedRecovery = 7,
+    S8CapacityReadiness = 8,
+    S9HilSoftwareBoundary = 9,
+    S10UnifiedVerification = 10
+}
+
 public sealed record OptimizationObjectiveWeights
 {
     public double Throughput { get; init; } = 1;
@@ -39,6 +54,8 @@ public sealed record OptimizationObjectiveWeights
 
     public IReadOnlyList<double> AsOrderedValues() =>
     [Throughput, MissionLeadTime, WaitTime, Energy, Wear, FailureRisk, SlaViolation, RecoveryTime];
+
+    public string EvidenceHash => OptimizationHash.ComputeObjectiveWeightsHash(this);
 }
 
 public sealed record OptimizationPolicyCandidate
@@ -63,6 +80,11 @@ public sealed record OptimizationExperimentDefinition
     public required OptimizationObjectiveWeights ObjectiveWeights { get; init; }
     public required string ConstraintProfileHash { get; init; }
     public required string SoftwareHead { get; init; }
+
+    public string ScenarioEvidenceHash => OptimizationHash.ComputeNamedEvidenceHash("scenario", ScenarioSetVersion);
+    public string TopologyEvidenceHash => OptimizationHash.ComputeNamedEvidenceHash("topology", TopologyRevision);
+    public string OrderDatasetEvidenceHash => OptimizationHash.ComputeNamedEvidenceHash("orders", OrderDatasetVersion);
+    public string ObjectiveWeightsEvidenceHash => ObjectiveWeights.EvidenceHash;
     public string DefinitionHash => OptimizationHash.ComputeExperimentHash(this);
 }
 
@@ -82,6 +104,19 @@ public sealed record OptimizationMetrics
     public double RecoveryTimeSeconds { get; init; }
 }
 
+public sealed record OptimizationStageEvidence
+{
+    public required OptimizationSimulationStage Stage { get; init; }
+    public required bool Available { get; init; }
+    public required bool Executed { get; init; }
+    public required bool ReadOnlyBoundary { get; init; }
+    public required bool RequiresRealHardware { get; init; }
+    public required bool RealHardwareExecuted { get; init; }
+    public required bool HardConstraintsSatisfied { get; init; }
+    public required string EvidenceHash { get; init; }
+    public string Detail { get; init; } = string.Empty;
+}
+
 public sealed record OptimizationScenarioRun
 {
     public required string ExperimentId { get; init; }
@@ -95,6 +130,7 @@ public sealed record OptimizationScenarioRun
     public required OptimizationMetrics Metrics { get; init; }
     public required string FinalStateHash { get; init; }
     public required string EvidenceHash { get; init; }
+    public IReadOnlyList<OptimizationStageEvidence> StageEvidence { get; init; } = [];
     public bool HardConstraintsSatisfied { get; init; }
     public string? FailureReason { get; init; }
 }
@@ -107,6 +143,7 @@ public sealed record OptimizationPolicyScore
     public required bool ParetoEfficient { get; init; }
     public required int SuccessfulRuns { get; init; }
     public required int FailedRuns { get; init; }
+    public required bool HardConstraintQualified { get; init; }
     public required OptimizationMetrics Aggregate { get; init; }
 }
 
@@ -120,6 +157,7 @@ public sealed record OptimizationExperimentResult
     public required string EvidenceHash { get; init; }
     public bool ControlWriteAllowed => false;
     public bool AutoProductionPolicyReplacementAllowed => false;
+    public bool ProductionAutomationAllowed => false;
 }
 
 public static class OptimizationGovernance
@@ -128,8 +166,11 @@ public static class OptimizationGovernance
     public const int MaximumCandidateCount = 12;
     public const int MaximumSeedCount = 32;
     public const double MaximumObjectiveWeight = 100;
+    public const int DeterminismRoundsPerInput = 2;
+    public const double HardConstraintFailureScore = -1d;
     public static bool ControlWriteAllowed => false;
     public static bool AutoProductionPolicyReplacementAllowed => false;
+    public static bool ProductionAutomationAllowed => false;
     public static string MaximumAutomationLevel => "L1";
 
     public static readonly OptimizationLoadCase[] RequiredLoadCases =
@@ -142,6 +183,21 @@ public static class OptimizationGovernance
         OptimizationLoadCase.HealthDegraded,
         OptimizationLoadCase.RestartRecovery,
         OptimizationLoadCase.DeterminismReplay
+    ];
+
+    public static readonly OptimizationSimulationStage[] RequiredSimulationStages =
+    [
+        OptimizationSimulationStage.S0Governance,
+        OptimizationSimulationStage.S1ScenarioEngine,
+        OptimizationSimulationStage.S2VirtualPlc,
+        OptimizationSimulationStage.S3VirtualRgv,
+        OptimizationSimulationStage.S4VirtualTraffic,
+        OptimizationSimulationStage.S5VirtualExternal,
+        OptimizationSimulationStage.S6VirtualHealth,
+        OptimizationSimulationStage.S7IntegratedRecovery,
+        OptimizationSimulationStage.S8CapacityReadiness,
+        OptimizationSimulationStage.S9HilSoftwareBoundary,
+        OptimizationSimulationStage.S10UnifiedVerification
     ];
 }
 
@@ -159,6 +215,33 @@ public static class OptimizationHash
             policy.ApprovedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)));
     }
 
+    public static string ComputeObjectiveWeightsHash(OptimizationObjectiveWeights weights)
+    {
+        ArgumentNullException.ThrowIfNull(weights);
+        return Sha256("objective-weights\n" + string.Join(',', weights.AsOrderedValues()
+            .Select(static value => value.ToString("R", CultureInfo.InvariantCulture))));
+    }
+
+    public static string ComputeNamedEvidenceHash(string name, string value) =>
+        Sha256(Normalize(name) + "\n" + Normalize(value));
+
+    public static string ComputeStageEvidenceHash(
+        OptimizationSimulationStage stage,
+        string definitionHash,
+        string policyHash,
+        OptimizationLoadCase loadCase,
+        int seed,
+        int determinismRound,
+        string detail) =>
+        Sha256(string.Join("\n",
+            ((int)stage).ToString(CultureInfo.InvariantCulture),
+            NormalizeHash(definitionHash),
+            NormalizeHash(policyHash),
+            ((int)loadCase).ToString(CultureInfo.InvariantCulture),
+            seed.ToString(CultureInfo.InvariantCulture),
+            determinismRound.ToString(CultureInfo.InvariantCulture),
+            Normalize(detail)));
+
     public static string ComputeExperimentHash(OptimizationExperimentDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -167,18 +250,19 @@ public static class OptimizationHash
             .OrderBy(static value => value, StringComparer.Ordinal);
         var seeds = definition.SeedSet.OrderBy(static value => value)
             .Select(static value => value.ToString(CultureInfo.InvariantCulture));
-        var weights = definition.ObjectiveWeights.AsOrderedValues()
-            .Select(static value => value.ToString("R", CultureInfo.InvariantCulture));
         return Sha256(string.Join("\n",
             Normalize(definition.ExperimentId),
             Normalize(definition.ScenarioSetVersion),
+            definition.ScenarioEvidenceHash,
             Normalize(definition.TopologyRevision),
+            definition.TopologyEvidenceHash,
             Normalize(definition.OrderDatasetVersion),
+            definition.OrderDatasetEvidenceHash,
             NormalizeHash(definition.ConstraintProfileHash),
             NormalizeHash(definition.SoftwareHead),
             string.Join(',', seeds),
             string.Join(',', policies),
-            string.Join(',', weights)));
+            definition.ObjectiveWeightsEvidenceHash));
     }
 
     public static string ComputeResultEvidenceHash(
@@ -194,7 +278,8 @@ public static class OptimizationHash
                 Normalize(run.PolicyId), NormalizeHash(run.PolicyHash), (int)run.LoadCase,
                 run.Seed, run.DeterminismRound, NormalizeHash(run.ScenarioHash),
                 NormalizeHash(run.FinalStateHash), NormalizeHash(run.EvidenceHash),
-                run.HardConstraintsSatisfied ? "1" : "0"));
+                run.HardConstraintsSatisfied ? "1" : "0",
+                string.Join(',', run.StageEvidence.OrderBy(static item => item.Stage).Select(static item => item.EvidenceHash))));
         return Sha256(definition.DefinitionHash + "\n" + string.Join("\n", canonicalRuns));
     }
 
