@@ -105,7 +105,7 @@ jobs:
           test "$(wc -l < artifacts/idi-p5-full-regression/workflows.tsv)" -eq 53
           printf 'expected_sha=%s\nhead_ref=%s\nworkflow_count=53\nreal_hil_gate_included=false\n' "$EXPECTED_SHA" "$HEAD_REF" | tee artifacts/idi-p5-full-regression/context.txt
 
-      - name: Reuse or dispatch every software workflow for the exact head
+      - name: Reuse successful exact-head runs or dispatch fresh gates
         shell: bash
         run: |
           set -euo pipefail
@@ -113,8 +113,18 @@ jobs:
           printf 'workflow_id\tworkflow_name\trun_id\tevent\n' > "$output"
           while IFS=$'\t' read -r workflow_id workflow_name; do
             response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_id/runs?branch=$HEAD_REF&per_page=100")"
-            run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.id) | last | .id // empty' <<<"$response")"
-            event='existing'
+
+            # A skipped/cancelled/failed pull_request run is never valid reusable evidence.
+            # Reuse only a completed success. The one-hour soak is allowed to reuse its
+            # already-running exact-head PR gate so that the matrix does not launch a
+            # duplicate hour-long soak solely because orchestration started later.
+            if [[ "$workflow_id" == "318963917" ]]; then
+              run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha and (.conclusion == "success" or (.event == "pull_request" and .status != "completed")))] | sort_by(.id) | last | .id // empty' <<<"$response")"
+            else
+              run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success")] | sort_by(.id) | last | .id // empty' <<<"$response")"
+            fi
+
+            event='existing-success'
             if [[ -z "$run_id" ]]; then
               gh api --method POST -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_id/dispatches" -f ref="$HEAD_REF"
               event='workflow_dispatch'
@@ -129,6 +139,7 @@ jobs:
             printf '%s\t%s\t%s\t%s\n' "$workflow_id" "$workflow_name" "$run_id" "$event" >> "$output"
           done < artifacts/idi-p5-full-regression/workflows.tsv
           test "$(($(wc -l < "$output") - 1))" -eq 53
+          test "$(tail -n +2 "$output" | cut -f3 | sort -u | wc -l)" -eq 53
 
       - name: Wait for all 53 exact-head software workflows
         shell: bash
