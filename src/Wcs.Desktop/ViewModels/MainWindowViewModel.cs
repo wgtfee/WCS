@@ -71,6 +71,7 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
             new() { Id = id++, ParentId = 0, Name = "统一仿真验证中心", Url = "/SimulationVerification" },
             new() { Id = id++, ParentId = 0, Name = "IDI-P1 ModelOps Center", Url = "/ModelOps" },
             new() { Id = id++, ParentId = 0, Name = "IDI-P4 Maintenance Learning", Url = "/MaintenanceLearning" },
+            new() { Id = id++, ParentId = 0, Name = "IDI-P5 Digital Twin Optimizer", Url = "/DigitalTwinOptimizer" },
             new() { Id = id++, ParentId = 0, Name = "配置与审计", Url = "/TransportAdministration" },
             new() { Id = id++, ParentId = 0, Name = "PLC 驱动诊断", Url = "/TransportDriverDiagnostics" },
             new() { Id = id++, ParentId = 0, Name = "现场联调工作台", Url = "/TransportCommissioning" },
