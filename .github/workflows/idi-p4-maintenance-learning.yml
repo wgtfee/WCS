@@ -34,8 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
           dotnet build src/Wcs.MaintenanceLearning/Wcs.MaintenanceLearning.csproj -c Release --no-restore
           dotnet build src/Wcs.Infrastructure/Wcs.Infrastructure.csproj -c Release --no-restore
+          dotnet build src/Wcs.Host/Wcs.Host.csproj -c Release --no-restore
           dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
       - name: Run exactly 24 P4 contract tests
         run: |
@@ -59,9 +61,15 @@ jobs:
           grep -RIn 'Wcs_MaintenanceEvaluationWindow' src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearningEntities.cs >/dev/null
           grep -RIn 'Wcs_MaintenanceCausalCandidate' src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearningEntities.cs >/dev/null
           grep -RIn 'Wcs_MaintenanceCounterfactualEstimate' src/Wcs.Infrastructure/IndustrialIntelligence/MaintenanceLearningEntities.cs >/dev/null
+          grep -RIn '\[Route("api/maintenance-learning")\]' src/Wcs.Host/Controllers/MaintenanceLearningController.cs >/dev/null
+          grep -RIn 'EffectiveMaximumAutomationLevel <= AutomationLevel.L1' src/Wcs.Host/Controllers/MaintenanceLearningController.cs >/dev/null
+          if grep -RInE 'CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager' src/Wcs.Host/Controllers/MaintenanceLearningController.cs; then
+            echo 'P4 Host API contains a production control-path dependency.' >&2
+            exit 1
+          fi
       - name: Write software evidence
         run: |
-          printf 'stage=IDI-P4\nhead_sha=%s\ntest_count=24\ncontrol_write_allowed=false\nauto_training_allowed=false\nauto_model_activation_allowed=false\nproduction_automation_allowed=false\nsql_persistence=true\nclosed_loop_sample=true\n' "$GITHUB_SHA" | tee artifacts/idi-p4-maintenance-learning/evidence.txt
+          printf 'stage=IDI-P4\nhead_sha=%s\ntest_count=24\ncontrol_write_allowed=false\nauto_training_allowed=false\nauto_model_activation_allowed=false\nproduction_automation_allowed=false\nsql_persistence=true\nhost_api=true\nclosed_loop_sample=true\n' "$GITHUB_SHA" | tee artifacts/idi-p4-maintenance-learning/evidence.txt
       - uses: actions/upload-artifact@v4
         with:
           name: wcs-idi-p4-maintenance-learning-${{ github.run_number }}
