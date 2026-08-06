@@ -13,8 +13,6 @@ namespace Wcs.Desktop.ViewModels;
 public partial class LoginViewModel : ObservableObject
 {
     private readonly IAuthState _authState;
-    private static readonly Random _rng = new();
-
     private readonly IDataProvider _dataProvider;
 
     public LoginViewModel(IAuthState authState, IDataProvider dataProvider)
@@ -63,16 +61,12 @@ public partial class LoginViewModel : ObservableObject
 
             if (result != null)
             {
-                _captchaKey = result.UUID;
+                CaptchaKey = result.UUID;
                 var imgData = result.Img;
                 if (imgData.StartsWith("data:image/png;base64,"))
-                {
-                    imgData = imgData.Substring("data:image/png;base64,".Length);
-                }
+                    imgData = imgData["data:image/png;base64,".Length..];
                 else if (imgData.StartsWith("data:image/jpeg;base64,"))
-                {
-                    imgData = imgData.Substring("data:image/jpeg;base64,".Length);
-                }
+                    imgData = imgData["data:image/jpeg;base64,".Length..];
 
                 if (!string.IsNullOrEmpty(imgData))
                 {
@@ -83,7 +77,7 @@ public partial class LoginViewModel : ObservableObject
             }
             else
             {
-                ErrorMessage =  "获取验证码失败";
+                ErrorMessage = "获取验证码失败";
             }
         }
         catch (Exception ex)
@@ -111,49 +105,55 @@ public partial class LoginViewModel : ObservableObject
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(Captcha))
+        {
+            ErrorMessage = "请输入验证码";
+            return;
+        }
+
         ErrorMessage = string.Empty;
         IsLoading = true;
-        bool success = false;
-            UserInfo.UserName = UserName;
-                LoginSuccess?.Invoke();
-        //try
-        //{
-        //    var loginData = new LoginInfo
-        //    {
-        //        UserName = UserName,
-        //        Password = Password,
-        //        VerificationCode = Captcha,
-        //        UUID = _captchaKey
-        //    };
-        //     
-        //    var token = await _dataProvider.GetToken(loginData);
-        //    if (!token.Status && token.Data != null)
-        //    {
-        //        ErrorMessage =  "登录失败，用户名或密码错误";
-        //        await GenerateCaptcha();
-        //        throw new Exception(token.Message);
-        //    }
-        //    else
-        //    {
-        //        _authState.Token = token.Data.token;
-        //        _authState.UserName = token.Data.userName;
-        //        success = true;
-        //        UserInfo.User = new UserDto
-        //        {
-        //            Name = token.Data.userName,
-        //            RoleId = token.Data.Role_Id,
-        //        };
-        //        UserInfo.UserName = UserName;
-        //        LoginSuccess?.Invoke();
-        //    }
-        //}
-        //catch (Exception ex)
-        //{
-        //    ErrorMessage = $"登录异常: {ex.Message}";
-        //}
-        //finally
-        //{
-        //    IsLoading = false;
-        //}
+        try
+        {
+            // Phase 6 safety rule: the desktop must never treat the presence of a login
+            // window as authentication. Until the native IAM PKCE client is introduced,
+            // retain the proven local/MES login flow and require a real token response.
+            var loginData = new LoginInfo
+            {
+                UserName = UserName,
+                Password = Password,
+                VerificationCode = Captcha,
+                UUID = CaptchaKey
+            };
+
+            var token = await _dataProvider.GetToken(loginData);
+            if (!token.Status || token.Data is null || string.IsNullOrWhiteSpace(token.Data.token))
+            {
+                ErrorMessage = string.IsNullOrWhiteSpace(token.Message)
+                    ? "登录失败，用户名、密码或验证码错误"
+                    : token.Message;
+                await GenerateCaptcha();
+                return;
+            }
+
+            _authState.Token = token.Data.token;
+            _authState.UserName = token.Data.userName;
+            UserInfo.User = new UserDto
+            {
+                Name = token.Data.userName,
+                RoleId = token.Data.Role_Id,
+            };
+            UserInfo.UserName = token.Data.userName;
+            LoginSuccess?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"登录异常: {ex.Message}";
+            await GenerateCaptcha();
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 }
