@@ -48,7 +48,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/idi-p5-full-regression
           cat > artifacts/idi-p5-full-regression/workflows.tsv <<'EOF'
-          322269201	WCS Asset Failure Forecast Compile
+          anomaly-failure-forecast-compile.yml	WCS Asset Failure Forecast Compile
           322284101	WCS Asset Failure Forecast Runtime
           322286772	WCS Asset Failure Forecast
           322126437	WCS PLC ML Model Adapter Compile
@@ -110,15 +110,15 @@ jobs:
         run: |
           set -euo pipefail
           output='artifacts/idi-p5-full-regression/runs.tsv'
-          printf 'workflow_id\tworkflow_name\trun_id\tevent\n' > "$output"
-          while IFS=$'\t' read -r workflow_id workflow_name; do
-            response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_id/runs?branch=$HEAD_REF&per_page=100")"
+          printf 'workflow_ref\tworkflow_name\trun_id\tevent\n' > "$output"
+          while IFS=$'\t' read -r workflow_ref workflow_name; do
+            response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_ref/runs?branch=$HEAD_REF&per_page=100")"
 
             # A skipped/cancelled/failed pull_request run is never valid reusable evidence.
             # Reuse only a completed success. The one-hour soak is allowed to reuse its
             # already-running exact-head PR gate so that the matrix does not launch a
             # duplicate hour-long soak solely because orchestration started later.
-            if [[ "$workflow_id" == "318963917" ]]; then
+            if [[ "$workflow_ref" == "318963917" ]]; then
               run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha and (.conclusion == "success" or (.event == "pull_request" and .status != "completed")))] | sort_by(.id) | last | .id // empty' <<<"$response")"
             else
               run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success")] | sort_by(.id) | last | .id // empty' <<<"$response")"
@@ -126,17 +126,17 @@ jobs:
 
             event='existing-success'
             if [[ -z "$run_id" ]]; then
-              gh api --method POST -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_id/dispatches" -f ref="$HEAD_REF"
+              gh api --method POST -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_ref/dispatches" -f ref="$HEAD_REF"
               event='workflow_dispatch'
               for _ in $(seq 1 60); do
                 sleep 2
-                response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_id/runs?branch=$HEAD_REF&event=workflow_dispatch&per_page=20")"
+                response="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/workflows/$workflow_ref/runs?branch=$HEAD_REF&event=workflow_dispatch&per_page=20")"
                 run_id="$(jq -r --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.id) | last | .id // empty' <<<"$response")"
                 [[ -n "$run_id" ]] && break
               done
             fi
             [[ -n "$run_id" ]] || { echo "Unable to resolve exact-head run for $workflow_name" >&2; exit 1; }
-            printf '%s\t%s\t%s\t%s\n' "$workflow_id" "$workflow_name" "$run_id" "$event" >> "$output"
+            printf '%s\t%s\t%s\t%s\n' "$workflow_ref" "$workflow_name" "$run_id" "$event" >> "$output"
           done < artifacts/idi-p5-full-regression/workflows.tsv
           test "$(($(wc -l < "$output") - 1))" -eq 53
           test "$(tail -n +2 "$output" | cut -f3 | sort -u | wc -l)" -eq 53
@@ -147,16 +147,16 @@ jobs:
           set -euo pipefail
           input='artifacts/idi-p5-full-regression/runs.tsv'
           results='artifacts/idi-p5-full-regression/results.tsv'
-          printf 'workflow_id\tworkflow_name\trun_id\tstatus\tconclusion\thead_sha\thtml_url\n' > "$results"
+          printf 'workflow_ref\tworkflow_name\trun_id\tstatus\tconclusion\thead_sha\thtml_url\n' > "$results"
           deadline=$(( $(date +%s) + 19800 ))
           while true; do
             pending=0; failed=0
             : > artifacts/idi-p5-full-regression/current.tsv
-            tail -n +2 "$input" | while IFS=$'\t' read -r workflow_id workflow_name run_id event; do
+            tail -n +2 "$input" | while IFS=$'\t' read -r workflow_ref workflow_name run_id event; do
               run="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPOSITORY/actions/runs/$run_id")"
-              printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$workflow_id" "$workflow_name" "$run_id" "$(jq -r '.status' <<<"$run")" "$(jq -r '.conclusion // "pending"' <<<"$run")" "$(jq -r '.head_sha' <<<"$run")" "$(jq -r '.html_url' <<<"$run")" >> artifacts/idi-p5-full-regression/current.tsv
+              printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$workflow_ref" "$workflow_name" "$run_id" "$(jq -r '.status' <<<"$run")" "$(jq -r '.conclusion // "pending"' <<<"$run")" "$(jq -r '.head_sha' <<<"$run")" "$(jq -r '.html_url' <<<"$run")" >> artifacts/idi-p5-full-regression/current.tsv
             done
-            while IFS=$'\t' read -r workflow_id workflow_name run_id status conclusion head_sha html_url; do
+            while IFS=$'\t' read -r workflow_ref workflow_name run_id status conclusion head_sha html_url; do
               if [[ "$head_sha" != "$EXPECTED_SHA" ]]; then failed=$((failed + 1)); echo "$workflow_name stale head $head_sha" >&2
               elif [[ "$status" != completed ]]; then pending=$((pending + 1))
               elif [[ "$conclusion" != success ]]; then failed=$((failed + 1)); echo "$workflow_name failed conclusion=$conclusion run=$run_id" >&2; fi
@@ -181,7 +181,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          jq -Rn --arg expectedHeadSha "$EXPECTED_SHA" --arg headRef "$HEAD_REF" '[inputs | split("\t") | {workflowId:(.[0]|tonumber),workflowName:.[1],runId:(.[2]|tonumber),status:.[3],conclusion:.[4],headSha:.[5],htmlUrl:.[6]}] | {stage:"IDI-P5",expectedHeadSha:$expectedHeadSha,headRef:$headRef,workflowCount:length,allSuccess:all(.[]; .status=="completed" and .conclusion=="success" and .headSha==$expectedHeadSha),maximumAutomationLevel:"L1",controlWriteAllowed:false,autoProductionPolicyReplacementAllowed:false,productionAutomationAllowed:false,requiredSimulationStages:11,determinismRoundsPerInput:2,realHilGateIncluded:false,workflows:.}' < <(tail -n +2 artifacts/idi-p5-full-regression/results.tsv) | tee artifacts/idi-p5-full-regression/evidence.json
+          jq -Rn --arg expectedHeadSha "$EXPECTED_SHA" --arg headRef "$HEAD_REF" '[inputs | split("\t") | {workflowRef:.[0],workflowName:.[1],runId:(.[2]|tonumber),status:.[3],conclusion:.[4],headSha:.[5],htmlUrl:.[6]}] | {stage:"IDI-P5",expectedHeadSha:$expectedHeadSha,headRef:$headRef,workflowCount:length,allSuccess:all(.[]; .status=="completed" and .conclusion=="success" and .headSha==$expectedHeadSha),maximumAutomationLevel:"L1",controlWriteAllowed:false,autoProductionPolicyReplacementAllowed:false,productionAutomationAllowed:false,requiredSimulationStages:11,determinismRoundsPerInput:2,realHilGateIncluded:false,workflows:.}' < <(tail -n +2 artifacts/idi-p5-full-regression/results.tsv) | tee artifacts/idi-p5-full-regression/evidence.json
           test "$(jq -r '.workflowCount' artifacts/idi-p5-full-regression/evidence.json)" = 53
           test "$(jq -r '.allSuccess' artifacts/idi-p5-full-regression/evidence.json)" = true
           test "$(jq -r '.controlWriteAllowed' artifacts/idi-p5-full-regression/evidence.json)" = false
