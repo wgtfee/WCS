@@ -15,10 +15,8 @@ public sealed class DigitalTwinOptimizer
 {
     private readonly IDigitalTwinExperimentRunner _runner;
 
-    public DigitalTwinOptimizer(IDigitalTwinExperimentRunner runner)
-    {
+    public DigitalTwinOptimizer(IDigitalTwinExperimentRunner runner) =>
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
-    }
 
     public async Task<OptimizationExperimentResult> EvaluateAsync(
         OptimizationExperimentDefinition definition,
@@ -26,38 +24,26 @@ public sealed class DigitalTwinOptimizer
     {
         ValidateDefinition(definition);
         var runs = new List<OptimizationScenarioRun>();
-
         foreach (var policy in definition.PolicyCandidates)
+        foreach (var loadCase in OptimizationGovernance.RequiredLoadCases)
+        foreach (var seed in definition.SeedSet)
         {
-            foreach (var loadCase in OptimizationGovernance.RequiredLoadCases)
+            var rounds = loadCase == OptimizationLoadCase.DeterminismReplay ? 2 : 1;
+            for (var round = 1; round <= rounds; round++)
             {
-                foreach (var seed in definition.SeedSet)
-                {
-                    var rounds = loadCase == OptimizationLoadCase.DeterminismReplay ? 2 : 1;
-                    for (var round = 1; round <= rounds; round++)
-                    {
-                        var run = await _runner.RunAsync(
-                            definition,
-                            policy,
-                            loadCase,
-                            seed,
-                            round,
-                            cancellationToken);
-                        ValidateRun(definition, policy, loadCase, seed, round, run);
-                        runs.Add(run);
-                    }
-                }
+                var run = await _runner.RunAsync(definition, policy, loadCase, seed, round, cancellationToken);
+                ValidateRun(definition, policy, loadCase, seed, round, run);
+                runs.Add(run);
             }
         }
 
         VerifyDeterminism(runs);
-        var ranking = BuildRanking(definition, runs);
         return new OptimizationExperimentResult
         {
             ExperimentId = definition.ExperimentId,
             DefinitionHash = definition.DefinitionHash,
             SoftwareHead = definition.SoftwareHead,
-            Ranking = ranking,
+            Ranking = BuildRanking(definition, runs),
             Runs = runs,
             EvidenceHash = OptimizationHash.ComputeResultEvidenceHash(definition, runs)
         };
@@ -66,50 +52,37 @@ public sealed class DigitalTwinOptimizer
     public static void ValidateDefinition(OptimizationExperimentDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        if (string.IsNullOrWhiteSpace(definition.ExperimentId))
-            throw new InvalidOperationException("ExperimentId is required.");
-        if (string.IsNullOrWhiteSpace(definition.ScenarioSetVersion) ||
+        if (string.IsNullOrWhiteSpace(definition.ExperimentId) ||
+            string.IsNullOrWhiteSpace(definition.ScenarioSetVersion) ||
             string.IsNullOrWhiteSpace(definition.TopologyRevision) ||
             string.IsNullOrWhiteSpace(definition.OrderDatasetVersion))
-            throw new InvalidOperationException("ScenarioSetVersion, TopologyRevision and OrderDatasetVersion are required.");
+            throw new InvalidOperationException("Experiment identity, scenario, topology and order dataset versions are required.");
         if (!OptimizationHash.IsSha256(definition.ConstraintProfileHash))
             throw new InvalidOperationException("ConstraintProfileHash must be SHA-256.");
-        if (!OptimizationHash.IsSha256(definition.SoftwareHead))
-            throw new InvalidOperationException("SoftwareHead must be the exact 64-character commit SHA.");
-
-        if (definition.PolicyCandidates.Count < OptimizationGovernance.MinimumCandidateCount ||
-            definition.PolicyCandidates.Count > OptimizationGovernance.MaximumCandidateCount)
-            throw new InvalidOperationException(
-                $"Policy candidate count must be within {OptimizationGovernance.MinimumCandidateCount}..{OptimizationGovernance.MaximumCandidateCount}.");
+        if (!IsExactGitHead(definition.SoftwareHead))
+            throw new InvalidOperationException("SoftwareHead must be an exact Git commit SHA (40 or 64 hex characters).");
+        if (definition.PolicyCandidates.Count is < OptimizationGovernance.MinimumCandidateCount or > OptimizationGovernance.MaximumCandidateCount)
+            throw new InvalidOperationException("Policy candidate count is outside the governed bound.");
         if (definition.PolicyCandidates.Count(static p => p.Kind == OptimizationPolicyKind.CurrentProductionBaseline) != 1)
             throw new InvalidOperationException("Exactly one CurrentProductionBaseline policy is required.");
         if (definition.PolicyCandidates.Select(static p => p.PolicyId).Distinct(StringComparer.Ordinal).Count() != definition.PolicyCandidates.Count)
             throw new InvalidOperationException("PolicyId must be unique within one experiment.");
-
         foreach (var policy in definition.PolicyCandidates)
         {
-            if (string.IsNullOrWhiteSpace(policy.PolicyId) || string.IsNullOrWhiteSpace(policy.Version))
-                throw new InvalidOperationException("PolicyId and Version are required.");
+            if (string.IsNullOrWhiteSpace(policy.PolicyId) || string.IsNullOrWhiteSpace(policy.Version) ||
+                string.IsNullOrWhiteSpace(policy.ApprovedBy) || policy.ApprovedAtUtc == default)
+                throw new InvalidOperationException("Every policy requires identity, version and explicit approval evidence.");
             if (!OptimizationHash.IsSha256(policy.ConstraintProfileHash) ||
                 !string.Equals(policy.ConstraintProfileHash, definition.ConstraintProfileHash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Every policy must use the exact governed ConstraintProfileHash.");
-            if (string.IsNullOrWhiteSpace(policy.ApprovedBy) || policy.ApprovedAtUtc == default)
-                throw new InvalidOperationException("Every policy requires explicit approval evidence.");
         }
-
-        if (definition.SeedSet.Count == 0 || definition.SeedSet.Count > OptimizationGovernance.MaximumSeedCount)
-            throw new InvalidOperationException($"SeedSet must contain 1..{OptimizationGovernance.MaximumSeedCount} seeds.");
-        if (definition.SeedSet.Distinct().Count() != definition.SeedSet.Count)
-            throw new InvalidOperationException("SeedSet cannot contain duplicates.");
-
-        foreach (var weight in definition.ObjectiveWeights.AsOrderedValues())
-        {
-            if (!double.IsFinite(weight) || weight < 0 || weight > OptimizationGovernance.MaximumObjectiveWeight)
-                throw new InvalidOperationException(
-                    $"Objective weights must be finite and within 0..{OptimizationGovernance.MaximumObjectiveWeight}.");
-        }
-        if (definition.ObjectiveWeights.AsOrderedValues().All(static value => value == 0))
-            throw new InvalidOperationException("At least one objective weight must be positive.");
+        if (definition.SeedSet.Count == 0 || definition.SeedSet.Count > OptimizationGovernance.MaximumSeedCount ||
+            definition.SeedSet.Distinct().Count() != definition.SeedSet.Count)
+            throw new InvalidOperationException("SeedSet must be unique and within the governed bound.");
+        var weights = definition.ObjectiveWeights.AsOrderedValues();
+        if (weights.Any(static w => !double.IsFinite(w) || w < 0 || w > OptimizationGovernance.MaximumObjectiveWeight) ||
+            weights.All(static w => w == 0))
+            throw new InvalidOperationException("Objective weights must be finite, bounded and contain at least one positive objective.");
     }
 
     private static void ValidateRun(
@@ -120,56 +93,39 @@ public sealed class DigitalTwinOptimizer
         int round,
         OptimizationScenarioRun run)
     {
-        if (!string.Equals(run.ExperimentId, definition.ExperimentId, StringComparison.Ordinal) ||
-            !string.Equals(run.PolicyId, policy.PolicyId, StringComparison.Ordinal) ||
+        if (run.ExperimentId != definition.ExperimentId || run.PolicyId != policy.PolicyId ||
             !string.Equals(run.PolicyHash, policy.PolicyHash, StringComparison.OrdinalIgnoreCase) ||
             run.LoadCase != loadCase || run.Seed != seed || run.DeterminismRound != round ||
             !string.Equals(run.SoftwareHead, definition.SoftwareHead, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Experiment runner returned evidence for a different governed input.");
-        if (!OptimizationHash.IsSha256(run.ScenarioHash) ||
-            !OptimizationHash.IsSha256(run.FinalStateHash) ||
+        if (!OptimizationHash.IsSha256(run.ScenarioHash) || !OptimizationHash.IsSha256(run.FinalStateHash) ||
             !OptimizationHash.IsSha256(run.EvidenceHash))
-            throw new InvalidOperationException("Scenario, final-state and run Evidence hashes must be SHA-256.");
+            throw new InvalidOperationException("Scenario, final-state and run evidence hashes must be SHA-256.");
         ValidateMetrics(run.Metrics);
     }
 
-    private static void ValidateMetrics(OptimizationMetrics metrics)
+    private static void ValidateMetrics(OptimizationMetrics m)
     {
-        var finite = new[]
-        {
-            metrics.Throughput,
-            metrics.MeanMissionLeadTimeSeconds,
-            metrics.P95MissionLeadTimeSeconds,
-            metrics.MeanWaitTimeSeconds,
-            metrics.P95WaitTimeSeconds,
-            metrics.EnergyEstimate,
-            metrics.WearIndex,
-            metrics.FailureRiskExposure,
-            metrics.RecoveryTimeSeconds
-        };
-        if (finite.Any(static value => !double.IsFinite(value) || value < 0))
-            throw new InvalidOperationException("Optimization metrics must be finite and non-negative.");
-        if (metrics.DeadlockCount < 0 || metrics.ConflictCount < 0 || metrics.SlaViolationCount < 0)
-            throw new InvalidOperationException("Optimization count metrics cannot be negative.");
-        if (metrics.P95MissionLeadTimeSeconds < metrics.MeanMissionLeadTimeSeconds ||
-            metrics.P95WaitTimeSeconds < metrics.MeanWaitTimeSeconds)
-            throw new InvalidOperationException("P95 metrics cannot be lower than their means.");
+        var values = new[] { m.Throughput, m.MeanMissionLeadTimeSeconds, m.P95MissionLeadTimeSeconds,
+            m.MeanWaitTimeSeconds, m.P95WaitTimeSeconds, m.EnergyEstimate, m.WearIndex,
+            m.FailureRiskExposure, m.RecoveryTimeSeconds };
+        if (values.Any(static v => !double.IsFinite(v) || v < 0) ||
+            m.DeadlockCount < 0 || m.ConflictCount < 0 || m.SlaViolationCount < 0 ||
+            m.P95MissionLeadTimeSeconds < m.MeanMissionLeadTimeSeconds ||
+            m.P95WaitTimeSeconds < m.MeanWaitTimeSeconds)
+            throw new InvalidOperationException("Optimization metrics are invalid or incomplete.");
     }
 
-    private static void VerifyDeterminism(IReadOnlyList<OptimizationScenarioRun> runs)
+    private static void VerifyDeterminism(IEnumerable<OptimizationScenarioRun> runs)
     {
-        var replayGroups = runs
-            .Where(static run => run.LoadCase == OptimizationLoadCase.DeterminismReplay)
-            .GroupBy(run => (run.PolicyId, run.Seed));
-        foreach (var group in replayGroups)
+        foreach (var group in runs.Where(static r => r.LoadCase == OptimizationLoadCase.DeterminismReplay)
+                     .GroupBy(static r => (r.PolicyId, r.Seed)))
         {
-            var ordered = group.OrderBy(static run => run.DeterminismRound).ToArray();
-            if (ordered.Length != 2 || ordered[0].DeterminismRound != 1 || ordered[1].DeterminismRound != 2)
-                throw new InvalidOperationException("DeterminismReplay requires exactly two rounds per policy/seed.");
-            if (!string.Equals(ordered[0].FinalStateHash, ordered[1].FinalStateHash, StringComparison.OrdinalIgnoreCase) ||
-                !MetricsEqual(ordered[0].Metrics, ordered[1].Metrics))
-                throw new InvalidOperationException(
-                    $"Determinism replay mismatch for policy {group.Key.PolicyId}, seed {group.Key.Seed}.");
+            var pair = group.OrderBy(static r => r.DeterminismRound).ToArray();
+            if (pair.Length != 2 || pair[0].DeterminismRound != 1 || pair[1].DeterminismRound != 2 ||
+                !string.Equals(pair[0].FinalStateHash, pair[1].FinalStateHash, StringComparison.OrdinalIgnoreCase) ||
+                pair[0].Metrics != pair[1].Metrics)
+                throw new InvalidOperationException($"Determinism replay mismatch for {group.Key.PolicyId}/{group.Key.Seed}.");
         }
     }
 
@@ -179,142 +135,80 @@ public sealed class DigitalTwinOptimizer
     {
         var aggregates = definition.PolicyCandidates.Select(policy =>
         {
-            var policyRuns = runs.Where(run => string.Equals(run.PolicyId, policy.PolicyId, StringComparison.Ordinal)).ToArray();
-            var successful = policyRuns.Where(static run => run.HardConstraintsSatisfied).ToArray();
-            if (successful.Length == 0)
-                return new PolicyAggregate(policy, new OptimizationMetrics(), 0, policyRuns.Length, false);
-            return new PolicyAggregate(
-                policy,
-                Average(successful.Select(static run => run.Metrics).ToArray()),
-                successful.Length,
-                policyRuns.Length - successful.Length,
-                true);
+            var all = runs.Where(r => r.PolicyId == policy.PolicyId).ToArray();
+            var ok = all.Where(static r => r.HardConstraintsSatisfied).ToArray();
+            return new Aggregate(policy, ok.Length == 0 ? new OptimizationMetrics() : Average(ok.Select(static r => r.Metrics).ToArray()),
+                ok.Length, all.Length - ok.Length, ok.Length > 0);
         }).ToArray();
-
-        var valid = aggregates.Where(static value => value.HasMetrics).ToArray();
-        if (valid.Length == 0)
-            throw new InvalidOperationException("No candidate has complete hard-constraint-satisfying metrics; ranking is unavailable.");
-
-        var bounds = MetricBounds.Create(valid.Select(static value => value.Metrics));
-        var scored = aggregates.Select(value => new OptimizationPolicyScore
+        var valid = aggregates.Where(static a => a.Valid).ToArray();
+        if (valid.Length == 0) throw new InvalidOperationException("No hard-constraint-satisfying metrics are available for ranking.");
+        var bounds = Bounds.Create(valid.Select(static a => a.Metrics));
+        return aggregates.Select(a => new OptimizationPolicyScore
         {
-            PolicyId = value.Policy.PolicyId,
-            PolicyHash = value.Policy.PolicyHash,
-            Score = value.HasMetrics ? Score(value.Metrics, definition.ObjectiveWeights, bounds) : double.NegativeInfinity,
-            ParetoEfficient = value.HasMetrics && IsParetoEfficient(value, valid),
-            SuccessfulRuns = value.SuccessfulRuns,
-            FailedRuns = value.FailedRuns,
-            Aggregate = value.Metrics
-        })
-        .OrderByDescending(static value => value.Score)
-        .ThenBy(static value => value.PolicyId, StringComparer.Ordinal)
-        .ToArray();
-        return scored;
+            PolicyId = a.Policy.PolicyId,
+            PolicyHash = a.Policy.PolicyHash,
+            Score = a.Valid ? Score(a.Metrics, definition.ObjectiveWeights, bounds) : double.NegativeInfinity,
+            ParetoEfficient = a.Valid && !valid.Any(other => !ReferenceEquals(other, a) && Dominates(other.Metrics, a.Metrics)),
+            SuccessfulRuns = a.Successful,
+            FailedRuns = a.Failed,
+            Aggregate = a.Metrics
+        }).OrderByDescending(static x => x.Score).ThenBy(static x => x.PolicyId, StringComparer.Ordinal).ToArray();
     }
 
-    private static double Score(OptimizationMetrics m, OptimizationObjectiveWeights w, MetricBounds b) =>
-        w.Throughput * b.NormalizeHigher(m.Throughput, b.Throughput) +
-        w.MissionLeadTime * b.NormalizeLower(m.P95MissionLeadTimeSeconds, b.MissionLeadTime) +
-        w.WaitTime * b.NormalizeLower(m.P95WaitTimeSeconds, b.WaitTime) +
-        w.Energy * b.NormalizeLower(m.EnergyEstimate, b.Energy) +
-        w.Wear * b.NormalizeLower(m.WearIndex, b.Wear) +
-        w.FailureRisk * b.NormalizeLower(m.FailureRiskExposure, b.FailureRisk) +
-        w.SlaViolation * b.NormalizeLower(m.SlaViolationCount, b.SlaViolation) +
-        w.RecoveryTime * b.NormalizeLower(m.RecoveryTimeSeconds, b.RecoveryTime);
-
-    private static bool IsParetoEfficient(PolicyAggregate candidate, IReadOnlyList<PolicyAggregate> all) =>
-        !all.Any(other => !ReferenceEquals(other, candidate) && Dominates(other.Metrics, candidate.Metrics));
+    private static double Score(OptimizationMetrics m, OptimizationObjectiveWeights w, Bounds b) =>
+        w.Throughput * b.Higher(m.Throughput, b.Throughput) +
+        w.MissionLeadTime * b.Lower(m.P95MissionLeadTimeSeconds, b.Lead) +
+        w.WaitTime * b.Lower(m.P95WaitTimeSeconds, b.Wait) +
+        w.Energy * b.Lower(m.EnergyEstimate, b.Energy) +
+        w.Wear * b.Lower(m.WearIndex, b.Wear) +
+        w.FailureRisk * b.Lower(m.FailureRiskExposure, b.Risk) +
+        w.SlaViolation * b.Lower(m.SlaViolationCount, b.Sla) +
+        w.RecoveryTime * b.Lower(m.RecoveryTimeSeconds, b.Recovery);
 
     private static bool Dominates(OptimizationMetrics a, OptimizationMetrics b)
     {
-        var noWorse = a.Throughput >= b.Throughput &&
-                      a.P95MissionLeadTimeSeconds <= b.P95MissionLeadTimeSeconds &&
-                      a.P95WaitTimeSeconds <= b.P95WaitTimeSeconds &&
-                      a.DeadlockCount <= b.DeadlockCount &&
-                      a.ConflictCount <= b.ConflictCount &&
-                      a.EnergyEstimate <= b.EnergyEstimate &&
-                      a.WearIndex <= b.WearIndex &&
-                      a.FailureRiskExposure <= b.FailureRiskExposure &&
-                      a.SlaViolationCount <= b.SlaViolationCount &&
-                      a.RecoveryTimeSeconds <= b.RecoveryTimeSeconds;
-        var strictlyBetter = a.Throughput > b.Throughput ||
-                             a.P95MissionLeadTimeSeconds < b.P95MissionLeadTimeSeconds ||
-                             a.P95WaitTimeSeconds < b.P95WaitTimeSeconds ||
-                             a.DeadlockCount < b.DeadlockCount ||
-                             a.ConflictCount < b.ConflictCount ||
-                             a.EnergyEstimate < b.EnergyEstimate ||
-                             a.WearIndex < b.WearIndex ||
-                             a.FailureRiskExposure < b.FailureRiskExposure ||
-                             a.SlaViolationCount < b.SlaViolationCount ||
-                             a.RecoveryTimeSeconds < b.RecoveryTimeSeconds;
-        return noWorse && strictlyBetter;
+        var noWorse = a.Throughput >= b.Throughput && a.P95MissionLeadTimeSeconds <= b.P95MissionLeadTimeSeconds &&
+            a.P95WaitTimeSeconds <= b.P95WaitTimeSeconds && a.DeadlockCount <= b.DeadlockCount &&
+            a.ConflictCount <= b.ConflictCount && a.EnergyEstimate <= b.EnergyEstimate && a.WearIndex <= b.WearIndex &&
+            a.FailureRiskExposure <= b.FailureRiskExposure && a.SlaViolationCount <= b.SlaViolationCount &&
+            a.RecoveryTimeSeconds <= b.RecoveryTimeSeconds;
+        var better = a.Throughput > b.Throughput || a.P95MissionLeadTimeSeconds < b.P95MissionLeadTimeSeconds ||
+            a.P95WaitTimeSeconds < b.P95WaitTimeSeconds || a.DeadlockCount < b.DeadlockCount ||
+            a.ConflictCount < b.ConflictCount || a.EnergyEstimate < b.EnergyEstimate || a.WearIndex < b.WearIndex ||
+            a.FailureRiskExposure < b.FailureRiskExposure || a.SlaViolationCount < b.SlaViolationCount ||
+            a.RecoveryTimeSeconds < b.RecoveryTimeSeconds;
+        return noWorse && better;
     }
 
-    private static OptimizationMetrics Average(IReadOnlyList<OptimizationMetrics> values) => new()
+    private static OptimizationMetrics Average(IReadOnlyList<OptimizationMetrics> x) => new()
     {
-        Throughput = values.Average(static x => x.Throughput),
-        MeanMissionLeadTimeSeconds = values.Average(static x => x.MeanMissionLeadTimeSeconds),
-        P95MissionLeadTimeSeconds = values.Average(static x => x.P95MissionLeadTimeSeconds),
-        MeanWaitTimeSeconds = values.Average(static x => x.MeanWaitTimeSeconds),
-        P95WaitTimeSeconds = values.Average(static x => x.P95WaitTimeSeconds),
-        DeadlockCount = (int)Math.Round(values.Average(static x => x.DeadlockCount)),
-        ConflictCount = (int)Math.Round(values.Average(static x => x.ConflictCount)),
-        EnergyEstimate = values.Average(static x => x.EnergyEstimate),
-        WearIndex = values.Average(static x => x.WearIndex),
-        FailureRiskExposure = values.Average(static x => x.FailureRiskExposure),
-        SlaViolationCount = (int)Math.Round(values.Average(static x => x.SlaViolationCount)),
-        RecoveryTimeSeconds = values.Average(static x => x.RecoveryTimeSeconds)
+        Throughput = x.Average(static m => m.Throughput), MeanMissionLeadTimeSeconds = x.Average(static m => m.MeanMissionLeadTimeSeconds),
+        P95MissionLeadTimeSeconds = x.Average(static m => m.P95MissionLeadTimeSeconds), MeanWaitTimeSeconds = x.Average(static m => m.MeanWaitTimeSeconds),
+        P95WaitTimeSeconds = x.Average(static m => m.P95WaitTimeSeconds), DeadlockCount = (int)Math.Round(x.Average(static m => m.DeadlockCount)),
+        ConflictCount = (int)Math.Round(x.Average(static m => m.ConflictCount)), EnergyEstimate = x.Average(static m => m.EnergyEstimate),
+        WearIndex = x.Average(static m => m.WearIndex), FailureRiskExposure = x.Average(static m => m.FailureRiskExposure),
+        SlaViolationCount = (int)Math.Round(x.Average(static m => m.SlaViolationCount)), RecoveryTimeSeconds = x.Average(static m => m.RecoveryTimeSeconds)
     };
 
-    private static bool MetricsEqual(OptimizationMetrics a, OptimizationMetrics b) =>
-        a == b;
+    private static bool IsExactGitHead(string? value) =>
+        value is { Length: 40 or 64 } && value.All(static c => char.IsAsciiHexDigit(c));
 
-    private sealed record PolicyAggregate(
-        OptimizationPolicyCandidate Policy,
-        OptimizationMetrics Metrics,
-        int SuccessfulRuns,
-        int FailedRuns,
-        bool HasMetrics);
-
+    private sealed record Aggregate(OptimizationPolicyCandidate Policy, OptimizationMetrics Metrics, int Successful, int Failed, bool Valid);
     private sealed record Range(double Min, double Max);
-
-    private sealed class MetricBounds
+    private sealed class Bounds
     {
-        public required Range Throughput { get; init; }
-        public required Range MissionLeadTime { get; init; }
-        public required Range WaitTime { get; init; }
-        public required Range Energy { get; init; }
-        public required Range Wear { get; init; }
-        public required Range FailureRisk { get; init; }
-        public required Range SlaViolation { get; init; }
-        public required Range RecoveryTime { get; init; }
-
-        public static MetricBounds Create(IEnumerable<OptimizationMetrics> source)
+        public required Range Throughput { get; init; } public required Range Lead { get; init; } public required Range Wait { get; init; }
+        public required Range Energy { get; init; } public required Range Wear { get; init; } public required Range Risk { get; init; }
+        public required Range Sla { get; init; } public required Range Recovery { get; init; }
+        public static Bounds Create(IEnumerable<OptimizationMetrics> source)
         {
-            var values = source.ToArray();
-            return new MetricBounds
-            {
-                Throughput = Of(values.Select(static x => x.Throughput)),
-                MissionLeadTime = Of(values.Select(static x => x.P95MissionLeadTimeSeconds)),
-                WaitTime = Of(values.Select(static x => x.P95WaitTimeSeconds)),
-                Energy = Of(values.Select(static x => x.EnergyEstimate)),
-                Wear = Of(values.Select(static x => x.WearIndex)),
-                FailureRisk = Of(values.Select(static x => x.FailureRiskExposure)),
-                SlaViolation = Of(values.Select(static x => (double)x.SlaViolationCount)),
-                RecoveryTime = Of(values.Select(static x => x.RecoveryTimeSeconds))
-            };
+            var x = source.ToArray();
+            static Range R(IEnumerable<double> v) { var a = v.ToArray(); return new(a.Min(), a.Max()); }
+            return new() { Throughput=R(x.Select(static m=>m.Throughput)), Lead=R(x.Select(static m=>m.P95MissionLeadTimeSeconds)),
+                Wait=R(x.Select(static m=>m.P95WaitTimeSeconds)), Energy=R(x.Select(static m=>m.EnergyEstimate)), Wear=R(x.Select(static m=>m.WearIndex)),
+                Risk=R(x.Select(static m=>m.FailureRiskExposure)), Sla=R(x.Select(static m=>(double)m.SlaViolationCount)), Recovery=R(x.Select(static m=>m.RecoveryTimeSeconds)) };
         }
-
-        public double NormalizeHigher(double value, Range range) => Normalize(value, range);
-        public double NormalizeLower(double value, Range range) => 1 - Normalize(value, range);
-
-        private static Range Of(IEnumerable<double> values)
-        {
-            var array = values.ToArray();
-            return new Range(array.Min(), array.Max());
-        }
-
-        private static double Normalize(double value, Range range) =>
-            Math.Abs(range.Max - range.Min) < 1e-12 ? 1 : (value - range.Min) / (range.Max - range.Min);
+        public double Higher(double v, Range r) => N(v,r); public double Lower(double v, Range r) => 1-N(v,r);
+        private static double N(double v, Range r) => Math.Abs(r.Max-r.Min)<1e-12 ? 1 : (v-r.Min)/(r.Max-r.Min);
     }
 }
