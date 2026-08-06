@@ -1,0 +1,75 @@
+name: WCS IAM Management Validation
+
+on:
+  push:
+    branches: [ Dev_IAM ]
+  pull_request:
+    branches: [ Dev_IAM ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+
+    steps:
+      - name: Checkout WCS
+        uses: actions/checkout@v4
+        with:
+          path: platform/WCS
+
+      - name: Checkout Security.Abstractions
+        uses: actions/checkout@v4
+        with:
+          repository: wgtfee/Industrial.Security.Abstractions
+          ref: master
+          path: platform/Industrial.Security/src/Industrial.Security.Abstractions
+
+      - name: Checkout Security.AspNetCore
+        uses: actions/checkout@v4
+        with:
+          repository: wgtfee/Industrial.Security.AspNetCore
+          ref: master
+          path: platform/Industrial.Security/src/Industrial.Security.AspNetCore
+
+      - name: Checkout Health.Abstractions
+        uses: actions/checkout@v4
+        with:
+          repository: wgtfee/Industrial.Health.Abstractions
+          ref: master
+          path: platform/Industrial.Health/src/Industrial.Health.Abstractions
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore WCS runtime tests
+        working-directory: platform/WCS
+        run: dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+
+      - name: Run WCS runtime regression tests
+        working-directory: platform/WCS
+        run: dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration $env:CONFIGURATION --no-restore --verbosity normal
+
+      - name: Restore WCS host security tests
+        working-directory: platform/WCS
+        run: dotnet restore src/Wcs.Host.Tests/Wcs.Host.Tests.csproj
+
+      - name: Run WCS host security tests
+        working-directory: platform/WCS
+        run: dotnet test src/Wcs.Host.Tests/Wcs.Host.Tests.csproj --configuration $env:CONFIGURATION --no-restore --verbosity normal
+
+      - name: Build WCS Host
+        working-directory: platform/WCS
+        run: dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration $env:CONFIGURATION --no-restore
+
+      - name: Build WCS Desktop
+        working-directory: platform/WCS
+        run: dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj; dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj --configuration $env:CONFIGURATION --no-restore
