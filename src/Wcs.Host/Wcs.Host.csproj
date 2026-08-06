@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <Content Update="permission-manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="appsettings.IamPrepare.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="appsettings.Shadow.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="appsettings.Centralized.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\..\Industrial.Security\src\Industrial.Security.Abstractions\Industrial.Security.Abstractions.csproj" />
@@ -30,7 +31,6 @@
     <ProjectReference Include="..\..\..\Industrial.Health\src\Industrial.Health.Abstractions\Industrial.Health.Abstractions.csproj" />
     <ProjectReference Include="..\Wcs.Entity\Wcs.Entity.csproj" />
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
-    <ProjectReference Include="..\Wcs.Entity\Wcs.Entity.csproj" />
     <ProjectReference Include="..\Wcs.Infrastructure\Wcs.Infrastructure.csproj" />
     <ProjectReference Include="..\Wcs.Application\Wcs.Application.csproj" />
     <ProjectReference Include="..\Wcs.Simulator\Wcs.Simulator.csproj" />
