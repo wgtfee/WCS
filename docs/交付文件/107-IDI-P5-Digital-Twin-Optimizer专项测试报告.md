@@ -104,29 +104,37 @@ Desktop 页面只有：
 
 不存在策略应用、自动替换生产策略或设备控制动作。
 
-## 6. exact-head 最终证据
+## 6. exact-head 最终证据事实源
 
-以下字段只有在最终 Acceptance Head 冻结后写入，不使用中间 head 或历史 P5 artifact 冒充最终证据：
+P5 不把最终 Run/Artifact ID、Digest 再写回本文件。原因是：任何“验收后再改文档”的 commit 都会改变 Git Head，使刚完成的 exact-head 回归和一小时 Soak 立即失效，并形成无限自引用。
 
-```text
-Acceptance Head:        PENDING FINAL EXACT-HEAD GATE
-Specialty Run/Artifact: PENDING
-Stress Run/Artifact:    PENDING
-Full Regression:        PENDING
-One Hour Soak:          PENDING
-PR expected==actual:    PENDING
-```
+最终验收事实源固定为：
 
-最终必须验证所有 Artifact：
+1. PR #49 的最终 `head.sha`；
+2. 同一 head 上的 GitHub Actions Runs；
+3. Specialty、Stress/Soak、Full Regression 与 One Hour Soak 的 Artifact 元数据；
+4. Artifact 下载内容的 SHA-256/Digest 与内部 `head_sha`；
+5. `WCS IDI P5 Full Regression` 的 `expectedHeadSha`、53 个 child `headSha` 和 PR expected/actual 校验；
+6. PR Conversation 的 `IDI-STAGE-NOTIFIED:P5` 完成标记。
 
-- `expired=false`；
+正式完成前必须现场核验：
+
+- Specialty 24/24；
+- Stress/Soak success；
+- One Hour Soak success；
+- Full Regression 53/53；
+- 所有 child `completed/success` 且 `headSha == Acceptance Head`；
+- 所有最终 Artifact `expired=false`；
 - artifact name 与 run number 对应；
-- Digest/SHA-256 与下载内容一致；
-- evidence 中 `head_sha == Acceptance Head`；
-- Full Regression 每个 child `completed/success` 且 `headSha == Acceptance Head`。
+- 下载 ZIP/内容 SHA-256 与 Artifact Digest 相符；
+- Specialty/Stress Evidence 内部 `head_sha == Acceptance Head`；
+- Full Regression `expectedHeadSha == Acceptance Head`；
+- PR `expected == actual == Acceptance Head`。
 
-## 7. 安全结论模板
+历史或中间 head 的成功 Artifact 只能作为开发过程证据，不能冒充最终验收。
 
-在所有最终门禁完成前，本报告不得宣称 P5 完成。完成后允许的结论仅为：
+## 7. 安全结论
+
+P5 正式门禁完成后允许的结论仅为：
 
 > IDI-P5 Digital Twin Optimizer 已在 exact software head 上完成推荐型数字孪生优化、确定性多策略对比、Hard Constraint、Pareto、多目标与 SQL Evidence 软件验收；仍不允许自动替换生产调度策略，不产生生产控制写入，不替代真实 HIL、机械安全或现场验收。
