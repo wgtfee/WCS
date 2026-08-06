@@ -4,7 +4,10 @@ public interface IMaintenanceLearningStore
 {
     Task SaveInterventionAsync(MaintenanceIntervention intervention, CancellationToken ct = default);
     Task SaveOutcomeAsync(MaintenanceOutcome outcome, CancellationToken ct = default);
+    Task SaveEvaluationWindowAsync(VersionedEvaluationWindow window, CancellationToken ct = default);
     Task SaveEvaluationAsync(MaintenanceEvaluationResult evaluation, CancellationToken ct = default);
+    Task SaveCausalCandidateAsync(CausalCandidate candidate, CancellationToken ct = default);
+    Task SaveCounterfactualAsync(CounterfactualEstimate estimate, CancellationToken ct = default);
     Task SaveLabelAsync(TrainingLabelCandidate label, CancellationToken ct = default);
     Task SaveApprovalAsync(TrainingLabelApproval approval, string correlationId, string idempotencyKey, CancellationToken ct = default);
     Task SaveOutboxAsync(MesOutboxEntry entry, CancellationToken ct = default);
