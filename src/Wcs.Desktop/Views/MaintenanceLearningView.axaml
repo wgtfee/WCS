@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Wcs.Desktop.Views.MaintenanceLearningView">
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="16">
+      <TextBlock Text="IDI-P4 Maintenance Learning" FontSize="24" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding SafetyText}" TextWrapping="Wrap" Opacity="0.75" />
+
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Environment" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Environment}" />
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Mode" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ModeText}" />
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Recovery" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RecoveryText}" TextWrapping="Wrap" />
+      </Grid>
+
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="刷新" Command="{Binding RefreshCommand}" />
+        <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <Border Padding="12" BorderThickness="1" CornerRadius="6">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Intervention 查询" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBox Width="280" Watermark="InterventionId" Text="{Binding InterventionId}" />
+            <Button Content="查询" Command="{Binding FindInterventionCommand}" />
+          </StackPanel>
+          <TextBlock Text="{Binding InterventionText}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <TextBlock Text="Pending MES Outbox" FontSize="18" FontWeight="SemiBold" />
+      <ItemsControl ItemsSource="{Binding PendingOutbox}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Padding="10" Margin="0,0,0,8" BorderThickness="1" CornerRadius="4">
+              <Grid ColumnDefinitions="150,160,100,*" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" Text="{Binding OutboxId}" />
+                <TextBlock Grid.Column="1" Text="{Binding InterventionId}" />
+                <TextBlock Grid.Column="2" Text="{Binding AttemptCount}" />
+                <TextBlock Grid.Column="3" Text="{Binding LastError}" TextWrapping="Wrap" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
