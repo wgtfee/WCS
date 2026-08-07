@@ -284,11 +284,15 @@ try
     app.UseMiddleware<TransportTraceContextMiddleware>();
     app.UseRouting();
     if (centralizedAuthentication)
-    {
         app.UseAuthentication();
-        app.UseAuthorization();
-    }
+
+    // Industrial.Security must enrich the authenticated principal (SystemAccess,
+    // shadow/local identity and emergency session) before ASP.NET authorization runs.
     app.UseIndustrialSecurity();
+
+    if (centralizedAuthentication)
+        app.UseAuthorization();
+
     if (transportObservability.EnablePrometheusEndpoint)
         app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
