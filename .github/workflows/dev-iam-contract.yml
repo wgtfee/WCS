@@ -29,6 +29,7 @@ jobs:
           program = (host / 'Program.cs').read_text(encoding='utf-8-sig')
           adapter = (host / 'IndustrialSecurity/WcsIndustrialSecurityAdapter.cs').read_text(encoding='utf-8-sig')
           controller = (host / 'Controllers/TransportAdministrationController.cs').read_text(encoding='utf-8-sig')
+          health = (host / 'Health/V071HealthEndpoints.cs').read_text(encoding='utf-8-sig')
           desktop_config = json.loads(Path('src/Wcs.Desktop/appsettings.json').read_text(encoding='utf-8-sig'))
           desktop_auth = Path('src/Wcs.Desktop/Services/DesktopIamAuthService.cs').read_text(encoding='utf-8-sig')
 
@@ -71,6 +72,15 @@ jobs:
           assert '[Permission(WcsManagementPermissionCodes.OperationManage)]' in controller
           assert '[Permission(WcsManagementPermissionCodes.TrafficForceRelease)]' in controller
 
+          # /health/traffic must use the shared evaluator. A Degraded readiness result
+          # keeps traffic while an Unhealthy readiness result is a critical dependency.
+          assert 'HealthSnapshotEvaluator.Evaluate' in health
+          assert 'HealthSnapshotEvaluator.ToTrafficHealth' in health
+          assert 'name.Equals("readiness"' in health
+          assert 'entry.Status == HealthStatus.Degraded' in health
+          assert 'DependencyCriticality.Degradable' in health
+          assert 'DependencyCriticality.Critical' in health
+
           # The desktop HTTP-driven PKCE client intercepts the authorize redirect, so its
           # configured redirect must exactly match the public client registered by IAM.
           desktop_iam = desktop_config['Iam']
@@ -80,7 +90,7 @@ jobs:
           assert 'code_challenge_method' in desktop_auth
           assert 'AllowAutoRedirect = false' in desktop_auth
 
-          print('WCS Dev_IAM management-plane IAM contract OK')
+          print('WCS Dev_IAM management-plane IAM/traffic-health contract OK')
 
       - name: Publish validation status
         if: always()
