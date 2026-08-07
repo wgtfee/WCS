@@ -1,6 +1,7 @@
 using Avalonia.Threading;
 using Microsoft.AspNetCore.SignalR.Client;
 using Wcs.Desktop.Interface;
+using Wcs.Desktop.Models;
 
 namespace Wcs.Desktop.Services;
 
