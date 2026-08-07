@@ -50,6 +50,13 @@ jobs:
           ]:
               assert marker in program, f'Missing WCS host contract: {marker}'
 
+          # Industrial.Security enriches the principal and loads break-glass sessions.
+          # It must run after authentication but before ASP.NET authorization.
+          authn = program.index('app.UseAuthentication()')
+          industrial = program.index('app.UseIndustrialSecurity()')
+          authz = program.index('app.UseAuthorization()')
+          assert authn < industrial < authz, 'WCS security middleware order must be Authentication -> Industrial.Security -> Authorization'
+
           assert 'Runtime workers' in adapter or 'runtime' in adapter.lower()
           for permission in [
               'wcs.administration.view',
