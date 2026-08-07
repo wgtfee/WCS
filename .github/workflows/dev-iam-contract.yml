@@ -1,0 +1,80 @@
+name: WCS Dev_IAM Contract
+
+on:
+  push:
+    branches: [ Dev_IAM ]
+  pull_request:
+    branches: [ Dev_IAM ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  iam-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate WCS IAM management-plane contract
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          host = Path('src/Wcs.Host')
+          centralized = json.loads((host / 'appsettings.Centralized.json').read_text(encoding='utf-8-sig'))
+          program = (host / 'Program.cs').read_text(encoding='utf-8-sig')
+          adapter = (host / 'IndustrialSecurity/WcsIndustrialSecurityAdapter.cs').read_text(encoding='utf-8-sig')
+          controller = (host / 'Controllers/TransportAdministrationController.cs').read_text(encoding='utf-8-sig')
+
+          security = centralized['Security']
+          assert security['Authentication']['Mode'] == 'Centralized'
+          assert security['Authorization']['Mode'] == 'Centralized'
+          assert security['Central']['SystemCode'] == 'WCS'
+          assert security['Central']['RequireSystemAccess'] is True
+          assert security['Central']['PermissionFailureMode'] == 'FailClosed'
+
+          for marker in [
+              'AddIndustrialSecurity(builder.Configuration)',
+              'AddIndustrialJwt(builder.Configuration)',
+              'UseIndustrialSecurity()',
+              'MapIndustrialSecurityCacheInvalidation()',
+              'MapIndustrialLocalUserManagementInfo()',
+              'MapIndustrialEmergencyValidation()',
+              'MapV071Health("wcs")',
+          ]:
+              assert marker in program, f'Missing WCS host contract: {marker}'
+
+          assert 'Runtime workers' in adapter or 'runtime' in adapter.lower()
+          for permission in [
+              'wcs.administration.view',
+              'wcs.operation.manage',
+              'wcs.traffic.force-release',
+              'wcs.vehicle.manual-command',
+              'wcs.plc.write-signal',
+          ]:
+              assert permission in adapter, f'Missing WCS permission: {permission}'
+
+          assert '[Permission(WcsManagementPermissionCodes.AdministrationView)]' in controller
+          assert '[Permission(WcsManagementPermissionCodes.OperationManage)]' in controller
+          assert '[Permission(WcsManagementPermissionCodes.TrafficForceRelease)]' in controller
+          print('WCS Dev_IAM management-plane IAM contract OK')
+
+      - name: Publish validation status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const passed = '${{ job.status }}' === 'success';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: passed ? 'success' : 'failure',
+              context: 'ci/wcs-iam-contract',
+              description: passed ? 'WCS IAM contract passed' : 'WCS IAM contract failed',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
