@@ -1,5 +1,5 @@
 using System.Net.Http.Headers;
-using Wcs.Desktop.Interface;
+using Wcs.Desktop.Models;
 
 namespace Wcs.Desktop.Services;
 
