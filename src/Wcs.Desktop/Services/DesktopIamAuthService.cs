@@ -12,7 +12,7 @@ public sealed class DesktopIamOptions
     public bool Enabled { get; set; }
     public string Authority { get; set; } = "http://localhost:5202";
     public string ClientId { get; set; } = "industrial-desktop";
-    public string RedirectUri { get; set; } = "http://127.0.0.1:49152/callback";
+    public string RedirectUri { get; set; } = "industrial-platform://desktop/callback";
     public string Scope { get; set; } = "openid profile industrial-platform";
     public string? Tenant { get; set; }
 }
@@ -34,8 +34,9 @@ public interface IDesktopIamAuthService
 /// <summary>
 /// Native desktop Authorization Code + PKCE client. The desktop first establishes the
 /// IAM session in an isolated CookieContainer, then executes the public-client OIDC
-/// authorization flow with redirects disabled so the registered loopback callback can
-/// be validated without requiring OS protocol registration.
+/// authorization flow with redirects disabled. Because redirects are intercepted before
+/// navigation, the registered custom-scheme callback does not require OS protocol handling
+/// in this HTTP-driven desktop flow.
 /// </summary>
 public sealed class DesktopIamAuthService : IDesktopIamAuthService, IDisposable
 {
