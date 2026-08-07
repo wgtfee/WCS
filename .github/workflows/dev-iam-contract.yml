@@ -29,6 +29,8 @@ jobs:
           program = (host / 'Program.cs').read_text(encoding='utf-8-sig')
           adapter = (host / 'IndustrialSecurity/WcsIndustrialSecurityAdapter.cs').read_text(encoding='utf-8-sig')
           controller = (host / 'Controllers/TransportAdministrationController.cs').read_text(encoding='utf-8-sig')
+          desktop_config = json.loads(Path('src/Wcs.Desktop/appsettings.json').read_text(encoding='utf-8-sig'))
+          desktop_auth = Path('src/Wcs.Desktop/Services/DesktopIamAuthService.cs').read_text(encoding='utf-8-sig')
 
           security = centralized['Security']
           assert security['Authentication']['Mode'] == 'Centralized'
@@ -61,6 +63,16 @@ jobs:
           assert '[Permission(WcsManagementPermissionCodes.AdministrationView)]' in controller
           assert '[Permission(WcsManagementPermissionCodes.OperationManage)]' in controller
           assert '[Permission(WcsManagementPermissionCodes.TrafficForceRelease)]' in controller
+
+          # The desktop HTTP-driven PKCE client intercepts the authorize redirect, so its
+          # configured redirect must exactly match the public client registered by IAM.
+          desktop_iam = desktop_config['Iam']
+          assert desktop_iam['ClientId'] == 'industrial-desktop'
+          assert desktop_iam['RedirectUri'] == 'industrial-platform://desktop/callback'
+          assert 'industrial-platform://desktop/callback' in desktop_auth
+          assert 'code_challenge_method' in desktop_auth
+          assert 'AllowAutoRedirect = false' in desktop_auth
+
           print('WCS Dev_IAM management-plane IAM contract OK')
 
       - name: Publish validation status
