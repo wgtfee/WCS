@@ -15,7 +15,11 @@ public sealed class BoundedAutomationReadinessStressTests
         for (var i = 0; i < 10_000; i++)
         {
             var decision = BoundedAutomationReadinessEvaluator.Evaluate(request);
-            Assert.Equal(first, decision);
+            Assert.Equal(first.SoftwareSideReady, decision.SoftwareSideReady);
+            Assert.Equal(first.ProductionEnablementAllowed, decision.ProductionEnablementAllowed);
+            Assert.Equal(first.EffectiveMaximumAutomationLevel, decision.EffectiveMaximumAutomationLevel);
+            Assert.Equal(first.Claim, decision.Claim);
+            Assert.True(first.Reasons.SequenceEqual(decision.Reasons));
             Assert.Equal(firstHash, BoundedAutomationReadinessEvidenceHash.Compute(request, decision));
         }
     }
