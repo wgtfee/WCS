@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:opt="using:Wcs.Optimization"
+             x:Class="Wcs.Desktop.Views.DigitalTwinOptimizerView"
+             x:DataType="vm:DigitalTwinOptimizerViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="16">
+      <TextBlock Text="IDI-P5 Digital Twin Optimizer" FontSize="24" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding SafetyText}" TextWrapping="Wrap" Opacity="0.75" />
+
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Environment" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Environment}" />
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Mode / Safety" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ModeText}" TextWrapping="Wrap" />
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="SQL Evidence Recovery" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RecoveryText}" TextWrapping="Wrap" />
+      </Grid>
+
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="刷新只读 Evidence" Command="{Binding RefreshCommand}" />
+        <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <TextBlock Text="最近实验" FontSize="18" FontWeight="SemiBold" />
+      <ItemsControl ItemsSource="{Binding Experiments}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="opt:OptimizationExperimentSummary">
+            <Border Padding="10" Margin="0,0,0,8" BorderThickness="1" CornerRadius="4">
+              <Grid ColumnDefinitions="220,100,*,140" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" Text="{Binding ExperimentId}" />
+                <TextBlock Grid.Column="1" Text="{Binding Status}" />
+                <TextBlock Grid.Column="2" Text="{Binding DefinitionHash}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="3" Text="{Binding CreatedAtUtc}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Border Padding="12" BorderThickness="1" CornerRadius="6">
+        <StackPanel Spacing="8">
+          <TextBlock Text="实验结果查询（只读）" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBox Width="320" PlaceholderText="ExperimentId" Text="{Binding ExperimentId}" />
+            <Button Content="读取 Result" Command="{Binding LoadResultCommand}" />
+          </StackPanel>
+          <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding EvidenceHash}" TextWrapping="Wrap" Opacity="0.7" />
+        </StackPanel>
+      </Border>
+
+      <TextBlock Text="Pareto / 多目标排名" FontSize="18" FontWeight="SemiBold" />
+      <ItemsControl ItemsSource="{Binding Ranking}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="opt:OptimizationPolicyScore">
+            <Border Padding="10" Margin="0,0,0,8" BorderThickness="1" CornerRadius="4">
+              <Grid ColumnDefinitions="200,100,100,120,120,*" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" Text="{Binding PolicyId}" />
+                <TextBlock Grid.Column="1" Text="{Binding Score}" />
+                <TextBlock Grid.Column="2" Text="{Binding ParetoEfficient}" />
+                <TextBlock Grid.Column="3" Text="{Binding HardConstraintQualified}" />
+                <TextBlock Grid.Column="4" Text="{Binding SuccessfulRuns}" />
+                <TextBlock Grid.Column="5" Text="{Binding PolicyHash}" TextTrimming="CharacterEllipsis" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

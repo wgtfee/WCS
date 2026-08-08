@@ -32,16 +32,24 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Verify current forecast compile contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          test -f src/Wcs.Host/Wcs.Host.csproj
+          test ! -e src/Wcs.AssetHealth/Wcs.AssetHealth.csproj
+          dotnet --info
       - name: Remove previous outputs
         shell: bash
         run: |
           rm -rf src/Wcs.Core.Tests/bin src/Wcs.Core.Tests/obj
           rm -rf src/Wcs.Host/bin src/Wcs.Host/obj
           rm -rf src/Wcs.Infrastructure/bin src/Wcs.Infrastructure/obj
-      - name: Restore
+      - name: Restore affected projects for a clean workflow_dispatch
         run: |
-          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj 2>&1 | tee failure-forecast-restore.log
-          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee -a failure-forecast-restore.log
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --ignore-failed-sources 2>&1 | tee failure-forecast-restore.log
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj --ignore-failed-sources 2>&1 | tee -a failure-forecast-restore.log
       - name: Build Core tests
         run: dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore 2>&1 | tee failure-forecast-core-build.log
       - name: Run forecast contract tests

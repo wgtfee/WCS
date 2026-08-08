@@ -28,5 +28,6 @@
     <ProjectReference Include="..\Wcs.Simulator\Wcs.Simulator.csproj" />
     <ProjectReference Include="..\Wcs.IndustrialIntelligence\Wcs.IndustrialIntelligence.csproj" />
     <ProjectReference Include="..\Wcs.MaintenanceLearning\Wcs.MaintenanceLearning.csproj" />
+    <ProjectReference Include="..\Wcs.Optimization\Wcs.Optimization.csproj" />
   </ItemGroup>
 </Project>
