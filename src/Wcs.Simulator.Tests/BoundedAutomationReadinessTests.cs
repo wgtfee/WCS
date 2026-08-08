@@ -288,6 +288,14 @@ public sealed class BoundedAutomationReadinessTests
     }
 
     [Fact]
+    public void UnknownAutomationOperationValue_IsDenied()
+    {
+        AssertDenied(
+            ValidRequest() with { RequestedProhibitedOperations = new[] { (PermanentAutomationProhibition)999 } },
+            "operation is invalid");
+    }
+
+    [Fact]
     public void L4_IsOutsideP6EvaluationBoundary()
     {
         var decision = BoundedAutomationReadinessEvaluator.Evaluate(WithRealEvidence(ValidRequest(AutomationLevel.L4)));
