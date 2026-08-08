@@ -64,7 +64,7 @@ P6 将以下 11 类动作固化为 permanent prohibition，任何候选请求包
 - StateMachineBypass；
 - TrafficConstraintBypass。
 
-该清单不能被普通配置、Policy、Evidence 或 UI 绕过。
+该清单不能被普通配置、Policy、Evidence 或 UI 绕过。若请求集合出现未定义的 enum/未知 operation 值，同样按 fail-closed 拒绝，不能因为“不在 11 个已知名称中”而忽略。
 
 ## 5. 确定性 Evaluator
 
@@ -76,7 +76,7 @@ P6 将以下 11 类动作固化为 permanent prohibition，任何候选请求包
 - `Claim`；
 - `Reasons`。
 
-所有拒绝原因显式记录，便于审计与 Evidence 追踪。Git Software Head 与业务 Evidence Hash 分开校验：当前 Git SHA-1 40 位和未来兼容的 64 位 Git commit SHA 都可作为 Software Head，业务 Evidence/Policy/Decision 使用 SHA-256。
+所有拒绝原因显式记录，便于审计与 Evidence 追踪。Git Software Head 与业务 Evidence Hash 分开校验：当前 Git SHA-1 40 位和未来兼容的 64 位 Git commit SHA 都可作为 Software Head，业务 Evidence/Policy/Decision 使用 SHA-256。未知 ExecutionAllowance 或未知 automation operation 数值都必须产生显式拒绝原因。
 
 ## 6. Evidence 模型
 
@@ -143,8 +143,8 @@ Desktop 页面 `IDI-P6 Bounded Automation Readiness` 仅展示：
 
 P6 软件验收由四层构成：
 
-1. Specialty：42 个 governance tests + 12 个 Evidence/API tests = 54；
-2. Stress/Soak：6 个高循环/并发契约 × 3 轮 = 18，并额外重跑完整 54；
+1. Specialty：43 个 governance tests + 12 个 Evidence/API tests = 55；
+2. Stress/Soak：6 个高循环/并发契约 × 3 轮 = 18，并额外重跑完整 55；
 3. SQL Evidence：真实 SQL Server 2022 service container，固定 6 个集成测试；
 4. Cumulative Full Regression：继承 P5 全部 53 child，并追加 P6 Specialty、P6 Stress、P6 SQL，合计 exactly 56 child，其中继续包含 One Hour Soak。
 
