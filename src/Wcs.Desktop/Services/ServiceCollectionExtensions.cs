@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IModelOpsApiService, ModelOpsApiService>();
         services.AddHttpClient<IMaintenanceLearningApiService, MaintenanceLearningApiService>();
         services.AddHttpClient<IDigitalTwinOptimizerApiService, DigitalTwinOptimizerApiService>();
+        services.AddHttpClient<IBoundedAutomationReadinessApiService, BoundedAutomationReadinessApiService>();
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
         services.AddSingleton<IDataProvider, ApiDataProvider>();
         services.AddTransient<LoginViewModel>();
@@ -47,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ModelOpsViewModel>();
         services.AddTransient<MaintenanceLearningViewModel>();
         services.AddTransient<DigitalTwinOptimizerViewModel>();
+        services.AddTransient<BoundedAutomationReadinessViewModel>();
         return services;
     }
 }
