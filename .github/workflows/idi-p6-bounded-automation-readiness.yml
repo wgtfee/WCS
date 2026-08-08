@@ -4,8 +4,12 @@ on:
   pull_request:
     branches: [ develop ]
     paths:
-      - 'src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness.cs'
+      - 'src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness*.cs'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/BoundedAutomationReadinessPersistence.cs'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - 'src/Wcs.Host/Controllers/BoundedAutomationReadinessController.cs'
       - 'src/Wcs.Simulator.Tests/BoundedAutomationReadinessTests.cs'
+      - 'src/Wcs.Simulator.Tests/BoundedAutomationEvidenceContractTests.cs'
       - '.github/workflows/idi-p6-bounded-automation-readiness.yml'
   workflow_dispatch:
 
@@ -35,7 +39,7 @@ jobs:
           dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
           dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
 
-      - name: Run exactly 42 P6 specialty tests
+      - name: Run exactly 42 P6 governance tests
         shell: bash
         run: |
           set -euo pipefail
@@ -51,35 +55,60 @@ jobs:
           root=ET.parse(path).getroot()
           results=root.findall('.//{*}UnitTestResult')
           failed=[x for x in results if x.attrib.get('outcome') != 'Passed']
-          assert len(results) == 42, f'expected exactly 42 P6 tests, got {len(results)}'
-          assert not failed, f'failed P6 tests: {[x.attrib.get("testName") for x in failed]}'
-          print('IDI-P6 bounded automation readiness tests: 42/42 success')
+          assert len(results) == 42, f'expected exactly 42 P6 governance tests, got {len(results)}'
+          assert not failed, f'failed P6 governance tests: {[x.attrib.get("testName") for x in failed]}'
+          print('IDI-P6 governance tests: 42/42 success')
+          PY
+
+      - name: Run exactly 12 P6 Evidence and API tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            -c Release --no-build \
+            --filter 'FullyQualifiedName~BoundedAutomationEvidenceContractTests' \
+            --logger 'trx;LogFileName=idi-p6-evidence-api.trx' \
+            --results-directory artifacts/idi-p6-readiness
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          path='artifacts/idi-p6-readiness/idi-p6-evidence-api.trx'
+          root=ET.parse(path).getroot()
+          results=root.findall('.//{*}UnitTestResult')
+          failed=[x for x in results if x.attrib.get('outcome') != 'Passed']
+          assert len(results) == 12, f'expected exactly 12 P6 Evidence/API tests, got {len(results)}'
+          assert not failed, f'failed P6 Evidence/API tests: {[x.attrib.get("testName") for x in failed]}'
+          print('IDI-P6 Evidence/API tests: 12/12 success')
           PY
 
       - name: Verify permanent fail-closed and zero-control boundary
         shell: bash
         run: |
           set -euo pipefail
-          scope='src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness.cs'
+          governance='src/Wcs.IndustrialIntelligence/Governance'
+          controller='src/Wcs.Host/Controllers/BoundedAutomationReadinessController.cs'
+          persistence='src/Wcs.Infrastructure/IndustrialIntelligence/BoundedAutomationReadinessPersistence.cs'
           banned='S7Client|S7RealClient|Snap7|S7CommPlusDriver|IPlcClient|IPlcConnection|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|RouteReservationManager|IRouteReservationManager|PlcWriter|WriteAsync\('
-          if grep -nE "$banned" "$scope"; then
+          if grep -RInE "$banned" "$governance"; then
             echo 'IDI-P6 governance contains a forbidden production-control dependency.' >&2
             exit 1
           fi
-          grep -q 'ProductionEnablementAllowed = false' "$scope"
-          grep -q 'software-side ready only' "$scope"
-          grep -q 'EmergencyStop' "$scope"
-          grep -q 'SafetyReset' "$scope"
-          grep -q 'SafetyDoorBypass' "$scope"
-          grep -q 'LightCurtainBypass' "$scope"
-          grep -q 'MechanicalInterlockBypass' "$scope"
-          grep -q 'PlcForceWrite' "$scope"
-          grep -q 'AutomaticRoadRightRelease' "$scope"
-          grep -q 'AutomaticBlockRelease' "$scope"
-          grep -q 'UnapprovedShutdown' "$scope"
-          grep -q 'StateMachineBypass' "$scope"
-          grep -q 'TrafficConstraintBypass' "$scope"
+          grep -q 'ProductionEnablementAllowed = false' src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness.cs
+          grep -R -q 'software-side ready only' "$governance"
+          test "$(grep -c '\[HttpGet' "$controller")" -eq 4
+          if grep -nE '\[Http(Post|Put|Patch|Delete)' "$controller"; then
+            echo 'IDI-P6 Host exposes a mutating action.' >&2
+            exit 1
+          fi
+          if grep -nE 'Updateable<BoundedAutomation|Deleteable<BoundedAutomation' "$persistence"; then
+            echo 'IDI-P6 Evidence persistence is not append-only.' >&2
+            exit 1
+          fi
+          grep -q 'ProductionEnablementAllowed = false' "$controller"
           grep -q 'Production is fail-closed for IDI-P0' src/Wcs.IndustrialIntelligence/Governance/IndustrialIntelligenceContracts.cs
+          test "$(grep -c '^    [A-Za-z].* = ' src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness.cs | head -n 1 || true)" -ge 0
+          for value in EmergencyStop SafetyReset SafetyDoorBypass LightCurtainBypass MechanicalInterlockBypass PlcForceWrite AutomaticRoadRightRelease AutomaticBlockRelease UnapprovedShutdown StateMachineBypass TrafficConstraintBypass; do
+            grep -q "$value" src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness.cs
+          done
 
       - name: Write exact-head P6 software evidence
         shell: bash
@@ -87,10 +116,10 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/idi-p6-readiness
           cat > artifacts/idi-p6-readiness/evidence.json <<EOF
-          {"schema":"wcs-idi-p6-readiness/v1","head_sha":"${EVIDENCE_HEAD_SHA}","testCount":42,"allSuccess":true,"finalClaim":"software-side ready only","productionEnablementAllowed":false,"defaultsDisabled":true,"permanentProhibitionCount":11,"realSiteEvidenceRequiredForL2L3":true,"realHilEvidenceRequiredForL2L3":true,"controlWriteAllowed":false}
+          {"schema":"wcs-idi-p6-readiness/v1","head_sha":"${EVIDENCE_HEAD_SHA}","governanceTestCount":42,"evidenceApiTestCount":12,"testCount":54,"allSuccess":true,"finalClaim":"software-side ready only","productionEnablementAllowed":false,"defaultsDisabled":true,"permanentProhibitionCount":11,"realSiteEvidenceRequiredForL2L3":true,"realHilEvidenceRequiredForL2L3":true,"controlWriteAllowed":false,"hostMutatingApiExposed":false,"evidencePersistenceAppendOnly":true}
           EOF
           test "$(jq -r '.head_sha' artifacts/idi-p6-readiness/evidence.json)" = "$EVIDENCE_HEAD_SHA"
-          test "$(jq -r '.testCount' artifacts/idi-p6-readiness/evidence.json)" -eq 42
+          test "$(jq -r '.testCount' artifacts/idi-p6-readiness/evidence.json)" -eq 54
           test "$(jq -r '.productionEnablementAllowed' artifacts/idi-p6-readiness/evidence.json)" = 'false'
 
       - name: Upload P6 readiness evidence
