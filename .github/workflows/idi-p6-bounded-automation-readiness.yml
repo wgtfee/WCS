@@ -44,7 +44,7 @@ jobs:
           dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
           dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release
 
-      - name: Run exactly 42 P6 governance tests
+      - name: Run exactly 43 P6 governance tests
         shell: bash
         run: |
           set -euo pipefail
@@ -60,9 +60,9 @@ jobs:
           root=ET.parse(path).getroot()
           results=root.findall('.//{*}UnitTestResult')
           failed=[x for x in results if x.attrib.get('outcome') != 'Passed']
-          assert len(results) == 42, f'expected exactly 42 P6 governance tests, got {len(results)}'
+          assert len(results) == 43, f'expected exactly 43 P6 governance tests, got {len(results)}'
           assert not failed, f'failed P6 governance tests: {[x.attrib.get("testName") for x in failed]}'
-          print('IDI-P6 governance tests: 42/42 success')
+          print('IDI-P6 governance tests: 43/43 success')
           PY
 
       - name: Run exactly 12 P6 Evidence and API tests
@@ -122,10 +122,10 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/idi-p6-readiness
           cat > artifacts/idi-p6-readiness/evidence.json <<EOF
-          {"schema":"wcs-idi-p6-readiness/v1","head_sha":"${EVIDENCE_HEAD_SHA}","governanceTestCount":42,"evidenceApiTestCount":12,"testCount":54,"allSuccess":true,"desktopBuild":true,"finalClaim":"software-side ready only","productionEnablementAllowed":false,"defaultsDisabled":true,"permanentProhibitionCount":11,"realSiteEvidenceRequiredForL2L3":true,"realHilEvidenceRequiredForL2L3":true,"controlWriteAllowed":false,"hostMutatingApiExposed":false,"evidencePersistenceAppendOnly":true}
+          {"schema":"wcs-idi-p6-readiness/v1","head_sha":"${EVIDENCE_HEAD_SHA}","governanceTestCount":43,"evidenceApiTestCount":12,"testCount":55,"allSuccess":true,"desktopBuild":true,"finalClaim":"software-side ready only","productionEnablementAllowed":false,"defaultsDisabled":true,"permanentProhibitionCount":11,"unknownOperationFailClosed":true,"realSiteEvidenceRequiredForL2L3":true,"realHilEvidenceRequiredForL2L3":true,"controlWriteAllowed":false,"hostMutatingApiExposed":false,"evidencePersistenceAppendOnly":true}
           EOF
           test "$(jq -r '.head_sha' artifacts/idi-p6-readiness/evidence.json)" = "$EVIDENCE_HEAD_SHA"
-          test "$(jq -r '.testCount' artifacts/idi-p6-readiness/evidence.json)" -eq 54
+          test "$(jq -r '.testCount' artifacts/idi-p6-readiness/evidence.json)" -eq 55
           test "$(jq -r '.productionEnablementAllowed' artifacts/idi-p6-readiness/evidence.json)" = 'false'
 
       - name: Upload P6 readiness evidence
