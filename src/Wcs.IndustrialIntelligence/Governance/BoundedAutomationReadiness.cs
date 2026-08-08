@@ -186,7 +186,9 @@ public static class BoundedAutomationReadinessEvaluator
         {
             foreach (var prohibited in request.RequestedProhibitedOperations.Distinct())
             {
-                if (BoundedAutomationReadinessGovernance.PermanentProhibitions.Contains(prohibited))
+                if (!Enum.IsDefined(prohibited))
+                    reasons.Add($"requested automation operation is invalid: {(int)prohibited}");
+                else if (BoundedAutomationReadinessGovernance.PermanentProhibitions.Contains(prohibited))
                     reasons.Add($"permanent prohibition requested: {prohibited}");
             }
         }
