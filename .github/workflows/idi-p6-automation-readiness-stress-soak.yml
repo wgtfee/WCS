@@ -1,0 +1,82 @@
+name: WCS IDI P6 Automation Readiness Stress Soak
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness*.cs'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/BoundedAutomationReadinessPersistence.cs'
+      - 'src/Wcs.Host/Controllers/BoundedAutomationReadinessController.cs'
+      - 'src/Wcs.Desktop/**BoundedAutomationReadiness*'
+      - 'src/Wcs.Simulator.Tests/BoundedAutomationReadinessStressTests.cs'
+      - '.github/workflows/idi-p6-automation-readiness-stress-soak.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bounded-automation-stress-soak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      EVIDENCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build simulator tests Release
+        run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release
+
+      - name: Repeat six stress contracts three times
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/idi-p6-stress-soak
+          : > artifacts/idi-p6-stress-soak/stress-runs.txt
+          for round in 1 2 3; do
+            OUT=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~BoundedAutomationReadinessStressTests' --logger 'console;verbosity=normal')
+            printf '=== repetition %s ===\n%s\n' "$round" "$OUT" | tee -a artifacts/idi-p6-stress-soak/stress-runs.txt
+            echo "$OUT" | grep -Eq 'Total tests:[[:space:]]+6'
+            echo "$OUT" | grep -Eq 'Passed:[[:space:]]+6'
+            ! echo "$OUT" | grep -Eq 'Failed:[[:space:]]+[1-9][0-9]*'
+          done
+
+      - name: Re-run all 54 P6 specialty contracts once
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOV=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~BoundedAutomationReadinessTests' --logger 'console;verbosity=normal')
+          API=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~BoundedAutomationEvidenceContractTests' --logger 'console;verbosity=normal')
+          printf '%s\n' "$GOV" | tee artifacts/idi-p6-stress-soak/governance.txt
+          printf '%s\n' "$API" | tee artifacts/idi-p6-stress-soak/evidence-api.txt
+          echo "$GOV" | grep -Eq 'Total tests:[[:space:]]+42'
+          echo "$GOV" | grep -Eq 'Passed:[[:space:]]+42'
+          echo "$API" | grep -Eq 'Total tests:[[:space:]]+12'
+          echo "$API" | grep -Eq 'Passed:[[:space:]]+12'
+
+      - name: Verify stress-soak zero-control boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'ProductionEnablementAllowed = false' src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness.cs
+          grep -R -q 'software-side ready only' src/Wcs.IndustrialIntelligence/Governance
+          ! grep -R -n -E 'S7Client|S7RealClient|S7CommPlusDriver|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|RouteReservationManager|IRouteReservationManager|WriteAsync\(' src/Wcs.IndustrialIntelligence/Governance
+          ! grep -nE '\[Http(Post|Put|Patch|Delete)' src/Wcs.Host/Controllers/BoundedAutomationReadinessController.cs
+
+      - name: Write stress-soak evidence for exact PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '{"schema":"wcs-idi-p6-stress-soak/v1","head_sha":"%s","stressRepetitions":3,"stressTestsPerRepetition":6,"stressPassedTotal":18,"specialtyTests":54,"allSuccess":true,"finalClaim":"software-side ready only","productionEnablementAllowed":false,"controlWriteAllowed":false,"permanentProhibitionCount":11,"realHilExecuted":false,"oneHourSoakIsSeparateCumulativeGate":true}\n' "$EVIDENCE_HEAD_SHA" > artifacts/idi-p6-stress-soak/evidence.json
+          test "$(jq -r '.head_sha' artifacts/idi-p6-stress-soak/evidence.json)" = "$EVIDENCE_HEAD_SHA"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wcs-idi-p6-automation-readiness-stress-soak-${{ github.run_number }}
+          path: artifacts/idi-p6-stress-soak/**
+          if-no-files-found: error
+          retention-days: 30
