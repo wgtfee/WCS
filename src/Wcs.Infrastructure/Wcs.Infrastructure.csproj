@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
+    <ProjectReference Include="..\Wcs.IndustrialIntelligence\Wcs.IndustrialIntelligence.csproj" />
     <ProjectReference Include="..\Wcs.ModelOps\Wcs.ModelOps.csproj" />
     <ProjectReference Include="..\Wcs.FeatureCenter\Wcs.FeatureCenter.csproj" />
     <ProjectReference Include="..\Wcs.DecisionIntelligence\Wcs.DecisionIntelligence.csproj" />
@@ -18,7 +19,7 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
-    <PackageReference Include="Serilog.Enrichers.Thread" Version="3.1.0" />
+    <PackageReference Include="Serilog.Enrichers.Thread" Version="3.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
