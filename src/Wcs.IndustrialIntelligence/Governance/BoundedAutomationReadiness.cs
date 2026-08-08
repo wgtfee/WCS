@@ -118,10 +118,23 @@ public sealed record BoundedAutomationReadinessDecision(
     string Claim,
     IReadOnlyList<string> Reasons);
 
-public static class BoundedAutomationReadinessEvaluator
+public static class BoundedAutomationReadinessGovernance
 {
     public const string SoftwareOnlyClaim = "software-side ready only";
 
+    // P6 never grants production authority. A future production-enablement stage must
+    // be separately reviewed and cannot override P0/P6 by configuration alone.
+    public const bool ProductionEnablementAllowed = false;
+
+    public static IReadOnlySet<PermanentAutomationProhibition> PermanentProhibitions { get; } =
+        new HashSet<PermanentAutomationProhibition>(Enum.GetValues<PermanentAutomationProhibition>());
+
+    public static bool IsGitCommitSha(string? value) =>
+        value is { Length: 40 or 64 } && value.All(static ch => char.IsAsciiHexDigit(ch));
+}
+
+public static class BoundedAutomationReadinessEvaluator
+{
     public static BoundedAutomationReadinessDecision Evaluate(BoundedAutomationReadinessRequest? request)
     {
         if (request is null)
@@ -139,15 +152,22 @@ public static class BoundedAutomationReadinessEvaluator
         var rollback = request.RollbackPolicy ?? RollbackPolicy.Disabled;
         var evidence = request.Evidence ?? BoundedAutomationEvidence.None;
 
+        if (string.IsNullOrWhiteSpace(request.EnvironmentName))
+            reasons.Add("environment name is required");
+
         if (!policy.Enabled)
             reasons.Add("AutomationPolicy is Disabled");
+        if (string.IsNullOrWhiteSpace(policy.PolicyVersion) || !Hashing.IsSha256(policy.PolicyHash))
+            reasons.Add("AutomationPolicy version/hash is invalid");
         if (!allowance.Enabled || allowance.Kind is ExecutionAllowanceKind.Denied)
             reasons.Add("ExecutionAllowance is Disabled");
+        if (!Enum.IsDefined(allowance.Kind))
+            reasons.Add("ExecutionAllowance kind is invalid");
         if (!rateLimit.Enabled || rateLimit.MaximumOperationsPerMinute <= 0)
             reasons.Add("RateLimit is not configured");
         if (!budgetLimit.Enabled || budgetLimit.MaximumCostUnitsPerHour <= 0m)
             reasons.Add("BudgetLimit is not configured");
-        if (!maintenanceWindow.Enabled || maintenanceWindow.StartUtc < TimeSpan.Zero || maintenanceWindow.EndUtc > TimeSpan.FromHours(24))
+        if (!ValidMaintenanceWindow(maintenanceWindow))
             reasons.Add("MaintenanceWindow is not configured");
         if (!approval.Enabled || approval.RequiredApprovals <= 0 || !approval.IndependentSafetyApprovalRequired)
             reasons.Add("ApprovalRequirement is not satisfied");
@@ -157,13 +177,18 @@ public static class BoundedAutomationReadinessEvaluator
             reasons.Add("KillSwitch is not enabled and armed");
         if (!rollback.Enabled || string.IsNullOrWhiteSpace(rollback.TargetVersion) || rollback.MaximumRollbackDuration <= TimeSpan.Zero)
             reasons.Add("RollbackPolicy is not configured");
-        if (!evidence.SoftwareEvidenceValid || !Hashing.IsSha256(evidence.SoftwareHeadSha) || !Hashing.IsSha256(evidence.EvidenceHash))
+        if (!evidence.SoftwareEvidenceValid ||
+            !BoundedAutomationReadinessGovernance.IsGitCommitSha(evidence.SoftwareHeadSha) ||
+            !Hashing.IsSha256(evidence.EvidenceHash))
             reasons.Add("software Evidence is missing or invalid");
 
         if (request.RequestedProhibitedOperations is { Count: > 0 })
         {
             foreach (var prohibited in request.RequestedProhibitedOperations.Distinct())
-                reasons.Add($"permanent prohibition requested: {prohibited}");
+            {
+                if (BoundedAutomationReadinessGovernance.PermanentProhibitions.Contains(prohibited))
+                    reasons.Add($"permanent prohibition requested: {prohibited}");
+            }
         }
 
         var productionLevelRequested = policy.RequestedLevel >= AutomationLevel.L2 ||
@@ -185,24 +210,29 @@ public static class BoundedAutomationReadinessEvaluator
             reasons.Add("IDI-P6 does not evaluate automation above L3");
 
         var softwareSideReady = reasons.Count == 0;
-        var effectiveLevel = softwareSideReady
-            ? policy.RequestedLevel > AutomationLevel.L3 ? AutomationLevel.L0 : policy.RequestedLevel
-            : AutomationLevel.L0;
+        var effectiveLevel = softwareSideReady ? policy.RequestedLevel : AutomationLevel.L0;
 
-        // P6 is a readiness evaluator only. It never grants production control authority.
-        // Existing P0 production fail-closed governance remains authoritative and unchanged.
         return new BoundedAutomationReadinessDecision(
             softwareSideReady,
-            ProductionEnablementAllowed: false,
+            ProductionEnablementAllowed: BoundedAutomationReadinessGovernance.ProductionEnablementAllowed,
             effectiveLevel,
-            SoftwareOnlyClaim,
+            BoundedAutomationReadinessGovernance.SoftwareOnlyClaim,
             reasons);
+    }
+
+    private static bool ValidMaintenanceWindow(MaintenanceWindow window)
+    {
+        if (!window.Enabled) return false;
+        var day = TimeSpan.FromHours(24);
+        if (window.StartUtc < TimeSpan.Zero || window.StartUtc >= day) return false;
+        if (window.EndUtc < TimeSpan.Zero || window.EndUtc >= day) return false;
+        return window.StartUtc != window.EndUtc;
     }
 
     private static BoundedAutomationReadinessDecision Denied(string reason) => new(
         SoftwareSideReady: false,
         ProductionEnablementAllowed: false,
         EffectiveMaximumAutomationLevel: AutomationLevel.L0,
-        Claim: SoftwareOnlyClaim,
+        Claim: BoundedAutomationReadinessGovernance.SoftwareOnlyClaim,
         Reasons: new[] { reason });
 }
