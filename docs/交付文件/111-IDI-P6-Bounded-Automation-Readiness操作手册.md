@@ -56,7 +56,7 @@ GET /api/bounded-automation-readiness/prohibitions
 
 应显示 11 项：EmergencyStop、SafetyReset、SafetyDoorBypass、LightCurtainBypass、MechanicalInterlockBypass、PlcForceWrite、AutomaticRoadRightRelease、AutomaticBlockRelease、UnapprovedShutdown、StateMachineBypass、TrafficConstraintBypass。
 
-这些项目不存在“临时允许”操作。
+这些项目不存在“临时允许”操作；未定义/未知 automation operation 值同样必须 fail-closed，不能作为绕过已知禁令集合的方式。
 
 ## 5. 查看 Evidence
 
@@ -183,8 +183,8 @@ dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release
 
 最终必须同时通过：
 
-- `WCS IDI P6 Bounded Automation Readiness Contract` — 54 Specialty；
-- `WCS IDI P6 Automation Readiness Stress Soak` — 6×3 Stress + 54 Specialty recheck；
+- `WCS IDI P6 Bounded Automation Readiness Contract` — 55 Specialty（43 Governance + 12 Evidence/API）；
+- `WCS IDI P6 Automation Readiness Stress Soak` — 6×3 Stress + 55 Specialty recheck；
 - `WCS IDI P6 Readiness SQL Evidence` — 6 SQL tests；
 - `WCS IDI P6 Full Regression` — exactly 56 child；
 - `WCS One Hour Soak Load` — exact Acceptance Head success。
@@ -207,7 +207,7 @@ dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release
 - Evidence record/hash；
 - Infrastructure project reference。
 
-不得通过跳过 Desktop build 或减少 54 个测试来收口。
+不得通过跳过 Desktop build 或减少 55 个测试来收口。
 
 ### 11.3 SQL Gate 失败
 
