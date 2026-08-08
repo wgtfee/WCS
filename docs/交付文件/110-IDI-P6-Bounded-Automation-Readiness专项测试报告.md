@@ -14,9 +14,9 @@ P6 的最终声明只能是：
 
 Workflow：`.github/workflows/idi-p6-bounded-automation-readiness.yml`
 
-固定测试数量：54。
+固定测试数量：55。
 
-### 2.1 Governance：42/42
+### 2.1 Governance：43/43
 
 覆盖：
 
@@ -34,6 +34,7 @@ Workflow：`.github/workflows/idi-p6-bounded-automation-readiness.yml`
 - L2/L3 Site/HIL/Safety/Rollback Evidence 要求；
 - Evidence 齐全后 Production 仍然 false；
 - 11 类 permanent prohibition；
+- 未定义 automation operation enum 值也必须 fail-closed；
 - L4 拒绝；
 - P0 Production fail-closed 与 L1 边界未被削弱。
 
@@ -80,7 +81,7 @@ Workflow：`.github/workflows/idi-p6-automation-readiness-stress-soak.yml`
 5. L2 缺真实 Evidence 重复 5,000 次持续 fail-closed；
 6. L3 Evidence 齐全重复 5,000 次仍只 software-side ready。
 
-Stress gate 之后再次完整执行 42 + 12 = 54 个 Specialty Contract，防止压力测试与专项契约脱节。
+Stress gate 之后再次完整执行 43 + 12 = 55 个 Specialty Contract，防止压力测试与专项契约脱节。
 
 ## 4. SQL Evidence Gate
 
@@ -169,6 +170,7 @@ Final claim: software-side ready only
 ProductionEnablementAllowed: false
 ControlWriteAllowed: false
 Permanent prohibitions: 11/11 retained
+Unknown operation values: fail-closed
 Real HIL gate included: false
 ```
 
