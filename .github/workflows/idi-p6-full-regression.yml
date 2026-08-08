@@ -19,6 +19,7 @@ on:
       - 'docs/交付文件/00-*'
       - '.github/workflows/idi-p6-bounded-automation-readiness.yml'
       - '.github/workflows/idi-p6-automation-readiness-stress-soak.yml'
+      - '.github/workflows/idi-p6-readiness-sql.yml'
       - '.github/workflows/idi-p6-full-regression.yml'
   workflow_dispatch:
 
@@ -34,7 +35,7 @@ concurrency:
 jobs:
   exact-head-matrix:
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/idi-p6-') }}
-    name: reuse or dispatch 55 exact-head software workflows
+    name: reuse or dispatch 56 exact-head software workflows
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:
@@ -105,9 +106,10 @@ jobs:
           328690643	WCS IDI P5 Optimizer Stress Soak
           idi-p6-bounded-automation-readiness.yml	WCS IDI P6 Bounded Automation Readiness Contract
           idi-p6-automation-readiness-stress-soak.yml	WCS IDI P6 Automation Readiness Stress Soak
+          idi-p6-readiness-sql.yml	WCS IDI P6 Readiness SQL Evidence
           EOF
-          test "$(wc -l < artifacts/idi-p6-full-regression/workflows.tsv)" -eq 55
-          printf 'expected_sha=%s\nhead_ref=%s\nworkflow_count=55\nreal_hil_gate_included=false\nproduction_enablement_allowed=false\nfinal_claim=software-side ready only\n' "$EXPECTED_SHA" "$HEAD_REF" | tee artifacts/idi-p6-full-regression/context.txt
+          test "$(wc -l < artifacts/idi-p6-full-regression/workflows.tsv)" -eq 56
+          printf 'expected_sha=%s\nhead_ref=%s\nworkflow_count=56\nreal_hil_gate_included=false\nproduction_enablement_allowed=false\nfinal_claim=software-side ready only\n' "$EXPECTED_SHA" "$HEAD_REF" | tee artifacts/idi-p6-full-regression/context.txt
 
       - name: Reuse successful exact-head runs or dispatch fresh gates
         shell: bash
@@ -169,10 +171,10 @@ jobs:
             [[ -n "$run_id" ]] || { echo "Unable to resolve exact-head run for $workflow_name" >&2; exit 1; }
             printf '%s\t%s\t%s\t%s\n' "$workflow_ref" "$workflow_name" "$run_id" "$event" >> "$output"
           done < artifacts/idi-p6-full-regression/workflows.tsv
-          test "$(($(wc -l < "$output") - 1))" -eq 55
-          test "$(tail -n +2 "$output" | cut -f3 | sort -u | wc -l)" -eq 55
+          test "$(($(wc -l < "$output") - 1))" -eq 56
+          test "$(tail -n +2 "$output" | cut -f3 | sort -u | wc -l)" -eq 56
 
-      - name: Wait for all 55 exact-head software workflows
+      - name: Wait for all 56 exact-head software workflows
         shell: bash
         run: |
           set -euo pipefail
@@ -205,7 +207,7 @@ jobs:
             (( $(date +%s) < deadline )) || { echo "Timed out waiting for $pending workflows" >&2; exit 1; }
             sleep 40
           done
-          test "$(($(wc -l < "$results") - 1))" -eq 55
+          test "$(($(wc -l < "$results") - 1))" -eq 56
 
       - name: Verify PR head did not move
         if: ${{ github.event_name == 'pull_request' }}
@@ -228,12 +230,12 @@ jobs:
         run: |
           set -euo pipefail
           jq -Rn --arg expectedHeadSha "$EXPECTED_SHA" --arg headRef "$HEAD_REF" '[inputs | split("\t") | {workflowRef:.[0],workflowName:.[1],runId:(.[2]|tonumber),status:.[3],conclusion:.[4],headSha:.[5],htmlUrl:.[6]}] | {stage:"IDI-P6",expectedHeadSha:$expectedHeadSha,headRef:$headRef,workflowCount:length,allSuccess:all(.[]; .status=="completed" and .conclusion=="success" and .headSha==$expectedHeadSha),finalClaim:"software-side ready only",readinessEvaluationLevels:"L0-L3",productionEnablementAllowed:false,controlWriteAllowed:false,defaultsDisabled:true,permanentProhibitionCount:11,realSiteEvidenceRequiredForL2L3:true,realHilEvidenceRequiredForL2L3:true,realHilGateIncluded:false,workflows:.}' < <(tail -n +2 artifacts/idi-p6-full-regression/results.tsv) | tee artifacts/idi-p6-full-regression/evidence.json
-          test "$(jq -r '.workflowCount' artifacts/idi-p6-full-regression/evidence.json)" = 55
+          test "$(jq -r '.workflowCount' artifacts/idi-p6-full-regression/evidence.json)" = 56
           test "$(jq -r '.allSuccess' artifacts/idi-p6-full-regression/evidence.json)" = true
           test "$(jq -r '.productionEnablementAllowed' artifacts/idi-p6-full-regression/evidence.json)" = false
           test "$(jq -r '.controlWriteAllowed' artifacts/idi-p6-full-regression/evidence.json)" = false
           test "$(jq -r '.finalClaim' artifacts/idi-p6-full-regression/evidence.json)" = 'software-side ready only'
-          for workflow in 'WCS IDI P0 Governance Contract' 'WCS IDI P1 ModelOps Contract' 'WCS IDI P2 Feature Center Contract' 'WCS IDI P3 Shadow Decision Contract' 'WCS IDI P4 Maintenance Learning Contract' 'WCS IDI P5 Digital Twin Optimizer Contract' 'WCS IDI P5 Optimizer Stress Soak' 'WCS IDI P6 Bounded Automation Readiness Contract' 'WCS IDI P6 Automation Readiness Stress Soak' 'WCS One Hour Soak Load'; do
+          for workflow in 'WCS IDI P0 Governance Contract' 'WCS IDI P1 ModelOps Contract' 'WCS IDI P2 Feature Center Contract' 'WCS IDI P3 Shadow Decision Contract' 'WCS IDI P4 Maintenance Learning Contract' 'WCS IDI P5 Digital Twin Optimizer Contract' 'WCS IDI P5 Optimizer Stress Soak' 'WCS IDI P6 Bounded Automation Readiness Contract' 'WCS IDI P6 Automation Readiness Stress Soak' 'WCS IDI P6 Readiness SQL Evidence' 'WCS One Hour Soak Load'; do
             test "$(jq -r --arg workflow "$workflow" '[.workflows[] | select(.workflowName == $workflow and .conclusion == "success")] | length' artifacts/idi-p6-full-regression/evidence.json)" = 1
           done
 
