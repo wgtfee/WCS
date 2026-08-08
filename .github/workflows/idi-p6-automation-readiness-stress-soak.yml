@@ -44,7 +44,7 @@ jobs:
             ! echo "$OUT" | grep -Eq 'Failed:[[:space:]]+[1-9][0-9]*'
           done
 
-      - name: Re-run all 54 P6 specialty contracts once
+      - name: Re-run all 55 P6 specialty contracts once
         shell: bash
         run: |
           set -euo pipefail
@@ -52,8 +52,8 @@ jobs:
           API=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~BoundedAutomationEvidenceContractTests' --logger 'console;verbosity=normal')
           printf '%s\n' "$GOV" | tee artifacts/idi-p6-stress-soak/governance.txt
           printf '%s\n' "$API" | tee artifacts/idi-p6-stress-soak/evidence-api.txt
-          echo "$GOV" | grep -Eq 'Total tests:[[:space:]]+42'
-          echo "$GOV" | grep -Eq 'Passed:[[:space:]]+42'
+          echo "$GOV" | grep -Eq 'Total tests:[[:space:]]+43'
+          echo "$GOV" | grep -Eq 'Passed:[[:space:]]+43'
           echo "$API" | grep -Eq 'Total tests:[[:space:]]+12'
           echo "$API" | grep -Eq 'Passed:[[:space:]]+12'
 
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '{"schema":"wcs-idi-p6-stress-soak/v1","head_sha":"%s","stressRepetitions":3,"stressTestsPerRepetition":6,"stressPassedTotal":18,"specialtyTests":54,"allSuccess":true,"finalClaim":"software-side ready only","productionEnablementAllowed":false,"controlWriteAllowed":false,"permanentProhibitionCount":11,"realHilExecuted":false,"oneHourSoakIsSeparateCumulativeGate":true}\n' "$EVIDENCE_HEAD_SHA" > artifacts/idi-p6-stress-soak/evidence.json
+          printf '{"schema":"wcs-idi-p6-stress-soak/v1","head_sha":"%s","stressRepetitions":3,"stressTestsPerRepetition":6,"stressPassedTotal":18,"specialtyTests":55,"allSuccess":true,"finalClaim":"software-side ready only","productionEnablementAllowed":false,"controlWriteAllowed":false,"permanentProhibitionCount":11,"unknownOperationFailClosed":true,"realHilExecuted":false,"oneHourSoakIsSeparateCumulativeGate":true}\n' "$EVIDENCE_HEAD_SHA" > artifacts/idi-p6-stress-soak/evidence.json
           test "$(jq -r '.head_sha' artifacts/idi-p6-stress-soak/evidence.json)" = "$EVIDENCE_HEAD_SHA"
 
       - uses: actions/upload-artifact@v4
