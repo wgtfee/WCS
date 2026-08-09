@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:Class="Wcs.Desktop.Views.IndustrialIntelligenceOverviewView"
+             x:DataType="vm:IndustrialIntelligenceOverviewViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="16">
+      <TextBlock Text="Industrial Decision Intelligence 总览" FontSize="24" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding BoundaryText}" TextWrapping="Wrap" Opacity="0.75" />
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+        <Border Grid.Column="0" Padding="12" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Available stages"/><TextBlock Text="{Binding AvailableStageCount}" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+        <Border Grid.Column="1" Padding="12" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Fail-closed / unavailable"/><TextBlock Text="{Binding FailClosedStageCount}" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+      </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="刷新 P0-P6" Command="{Binding RefreshCommand}" />
+        <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+      </StackPanel>
+      <DataGrid ItemsSource="{Binding Stages}" AutoGenerateColumns="False" IsReadOnly="True" MinHeight="360">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Stage" Binding="{Binding Stage}" Width="70" />
+          <DataGridTextColumn Header="Capability" Binding="{Binding Name}" Width="220" />
+          <DataGridCheckBoxColumn Header="Available" Binding="{Binding Available}" Width="90" />
+          <DataGridTextColumn Header="Environment" Binding="{Binding Environment}" Width="120" />
+          <DataGridTextColumn Header="Max Level" Binding="{Binding MaximumAutomationLevel}" Width="100" />
+          <DataGridCheckBoxColumn Header="Control Write" Binding="{Binding ControlWriteAllowed}" Width="100" />
+          <DataGridTextColumn Header="Items" Binding="{Binding ItemCount}" Width="70" />
+          <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="*" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <Border Padding="12" BorderThickness="1" CornerRadius="6">
+        <TextBlock Text="建议使用顺序：P0 Governance → P1 ModelOps → P2 Feature Center → P3 Shadow Decision → P4 Maintenance Learning → P5 Digital Twin Optimizer → P6 Bounded Automation Readiness。P5/P6 仍是 recommendation/software-side readiness，不是 Production 自动控制。" TextWrapping="Wrap" />
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

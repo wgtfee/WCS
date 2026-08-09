@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             x:Class="Wcs.Desktop.Views.FeatureCenterView"
+             x:DataType="vm:FeatureCenterViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="16">
+      <TextBlock Text="IDI-P2 Feature Center" FontSize="24" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding SafetyText}" TextWrapping="Wrap" Opacity="0.75" />
+
+      <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+        <Border Grid.Column="0" Padding="12" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Feature Definitions"/><TextBlock Text="{Binding FeatureCount}" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+        <Border Grid.Column="1" Padding="12" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Entity Types"/><TextBlock Text="{Binding EntityTypeCount}" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+        <Border Grid.Column="2" Padding="12" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Sources"/><TextBlock Text="{Binding SourceCount}" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+      </Grid>
+
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="刷新 Feature Definitions" Command="{Binding RefreshCommand}" />
+        <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <DataGrid ItemsSource="{Binding Features}" AutoGenerateColumns="False" IsReadOnly="True" MinHeight="280">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="FeatureId" Binding="{Binding FeatureId}" Width="180" />
+          <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
+          <DataGridTextColumn Header="Entity" Binding="{Binding EntityType}" Width="120" />
+          <DataGridTextColumn Header="Type" Binding="{Binding DataType}" Width="100" />
+          <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="180" />
+          <DataGridTextColumn Header="Aggregation" Binding="{Binding Aggregation}" Width="120" />
+          <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="90" />
+          <DataGridTextColumn Header="Owner" Binding="{Binding Owner}" Width="120" />
+          <DataGridTextColumn Header="DefinitionHash" Binding="{Binding DefinitionHash}" Width="*" />
+        </DataGrid.Columns>
+      </DataGrid>
+
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+        <Border Grid.Column="0" Padding="12" BorderThickness="1" CornerRadius="6">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Schema 查询" FontSize="18" FontWeight="SemiBold" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox Width="180" PlaceholderText="SchemaId" Text="{Binding SchemaId}" />
+              <TextBox Width="120" PlaceholderText="Version" Text="{Binding SchemaVersion}" />
+              <Button Content="读取" Command="{Binding LoadSchemaCommand}" />
+            </StackPanel>
+            <TextBlock Text="{Binding SchemaText}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="1" Padding="12" BorderThickness="1" CornerRadius="6">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Snapshot 查询" FontSize="18" FontWeight="SemiBold" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox Width="300" PlaceholderText="SnapshotId" Text="{Binding SnapshotId}" />
+              <Button Content="读取" Command="{Binding LoadSnapshotCommand}" />
+            </StackPanel>
+            <TextBlock Text="{Binding SnapshotText}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Border Padding="12" BorderThickness="1" CornerRadius="6">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Point-in-Time Dataset 查询" FontSize="18" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBox Width="220" PlaceholderText="DatasetId" Text="{Binding DatasetId}" />
+            <TextBox Width="120" PlaceholderText="Version" Text="{Binding DatasetVersion}" />
+            <Button Content="读取" Command="{Binding LoadDatasetCommand}" />
+          </StackPanel>
+          <TextBlock Text="{Binding DatasetText}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
