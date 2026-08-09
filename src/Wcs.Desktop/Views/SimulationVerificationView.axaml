@@ -1,117 +1,63 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.SimulationVerificationView"
              x:DataType="vm:SimulationVerificationViewModel"
              Background="{DynamicResource BgPrimary}">
     <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="24" RowSpacing="16">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <StackPanel>
-                <TextBlock Text="S10 统一仿真与验证中心"
-                           FontSize="26"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource TextPrimary}" />
-                <TextBlock Text="统一展示 S0～S9 能力、当前环境可用性、只读 API 与安全验收边界"
-                           Margin="0,4,0,0"
-                           Foreground="{DynamicResource TextSecondary}" />
-                <TextBlock Text="{Binding StatusText}"
-                           Margin="0,4,0,0"
-                           Foreground="{DynamicResource TextSecondary}" />
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-page-title" Text="S10 统一仿真与验证中心" />
+                <TextBlock Classes="wcs-page-subtitle" Text="统一展示 S0～S9 能力、当前环境可用性、只读 API 与安全验收边界。" />
+                <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
             </StackPanel>
-            <Button Grid.Column="1"
-                    Content="刷新状态"
-                    Command="{Binding RefreshCommand}"
-                    Padding="20,8" />
+            <atom:Button Grid.Column="1" Content="刷新状态" Command="{Binding RefreshCommand}" />
         </Grid>
 
-        <Border Grid.Row="1"
-                Padding="14"
-                CornerRadius="8"
-                BorderThickness="1"
-                BorderBrush="#D97706"
-                Background="#22D97706">
-            <StackPanel>
-                <TextBlock Text="安全边界"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource TextPrimary}" />
-                <TextBlock Text="{Binding SafetyText}"
-                           Margin="0,4,0,0"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource TextSecondary}" />
-                <TextBlock Text="本页面不提供场景执行、故障注入、PLC/RGV 控制、HIL 启动、机械安全确认或 Site Acceptance 写入入口。"
-                           Margin="0,4,0,0"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource TextSecondary}" />
+        <Border Grid.Row="1" Classes="wcs-boundary-strip">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-section-title" Text="安全边界" />
+                <TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}" />
+                <TextBlock Classes="wcs-page-subtitle" Text="本页面不提供场景执行、故障注入、PLC/RGV 控制、HIL 启动、机械安全确认或 Site Acceptance 写入入口。" />
             </StackPanel>
         </Border>
 
         <UniformGrid Grid.Row="2" Columns="6" Rows="1">
-            <Border Margin="0,0,4,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
-                <StackPanel><TextBlock Text="环境" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding Environment}" FontSize="18" FontWeight="Bold" TextWrapping="Wrap" /></StackPanel>
-            </Border>
-            <Border Margin="4,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
-                <StackPanel><TextBlock Text="页面模式" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ModeText}" FontSize="18" FontWeight="Bold" /></StackPanel>
-            </Border>
-            <Border Margin="4,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
-                <StackPanel><TextBlock Text="仿真检查" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding SimulationText}" FontSize="18" FontWeight="Bold" /></StackPanel>
-            </Border>
-            <Border Margin="4,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
-                <StackPanel><TextBlock Text="HIL 检查" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding HilText}" FontSize="18" FontWeight="Bold" /></StackPanel>
-            </Border>
-            <Border Margin="4,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
-                <StackPanel><TextBlock Text="可用阶段" Foreground="{DynamicResource TextSecondary}" /><TextBlock FontSize="18" FontWeight="Bold"><Run Text="{Binding AvailableStageCount}"/><Run Text=" / "/><Run Text="{Binding TotalStageCount}"/></TextBlock></StackPanel>
-            </Border>
-            <Border Margin="4,0,0,0" Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
-                <StackPanel><TextBlock Text="真实 HIL" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding RealHilText}" FontSize="18" FontWeight="Bold" /></StackPanel>
-            </Border>
+            <atom:Card Margin="0,0,4,0" StyleVariant="Outlined"><atom:Statistic Header="环境" Value="{Binding Environment}" ContentFontSize="18" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="页面模式" Value="{Binding ModeText}" ContentFontSize="18" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="仿真检查" Value="{Binding SimulationText}" ContentFontSize="18" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="HIL 检查" Value="{Binding HilText}" ContentFontSize="18" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><StackPanel><atom:Statistic Header="可用阶段" Value="{Binding AvailableStageCount}" ContentFontSize="18"/><TextBlock Classes="wcs-toolbar-status" Text="{Binding TotalStageCount, StringFormat='总计 {0} 阶段'}"/></StackPanel></atom:Card>
+            <atom:Card Margin="4,0,0,0" StyleVariant="Outlined"><atom:Statistic Header="真实 HIL" Value="{Binding RealHilText}" ContentFontSize="18" /></atom:Card>
         </UniformGrid>
 
         <Grid Grid.Row="3" ColumnDefinitions="2*,*" ColumnSpacing="16">
-            <Border Padding="12" CornerRadius="8" Background="{DynamicResource BgSecondary}">
-                <Grid RowDefinitions="Auto,*" RowSpacing="8">
-                    <TextBlock Text="阶段能力矩阵"
-                               FontSize="18"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource TextPrimary}" />
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding Stages}"
-                              SelectedItem="{Binding SelectedStage}"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="阶段" Binding="{Binding Id}" Width="70" />
-                            <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="170" />
-                            <DataGridTextColumn Header="当前状态" Binding="{Binding AvailabilityText}" Width="130" />
-                            <DataGridTextColumn Header="RunId" Binding="{Binding RunIdRequirement}" Width="80" />
-                            <DataGridTextColumn Header="执行边界" Binding="{Binding HardwareRequirement}" Width="100" />
-                            <DataGridTextColumn Header="API 前缀" Binding="{Binding ApiPrefix}" Width="220" />
-                            <DataGridTextColumn Header="能力" Binding="{Binding Capability}" Width="*" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </Grid>
-            </Border>
+            <atom:Card Header="阶段能力矩阵" StyleVariant="Outlined">
+                <atom:DataGrid ItemsSource="{Binding Stages}" SelectedItem="{Binding SelectedStage}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="阶段" Binding="{Binding Id}" Width="70" />
+                        <atom:DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="170" />
+                        <atom:DataGridTextColumn Header="当前状态" Binding="{Binding AvailabilityText}" Width="130" />
+                        <atom:DataGridTextColumn Header="RunId" Binding="{Binding RunIdRequirement}" Width="80" />
+                        <atom:DataGridTextColumn Header="执行边界" Binding="{Binding HardwareRequirement}" Width="100" />
+                        <atom:DataGridTextColumn Header="API 前缀" Binding="{Binding ApiPrefix}" Width="220" />
+                        <atom:DataGridTextColumn Header="能力" Binding="{Binding Capability}" Width="*" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </atom:Card>
 
-            <Border Grid.Column="1" Padding="16" CornerRadius="8" Background="{DynamicResource BgSecondary}">
+            <atom:Card Grid.Column="1" Header="选中阶段" StyleVariant="Outlined">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="选中阶段"
-                               FontSize="18"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource TextPrimary}" />
                     <TextBlock Text="{Binding SelectedStage.Id}" FontSize="26" FontWeight="Bold" />
                     <TextBlock Text="{Binding SelectedStage.Name}" FontSize="17" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding SelectedStage.Capability}"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource TextSecondary}" />
-                    <TextBlock Text="只读 API" FontWeight="Bold" Margin="0,8,0,0" />
-                    <TextBlock Text="{Binding SelectedStage.ApiPrefix}"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource TextSecondary}" />
-                    <TextBlock Text="安全说明" FontWeight="Bold" Margin="0,8,0,0" />
-                    <TextBlock Text="{Binding SelectedStage.SafetyBoundary}"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource TextSecondary}" />
+                    <TextBlock Text="{Binding SelectedStage.Capability}" TextWrapping="Wrap" />
+                    <TextBlock Classes="wcs-section-title" Text="只读 API" Margin="0,8,0,0" />
+                    <TextBlock Text="{Binding SelectedStage.ApiPrefix}" TextWrapping="Wrap" />
+                    <TextBlock Classes="wcs-section-title" Text="安全说明" Margin="0,8,0,0" />
+                    <TextBlock Text="{Binding SelectedStage.SafetyBoundary}" TextWrapping="Wrap" />
                 </StackPanel>
-            </Border>
+            </atom:Card>
         </Grid>
     </Grid>
 </UserControl>
