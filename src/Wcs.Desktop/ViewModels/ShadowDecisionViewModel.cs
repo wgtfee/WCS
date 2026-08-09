@@ -54,9 +54,9 @@ public partial class ShadowDecisionViewModel : ViewModelBase
             Proposals.Clear();
             foreach (var item in values) Proposals.Add(item);
             ProposalCount = Proposals.Count;
-            BlockedCount = Proposals.Count(x => string.Equals(x.Status, "Blocked", StringComparison.OrdinalIgnoreCase));
-            ApprovedCount = Proposals.Count(x => string.Equals(x.Status, "Approved", StringComparison.OrdinalIgnoreCase));
-            PendingCount = Proposals.Count(x => string.Equals(x.Status, "Shadow", StringComparison.OrdinalIgnoreCase) || string.Equals(x.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase));
+            BlockedCount = Proposals.Count(x => x.Status == DecisionProposalStatusDto.Blocked);
+            ApprovedCount = Proposals.Count(x => x.Status == DecisionProposalStatusDto.Approved);
+            PendingCount = Proposals.Count(x => x.Status is DecisionProposalStatusDto.Shadow or DecisionProposalStatusDto.PendingApproval);
             StatusText = $"已刷新：{DateTime.Now:yyyy-MM-dd HH:mm:ss} · Proposal {ProposalCount} · Pending {PendingCount} · Blocked {BlockedCount} · Approved {ApprovedCount}";
         }
         catch (Exception ex) { StatusText = $"读取失败（保持 proposal-only）：{ex.Message}"; }
