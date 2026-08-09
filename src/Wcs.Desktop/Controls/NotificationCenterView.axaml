@@ -2,102 +2,57 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
              xmlns:md="using:Wcs.Desktop.Models"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Controls.NotificationCenterView"
-             Width="680" Height="380"
+             Width="720" Height="400"
              x:DataType="vm:MainWindowViewModel">
-    <Border Background="{DynamicResource BgSecondary}" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource BorderColor}">
-        <Grid RowDefinitions="Auto,*">
-            <!-- Header -->
-            <Border Background="{DynamicResource BgCard}" Padding="16,10" CornerRadius="6,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="消息中心" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
-                    <TextBlock Grid.Column="1" FontSize="12" Foreground="{DynamicResource TextSecondary}"
-                               VerticalAlignment="Center">
-                        <Run Text="{Binding NotificationCenter.UnreadCount}"/>
-                        <Run Text="条未读"/>
-                    </TextBlock>
-                </Grid>
-            </Border>
-
-            <!-- 三列平级显示 -->
-            <Grid Grid.Row="1" ColumnDefinitions="*,*,*" Margin="0">
-
-                <!-- 未读消息列 -->
-                <Border Grid.Column="0" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource BorderColor}">
-                    <Grid RowDefinitions="Auto,*">
-                        <TextBlock Grid.Row="0" Text="未读消息" FontWeight="Bold" Foreground="#2196F3"
-                                   FontSize="13" Padding="12,10" Background="{DynamicResource BgSidebar}"/>
-                        <ListBox Grid.Row="1" ItemsSource="{Binding NotificationCenter.UnreadMessages}"
-                                 Background="Transparent" BorderThickness="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="md:NotificationItem">
-                                    <Border Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
-                                        <StackPanel Spacing="3">
-                                            <TextBlock Text="{Binding Title}" FontWeight="Bold"
-                                                       Foreground="{DynamicResource TextPrimary}" FontSize="12"/>
-                                            <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextSecondary}" FontSize="11"
-                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding Time, StringFormat='{}{0:HH:mm}'}"
-                                                       Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
-                </Border>
-
-                <!-- 系统消息列 -->
-                <Border Grid.Column="1" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource BorderColor}">
-                    <Grid RowDefinitions="Auto,*">
-                        <TextBlock Grid.Row="0" Text="系统消息" FontWeight="Bold" Foreground="#FF9800"
-                                   FontSize="13" Padding="12,10" Background="{DynamicResource BgSidebar}"/>
-                        <ListBox Grid.Row="1" ItemsSource="{Binding NotificationCenter.SystemMessages}"
-                                 Background="Transparent" BorderThickness="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="md:NotificationItem">
-                                    <Border Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
-                                        <StackPanel Spacing="3">
-                                            <TextBlock Text="{Binding Title}" FontWeight="Bold"
-                                                       Foreground="#FF9800" FontSize="12"/>
-                                            <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextSecondary}" FontSize="11"
-                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding Time, StringFormat='{}{0:MM/dd HH:mm}'}"
-                                                       Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
-                </Border>
-
-                <!-- 已读消息列 -->
-                <Border Grid.Column="2">
-                    <Grid RowDefinitions="Auto,*">
-                        <TextBlock Grid.Row="0" Text="已读消息" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}"
-                                   FontSize="13" Padding="12,10" Background="{DynamicResource BgSidebar}"/>
-                        <ListBox Grid.Row="1" ItemsSource="{Binding NotificationCenter.ReadMessages}"
-                                 Background="Transparent" BorderThickness="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="md:NotificationItem">
-                                    <Border Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
-                                        <StackPanel Spacing="3">
-                                            <TextBlock Text="{Binding Title}" FontWeight="Bold"
-                                                       Foreground="{DynamicResource TextSecondary}" FontSize="12"/>
-                                            <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextSecondary}" FontSize="11"
-                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding Time, StringFormat='{}{0:MM/dd HH:mm}'}"
-                                                       Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
-                </Border>
-
+    <atom:Card Header="消息中心" StyleVariant="Outlined">
+        <Grid RowDefinitions="Auto,*" RowSpacing="10">
+            <TextBlock Grid.Row="0" HorizontalAlignment="Right" FontSize="12" Foreground="{DynamicResource TextSecondary}">
+                <Run Text="{Binding NotificationCenter.UnreadCount}"/>
+                <Run Text=" 条未读"/>
+            </TextBlock>
+            <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="10">
+                <atom:Card Grid.Column="0" Header="未读消息" StyleVariant="Outlined">
+                    <atom:ListView ItemsSource="{Binding NotificationCenter.UnreadMessages}">
+                        <atom:ListView.ItemTemplate>
+                            <DataTemplate x:DataType="md:NotificationItem">
+                                <StackPanel Spacing="3" Margin="4">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" FontSize="12"/>
+                                    <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextSecondary}" FontSize="11" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Time, StringFormat='{}{0:HH:mm}'}" Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </atom:ListView.ItemTemplate>
+                    </atom:ListView>
+                </atom:Card>
+                <atom:Card Grid.Column="1" Header="系统消息" StyleVariant="Outlined">
+                    <atom:ListView ItemsSource="{Binding NotificationCenter.SystemMessages}">
+                        <atom:ListView.ItemTemplate>
+                            <DataTemplate x:DataType="md:NotificationItem">
+                                <StackPanel Spacing="3" Margin="4">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" FontSize="12"/>
+                                    <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextSecondary}" FontSize="11" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Time, StringFormat='{}{0:MM/dd HH:mm}'}" Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </atom:ListView.ItemTemplate>
+                    </atom:ListView>
+                </atom:Card>
+                <atom:Card Grid.Column="2" Header="已读消息" StyleVariant="Outlined">
+                    <atom:ListView ItemsSource="{Binding NotificationCenter.ReadMessages}">
+                        <atom:ListView.ItemTemplate>
+                            <DataTemplate x:DataType="md:NotificationItem">
+                                <StackPanel Spacing="3" Margin="4">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" FontSize="12"/>
+                                    <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextSecondary}" FontSize="11" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Time, StringFormat='{}{0:MM/dd HH:mm}'}" Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </atom:ListView.ItemTemplate>
+                    </atom:ListView>
+                </atom:Card>
             </Grid>
         </Grid>
-    </Border>
+    </atom:Card>
 </UserControl>
