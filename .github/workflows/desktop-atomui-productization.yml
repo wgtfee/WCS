@@ -38,7 +38,7 @@ jobs:
           grep -q 'UseDesktopDataGrid' src/Wcs.Desktop/App.axaml.cs
           grep -q 'AtomUIProductStyles.axaml' src/Wcs.Desktop/App.axaml
 
-      - name: Verify first-wave product pages use AtomUI controls
+      - name: Verify migrated product pages use AtomUI controls
         shell: bash
         run: |
           set -euo pipefail
@@ -47,18 +47,48 @@ jobs:
             src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
             src/Wcs.Desktop/Views/FeatureCenterView.axaml
             src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
+            src/Wcs.Desktop/Views/TransportTrafficView.axaml
+            src/Wcs.Desktop/Views/TransportProductionView.axaml
+            src/Wcs.Desktop/Views/TransportObservabilityView.axaml
+            src/Wcs.Desktop/Views/TransportResilienceView.axaml
           )
 
           for page in "${pages[@]}"; do
             grep -q 'xmlns:atom="https://atomui.net"' "$page"
-            grep -q '<atom:Card' "$page"
             grep -q '<atom:Button' "$page"
             grep -q '<atom:DataGrid' "$page"
             ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])' "$page"
           done
 
-          grep -q '<atom:Statistic' src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
-          grep -q '<atom:TabControl' src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
+          kpi_pages=(
+            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
+            src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
+            src/Wcs.Desktop/Views/FeatureCenterView.axaml
+            src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
+            src/Wcs.Desktop/Views/TransportTrafficView.axaml
+            src/Wcs.Desktop/Views/TransportProductionView.axaml
+            src/Wcs.Desktop/Views/TransportObservabilityView.axaml
+            src/Wcs.Desktop/Views/TransportResilienceView.axaml
+          )
+          for page in "${kpi_pages[@]}"; do
+            grep -q '<atom:Card' "$page"
+            grep -q '<atom:Statistic' "$page"
+          done
+
+          tab_pages=(
+            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
+            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
+            src/Wcs.Desktop/Views/TransportTrafficView.axaml
+            src/Wcs.Desktop/Views/TransportProductionView.axaml
+            src/Wcs.Desktop/Views/TransportObservabilityView.axaml
+            src/Wcs.Desktop/Views/TransportResilienceView.axaml
+          )
+          for page in "${tab_pages[@]}"; do
+            grep -q '<atom:TabControl' "$page"
+          done
+
           grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/FeatureCenterView.axaml
           grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/ShadowDecisionView.axaml
 
@@ -68,7 +98,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/desktop-atomui
           cat > artifacts/desktop-atomui/evidence.json <<EOF
-          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":4,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
+          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":9,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
           EOF
 
       - uses: actions/upload-artifact@v4
