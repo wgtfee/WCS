@@ -3,24 +3,12 @@
              xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Controls.UserProfileOverlay"
              Width="480" Height="340">
-    <Border Background="{DynamicResource BgSecondary}" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource BorderColor}">
-        <Grid RowDefinitions="Auto,*,Auto">
-            <!-- Header -->
-            <Border Background="{DynamicResource BgCard}" Padding="16,12" CornerRadius="8,8,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="个人信息" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
-                    <Button Grid.Column="1" Width="30" Height="30"
-                            Content="✕" FontSize="12"
-                            Background="Transparent" BorderThickness="0"
-                            Click="CloseClick"/>
-                </Grid>
-            </Border>
-
-            <!-- Body -->
-            <StackPanel Grid.Row="1" Spacing="14" Margin="24,20">
+    <atom:Card Header="个人信息" StyleVariant="Outlined">
+        <Grid RowDefinitions="*,Auto" RowSpacing="16">
+            <StackPanel Spacing="14" Margin="8">
                 <Grid ColumnDefinitions="100,*">
                     <TextBlock Text="用户名:" Foreground="{DynamicResource TextSecondary}" FontSize="14"/>
-                    <TextBlock Grid.Column="1" Text="Admin" Foreground="{DynamicResource TextPrimary}" FontSize="14" FontWeight="Bold"/>
+                    <TextBlock Grid.Column="1" Text="Admin" Foreground="{DynamicResource TextPrimary}" FontSize="14" FontWeight="SemiBold"/>
                 </Grid>
                 <Grid ColumnDefinitions="100,*">
                     <TextBlock Text="角色:" Foreground="{DynamicResource TextSecondary}" FontSize="14"/>
@@ -35,15 +23,7 @@
                     <TextBlock Grid.Column="1" Text="2026-06-12 08:30:00" Foreground="{DynamicResource TextPrimary}" FontSize="14"/>
                 </Grid>
             </StackPanel>
-
-            <!-- Close button -->
-            <Border Grid.Row="2" Padding="16,10" CornerRadius="0,0,8,8" Background="{DynamicResource BgSidebar}">
-                <atom:Button Content="关闭" Width="100" Height="32"
-                        Classes="Secondary"
-                        HorizontalAlignment="Center"
-                        VerticalContentAlignment="Center"
-                        Click="CloseClick"/>
-            </Border>
+            <atom:Button Grid.Row="1" Content="关闭" Width="100" Height="34" HorizontalAlignment="Center" Click="CloseClick"/>
         </Grid>
-    </Border>
+    </atom:Card>
 </UserControl>
