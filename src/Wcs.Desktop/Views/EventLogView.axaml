@@ -1,49 +1,38 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:conv="using:Wcs.Desktop.Converters"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.EventLogView"
              x:DataType="vm:EventLogViewModel"
              Background="{DynamicResource BgPrimary}">
-    <UserControl.Resources>
-        <conv:StatusToColorConverter x:Key="StatusToColor" />
-    </UserControl.Resources>
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-page-title" Text="Event Log" />
+                <TextBlock Classes="wcs-page-subtitle" Text="运行事件、分类与时间序列的统一只读追踪视图。" />
+            </StackPanel>
+            <CheckBox Grid.Column="1" IsChecked="{Binding AutoScroll}" Content="Auto-scroll" VerticalAlignment="Center" />
+        </Grid>
 
-    <DockPanel Margin="16">
-        <!-- Toolbar -->
-        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Text="Event Log" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
-                           VerticalAlignment="Center" />
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                    <CheckBox IsChecked="{Binding AutoScroll}" Foreground="{DynamicResource TextPrimary}"
-                              Content="Auto-scroll" />
-                </StackPanel>
-            </Grid>
-        </Border>
+        <UniformGrid Grid.Row="1" Columns="1" Rows="1">
+            <atom:Card StyleVariant="Outlined" IsHoverable="True">
+                <atom:Statistic Header="当前事件" Value="{Binding Entries.Count}" ContentFontSize="26" />
+            </atom:Card>
+        </UniformGrid>
 
-        <!-- Event Log List -->
-        <ListBox ItemsSource="{Binding Entries}"
-                 Background="{DynamicResource BgStatusBar}" BorderBrush="{DynamicResource BorderColor}">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <Border Padding="6,3" Background="Transparent">
-                        <Grid ColumnDefinitions="Auto,Auto,*">
-                            <TextBlock Text="{Binding Timestamp, StringFormat='HH:mm:ss'}"
-                                       Foreground="{DynamicResource TextSecondary}" FontSize="12" />
-                            <Border Grid.Column="1" CornerRadius="3" Padding="4,1"
-                                    Background="{Binding Level, Converter={StaticResource StatusToColor}, ConverterParameter=bg}"
-                                    Opacity="0.3">
-                                <TextBlock Text="{Binding Category}" FontSize="11"
-                                           Foreground="{DynamicResource TextPrimary}" FontWeight="Bold" />
-                            </Border>
-                            <TextBlock Grid.Column="2" Text="{Binding Message}"
-                                       Foreground="{DynamicResource TextSecondary}" FontSize="12"
-                                       TextWrapping="NoWrap" />
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-    </DockPanel>
+        <atom:Card Grid.Row="2" Header="事件流" StyleVariant="Outlined">
+            <atom:DataGrid ItemsSource="{Binding Entries}" AutoGenerateColumns="False"
+                           IsReadOnly="True"
+                           CanUserSortColumns="True"
+                           CanUserResizeColumns="True"
+                           PaginationVisibility="None">
+                <atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="时间" Binding="{Binding Timestamp}" Width="180" />
+                    <atom:DataGridTextColumn Header="级别" Binding="{Binding Level}" Width="100" />
+                    <atom:DataGridTextColumn Header="分类" Binding="{Binding Category}" Width="160" />
+                    <atom:DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="2*" />
+                </atom:DataGrid.Columns>
+            </atom:DataGrid>
+        </atom:Card>
+    </Grid>
 </UserControl>

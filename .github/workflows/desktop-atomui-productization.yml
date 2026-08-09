@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pages=(
+          grid_pages=(
             src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
             src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
             src/Wcs.Desktop/Views/FeatureCenterView.axaml
@@ -56,13 +56,38 @@ jobs:
             src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
             src/Wcs.Desktop/Views/TransportCommissioningView.axaml
             src/Wcs.Desktop/Views/TransportAdministrationView.axaml
+            src/Wcs.Desktop/Views/DeviceListView.axaml
+            src/Wcs.Desktop/Views/TaskManagementView.axaml
+            src/Wcs.Desktop/Views/AlarmPanelView.axaml
+            src/Wcs.Desktop/Views/EventLogView.axaml
           )
 
-          for page in "${pages[@]}"; do
+          for page in "${grid_pages[@]}"; do
             grep -q 'xmlns:atom="https://atomui.net"' "$page"
-            grep -q '<atom:Button' "$page"
             grep -q '<atom:DataGrid' "$page"
             ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])' "$page"
+          done
+
+          button_pages=(
+            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
+            src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
+            src/Wcs.Desktop/Views/FeatureCenterView.axaml
+            src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
+            src/Wcs.Desktop/Views/TransportTrafficView.axaml
+            src/Wcs.Desktop/Views/TransportProductionView.axaml
+            src/Wcs.Desktop/Views/TransportObservabilityView.axaml
+            src/Wcs.Desktop/Views/TransportResilienceView.axaml
+            src/Wcs.Desktop/Views/TransportOptimizationView.axaml
+            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
+            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+            src/Wcs.Desktop/Views/TransportAdministrationView.axaml
+            src/Wcs.Desktop/Views/DeviceListView.axaml
+            src/Wcs.Desktop/Views/TaskManagementView.axaml
+            src/Wcs.Desktop/Views/AlarmPanelView.axaml
+          )
+          for page in "${button_pages[@]}"; do
+            grep -q '<atom:Button' "$page"
           done
 
           kpi_pages=(
@@ -79,6 +104,10 @@ jobs:
             src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
             src/Wcs.Desktop/Views/TransportCommissioningView.axaml
             src/Wcs.Desktop/Views/TransportAdministrationView.axaml
+            src/Wcs.Desktop/Views/DeviceListView.axaml
+            src/Wcs.Desktop/Views/TaskManagementView.axaml
+            src/Wcs.Desktop/Views/AlarmPanelView.axaml
+            src/Wcs.Desktop/Views/EventLogView.axaml
           )
           for page in "${kpi_pages[@]}"; do
             grep -q '<atom:Card' "$page"
@@ -101,9 +130,16 @@ jobs:
             grep -q '<atom:TabControl' "$page"
           done
 
-          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/FeatureCenterView.axaml
-          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+          line_edit_pages=(
+            src/Wcs.Desktop/Views/FeatureCenterView.axaml
+            src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+            src/Wcs.Desktop/Views/TaskManagementView.axaml
+            src/Wcs.Desktop/Views/AlarmPanelView.axaml
+          )
+          for page in "${line_edit_pages[@]}"; do
+            grep -q '<atom:LineEdit' "$page"
+          done
 
       - name: Write exact-head UI evidence
         shell: bash
@@ -111,7 +147,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/desktop-atomui
           cat > artifacts/desktop-atomui/evidence.json <<EOF
-          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":13,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
+          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":17,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
           EOF
 
       - uses: actions/upload-artifact@v4

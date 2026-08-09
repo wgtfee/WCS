@@ -10,152 +10,66 @@
         <conv:StatusToColorConverter x:Key="StatusToColor" />
     </UserControl.Resources>
 
-    <DockPanel Margin="16">
-        <!-- Toolbar -->
-        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-                <TextBlock Text="任务管理" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
-                           VerticalAlignment="Center" />
-                <ComboBox Grid.Column="1" ItemsSource="{Binding SearchFields}"
-                          SelectedItem="{Binding SearchField}" Width="80" Margin="16,0,0,0" VerticalAlignment="Center" />
-                <TextBox Grid.Column="2" Watermark="搜索..." Text="{Binding SearchText}"
-                         Width="200" Margin="8,0,0,0" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="3" Text="{Binding Tasks.Count, StringFormat='共 {0} 条'}"
-                           FontSize="13" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="16,0,0,0" />
-                <Button Grid.Column="4" Content="刷新" Command="{Binding RefreshCommand}" Classes="Secondary" Margin="4,0,0,0" />
-            </Grid>
-        </Border>
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-page-title" Text="任务管理" />
+                <TextBlock Classes="wcs-page-subtitle" Text="任务状态、设备分配、路径、重试与异常信息的统一运行视图。" />
+            </StackPanel>
+            <ComboBox Grid.Column="1" ItemsSource="{Binding SearchFields}" SelectedItem="{Binding SearchField}" Width="100" VerticalAlignment="Center" />
+            <atom:LineEdit Grid.Column="2" Text="{Binding SearchText}" Watermark="搜索任务..." Width="220" VerticalAlignment="Center" />
+            <atom:Button Grid.Column="3" Content="刷新" Command="{Binding RefreshCommand}" />
+        </Grid>
 
-        <!-- 任务列表 DataGrid -->
-        <atom:DataGrid ItemsSource="{Binding Tasks}" AutoGenerateColumns="False"
-                       IsReadOnly="True"
-                       CanUserSortColumns="True"
-                       CanUserFilterColumns="True"
-                       CanUserResizeColumns="True"
-                       Margin="0,0,0,8">
-            <atom:DataGrid.Columns>
-                <atom:DataGridTemplateColumn Header="任务 ID" SortMemberPath="TaskId">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding TaskId}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="设备" SortMemberPath="DeviceId">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding DeviceId}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="状态" SortMemberPath="Status">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="4,0">
-                                <Ellipse Width="10" Height="10"
-                                         Fill="{Binding Status, Converter={StaticResource StatusToColor}}" />
-                                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="优先级" SortMemberPath="Priority">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Priority}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="等级" SortMemberPath="PriorityLevel">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding PriorityLevel}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="类别" SortMemberPath="Category">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Category}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="路径" SortMemberPath="RouteId">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding RouteId}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="创建时间" SortMemberPath="CreatedTime">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding CreatedTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="开始时间" SortMemberPath="StartTime">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding StartTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="结束时间" SortMemberPath="EndTime">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding EndTime, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="重试" SortMemberPath="RetryCount">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding RetryCount}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="最大重试" SortMemberPath="MaxRetries">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding MaxRetries}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="错误信息" SortMemberPath="ErrorMessage">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="父任务" SortMemberPath="ParentTaskId">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding ParentTaskId}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="依赖" SortMemberPath="Dependencies">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Dependencies}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="4,0" />
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-                <atom:DataGridTemplateColumn Header="操作">
-                    <atom:DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="4,0">
-                                <Button Content="取消"
-                                        Command="{Binding $parent[atom:DataGrid].DataContext.CancelTaskCommand}"
-                                        CommandParameter="{Binding TaskId}"
-                                        Classes="Danger" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </atom:DataGridTemplateColumn.CellTemplate>
-                </atom:DataGridTemplateColumn>
-            </atom:DataGrid.Columns>
-        </atom:DataGrid>
-    </DockPanel>
+        <UniformGrid Grid.Row="1" Columns="1" Rows="1">
+            <atom:Card StyleVariant="Outlined" IsHoverable="True">
+                <atom:Statistic Header="当前任务" Value="{Binding Tasks.Count}" ContentFontSize="26" />
+            </atom:Card>
+        </UniformGrid>
+
+        <atom:Card Grid.Row="2" Header="任务列表" StyleVariant="Outlined">
+            <atom:DataGrid ItemsSource="{Binding Tasks}" AutoGenerateColumns="False"
+                           IsReadOnly="True"
+                           CanUserSortColumns="True"
+                           CanUserFilterColumns="True"
+                           CanUserResizeColumns="True"
+                           PaginationVisibility="None">
+                <atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="任务 ID" Binding="{Binding TaskId}" Width="180" />
+                    <atom:DataGridTextColumn Header="设备" Binding="{Binding DeviceId}" Width="120" />
+                    <atom:DataGridTemplateColumn Header="状态" SortMemberPath="Status" Width="120">
+                        <atom:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="4,0">
+                                    <Ellipse Width="10" Height="10" Fill="{Binding Status, Converter={StaticResource StatusToColor}}" />
+                                    <TextBlock Text="{Binding Status}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </atom:DataGridTemplateColumn.CellTemplate>
+                    </atom:DataGridTemplateColumn>
+                    <atom:DataGridTextColumn Header="优先级" Binding="{Binding Priority}" Width="80" />
+                    <atom:DataGridTextColumn Header="等级" Binding="{Binding PriorityLevel}" Width="90" />
+                    <atom:DataGridTextColumn Header="类别" Binding="{Binding Category}" Width="100" />
+                    <atom:DataGridTextColumn Header="路径" Binding="{Binding RouteId}" Width="140" />
+                    <atom:DataGridTextColumn Header="创建时间" Binding="{Binding CreatedTime}" Width="180" />
+                    <atom:DataGridTextColumn Header="开始时间" Binding="{Binding StartTime}" Width="180" />
+                    <atom:DataGridTextColumn Header="结束时间" Binding="{Binding EndTime}" Width="180" />
+                    <atom:DataGridTextColumn Header="重试" Binding="{Binding RetryCount}" Width="70" />
+                    <atom:DataGridTextColumn Header="最大重试" Binding="{Binding MaxRetries}" Width="90" />
+                    <atom:DataGridTextColumn Header="错误信息" Binding="{Binding ErrorMessage}" Width="2*" />
+                    <atom:DataGridTextColumn Header="父任务" Binding="{Binding ParentTaskId}" Width="140" />
+                    <atom:DataGridTextColumn Header="依赖" Binding="{Binding Dependencies}" Width="160" />
+                    <atom:DataGridTemplateColumn Header="操作" Width="90">
+                        <atom:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <atom:Button Content="取消"
+                                             Command="{Binding $parent[atom:DataGrid].DataContext.CancelTaskCommand}"
+                                             CommandParameter="{Binding TaskId}" />
+                            </DataTemplate>
+                        </atom:DataGridTemplateColumn.CellTemplate>
+                    </atom:DataGridTemplateColumn>
+                </atom:DataGrid.Columns>
+            </atom:DataGrid>
+        </atom:Card>
+    </Grid>
 </UserControl>
