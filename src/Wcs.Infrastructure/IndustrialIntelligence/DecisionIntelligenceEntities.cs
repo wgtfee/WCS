@@ -51,7 +51,7 @@ public sealed class DecisionOutcomeJournalEntity
     [SugarColumn(Length = 64, IsNullable = false)] public string ProposalId { get; set; } = string.Empty;
     [SugarColumn(Length = 120, IsNullable = false)] public string OutcomeType { get; set; } = string.Empty;
     [SugarColumn(Length = 500, IsNullable = false)] public string ActualReference { get; set; } = string.Empty;
-    public decimal? ActualBenefit { get; set; }
+    [SugarColumn(IsNullable = true)] public decimal? ActualBenefit { get; set; }
     public DateTime ObservedAtUtc { get; set; }
     [SugarColumn(Length = 64, IsNullable = false)] public string EvidenceHash { get; set; } = string.Empty;
 }
@@ -78,6 +78,30 @@ public static class DecisionIntelligenceSchema
         db.CodeFirst.InitTables(typeof(DecisionProposalEntity), typeof(DecisionConstraintResultEntity),
             typeof(DecisionApprovalJournalEntity), typeof(DecisionOutcomeJournalEntity), typeof(DecisionExplanationEvidenceEntity));
         db.Ado.ExecuteCommand(@"
+IF OBJECT_ID('dbo.Wcs_DecisionOutcomeJournal') IS NOT NULL
+   AND EXISTS (
+       SELECT 1
+       FROM sys.columns
+       WHERE object_id = OBJECT_ID('dbo.Wcs_DecisionOutcomeJournal')
+         AND name = 'ActualBenefit'
+         AND is_nullable = 0)
+BEGIN
+    DECLARE @ActualBenefitPrecision int;
+    DECLARE @ActualBenefitScale int;
+    SELECT
+        @ActualBenefitPrecision = precision,
+        @ActualBenefitScale = scale
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.Wcs_DecisionOutcomeJournal')
+      AND name = 'ActualBenefit';
+
+    DECLARE @AlterActualBenefit nvarchar(400) =
+        N'ALTER TABLE dbo.Wcs_DecisionOutcomeJournal ALTER COLUMN ActualBenefit decimal('
+        + CONVERT(nvarchar(10), @ActualBenefitPrecision)
+        + N',' + CONVERT(nvarchar(10), @ActualBenefitScale) + N') NULL';
+    EXEC sp_executesql @AlterActualBenefit;
+END;
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_DecisionProposal_Id' AND object_id=OBJECT_ID('Wcs_DecisionProposal')) CREATE UNIQUE INDEX UX_Wcs_DecisionProposal_Id ON Wcs_DecisionProposal(ProposalId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Wcs_DecisionProposal_Idempotency' AND object_id=OBJECT_ID('Wcs_DecisionProposal')) CREATE UNIQUE INDEX UX_Wcs_DecisionProposal_Idempotency ON Wcs_DecisionProposal(IdempotencyKey);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Wcs_DecisionProposal_StatusCreated' AND object_id=OBJECT_ID('Wcs_DecisionProposal')) CREATE INDEX IX_Wcs_DecisionProposal_StatusCreated ON Wcs_DecisionProposal(Status,CreatedAtUtc DESC);
