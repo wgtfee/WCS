@@ -1,67 +1,52 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.TrackingLogView"
              x:DataType="vm:TrackingLogViewModel"
              Background="{DynamicResource BgPrimary}">
-    <DockPanel Margin="16">
-        
-        <!-- ========== 顶部标题 ========== -->
-        <Border DockPanel.Dock="Top" 
-                Background="{DynamicResource BgSecondary}" 
-                CornerRadius="8" Padding="12" Margin="0,0,0,8">
-            <Grid ColumnDefinitions="Auto,*">
-                <TextBlock Text="埋点日志" FontSize="20" FontWeight="Bold" 
-                           Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="追踪用户行为与系统埋点数据" FontSize="13"
-                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="16,0,0,0"/>
-            </Grid>
-        </Border>
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="24" RowSpacing="16">
+        <StackPanel Grid.Row="0" Spacing="4">
+            <TextBlock Classes="wcs-page-title" Text="埋点日志" />
+            <TextBlock Classes="wcs-page-subtitle" Text="追踪用户行为与系统埋点数据。" />
+        </StackPanel>
 
-        <!-- ========== 底部分页器 ========== -->
-        <Border DockPanel.Dock="Bottom" Padding="0,8,0,0" Background="Transparent">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
-                <Button Content="上一页" Command="{Binding PreviousPageCommand}" />
-                <TextBlock Text="{Binding PageInfo}" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="8,0" />
-                <Button Content="下一页" Command="{Binding NextPageCommand}" />
-            </StackPanel>
-        </Border>
-
-        <!-- ========== 查询面板 ========== -->
-        <Border DockPanel.Dock="Top" Classes="card" Margin="0,0,0,8">
-            <StackPanel Spacing="12" Margin="12">
-                        
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
-                    <Button Content="查询" Command="{Binding SearchCommand}" Classes="primary" />
-                    <Button Content="重置" Command="{Binding ResetCommand}" />
-                </StackPanel>
-                 <StackPanel Orientation="Horizontal" Spacing="12">
-                    <TextBox Width="160" PlaceholderText="事件名称" Text="{Binding EventName}" />
-                    <TextBox Width="120" PlaceholderText="用户" Text="{Binding UserName}" />
+        <atom:Card Grid.Row="1" Header="查询条件" StyleVariant="Outlined">
+            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <atom:LineEdit Width="160" Watermark="事件名称" Text="{Binding EventName}" />
+                    <atom:LineEdit Width="120" Watermark="用户" Text="{Binding UserName}" />
                     <DatePicker Width="150" SelectedDate="{Binding BeginDate}" />
                     <DatePicker Width="150" SelectedDate="{Binding EndDate}" />
-                    <ComboBox Width="120" ItemsSource="{Binding EventTypes}" 
-                              SelectedItem="{Binding EventType}" PlaceholderText="事件类型" />
-                </StackPanel >
+                    <ComboBox Width="120" ItemsSource="{Binding EventTypes}" SelectedItem="{Binding EventType}" PlaceholderText="事件类型" />
+                </StackPanel>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                    <atom:Button Content="查询" Command="{Binding SearchCommand}" />
+                    <atom:Button Content="重置" Command="{Binding ResetCommand}" />
+                </StackPanel>
+            </Grid>
+        </atom:Card>
 
-            </StackPanel>
-        </Border>
+        <atom:Card Grid.Row="2" Header="埋点记录" StyleVariant="Outlined">
+            <atom:DataGrid ItemsSource="{Binding PagedItems}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None" CanUserSortColumns="True" CanUserResizeColumns="True">
+                <atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="90" />
+                    <atom:DataGridTextColumn Header="事件名称" Binding="{Binding EventName}" Width="160" />
+                    <atom:DataGridTextColumn Header="事件类型" Binding="{Binding EventType}" Width="120" />
+                    <atom:DataGridTextColumn Header="页面路径" Binding="{Binding PageUrl}" Width="2*" />
+                    <atom:DataGridTextColumn Header="用户" Binding="{Binding UserName}" Width="120" />
+                    <atom:DataGridTextColumn Header="IP" Binding="{Binding UserIP}" Width="130" />
+                    <atom:DataGridTextColumn Header="浏览器" Binding="{Binding Browser}" Width="140" />
+                    <atom:DataGridTextColumn Header="操作系统" Binding="{Binding OS}" Width="140" />
+                    <atom:DataGridTextColumn Header="事件时间" Binding="{Binding EventTime}" Width="180" />
+                </atom:DataGrid.Columns>
+            </atom:DataGrid>
+        </atom:Card>
 
-        <!-- ========== DataGrid 填充中间剩余空间 ========== -->
-        <DataGrid ItemsSource="{Binding PagedItems}" AutoGenerateColumns="False"
-                  Margin="0,0,0,8">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="ID" Binding="{Binding Id}" />
-                <DataGridTextColumn Header="事件名称" Binding="{Binding EventName}" />
-                <DataGridTextColumn Header="事件类型" Binding="{Binding EventType}" />
-                <DataGridTextColumn Header="页面路径" Binding="{Binding PageUrl}" />
-                <DataGridTextColumn Header="用户" Binding="{Binding UserName}" />
-                <DataGridTextColumn Header="IP" Binding="{Binding UserIP}" />
-                <DataGridTextColumn Header="浏览器" Binding="{Binding Browser}" />
-                <DataGridTextColumn Header="操作系统" Binding="{Binding OS}" />
-                <DataGridTextColumn Header="事件时间" Binding="{Binding EventTime}" />
-            </DataGrid.Columns>
-        </DataGrid>
-
-    </DockPanel>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
+            <atom:Button Content="上一页" Command="{Binding PreviousPageCommand}" />
+            <TextBlock Text="{Binding PageInfo}" VerticalAlignment="Center" />
+            <atom:Button Content="下一页" Command="{Binding NextPageCommand}" />
+        </StackPanel>
+    </Grid>
 </UserControl>

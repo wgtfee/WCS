@@ -20,14 +20,11 @@ jobs:
       EVIDENCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
       - name: Build Desktop Release
         run: dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release
-
       - name: Verify AtomUI runtime registration
         shell: bash
         run: |
@@ -37,12 +34,11 @@ jobs:
           grep -q 'UseDesktopControls' src/Wcs.Desktop/App.axaml.cs
           grep -q 'UseDesktopDataGrid' src/Wcs.Desktop/App.axaml.cs
           grep -q 'AtomUIProductStyles.axaml' src/Wcs.Desktop/App.axaml
-
       - name: Verify migrated product pages use AtomUI controls
         shell: bash
         run: |
           set -euo pipefail
-          grid_pages=(
+          atom_pages=(
             src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
             src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
             src/Wcs.Desktop/Views/FeatureCenterView.axaml
@@ -60,96 +56,88 @@ jobs:
             src/Wcs.Desktop/Views/TaskManagementView.axaml
             src/Wcs.Desktop/Views/AlarmPanelView.axaml
             src/Wcs.Desktop/Views/EventLogView.axaml
+            src/Wcs.Desktop/Views/DashboardView.axaml
+            src/Wcs.Desktop/Views/ObjectTrackingView.axaml
+            src/Wcs.Desktop/Views/TrackingLogView.axaml
+            src/Wcs.Desktop/Views/AuditLogView.axaml
+            src/Wcs.Desktop/Views/SystemLogView.axaml
+            src/Wcs.Desktop/Views/TransportSimulationView.axaml
+            src/Wcs.Desktop/Views/SimulationVerificationView.axaml
           )
-
-          for page in "${grid_pages[@]}"; do
+          for page in "${atom_pages[@]}"; do
             grep -q 'xmlns:atom="https://atomui.net"' "$page"
-            grep -q '<atom:DataGrid' "$page"
+            grep -q '<atom:Card' "$page"
             ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])' "$page"
           done
 
-          button_pages=(
-            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
-            src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
-            src/Wcs.Desktop/Views/FeatureCenterView.axaml
-            src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
-            src/Wcs.Desktop/Views/TransportTrafficView.axaml
-            src/Wcs.Desktop/Views/TransportProductionView.axaml
-            src/Wcs.Desktop/Views/TransportObservabilityView.axaml
-            src/Wcs.Desktop/Views/TransportResilienceView.axaml
-            src/Wcs.Desktop/Views/TransportOptimizationView.axaml
-            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
-            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
-            src/Wcs.Desktop/Views/TransportAdministrationView.axaml
-            src/Wcs.Desktop/Views/DeviceListView.axaml
-            src/Wcs.Desktop/Views/TaskManagementView.axaml
-            src/Wcs.Desktop/Views/AlarmPanelView.axaml
+          grid_pages=(
+            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
+            src/Wcs.Desktop/Views/FeatureCenterView.axaml src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+            src/Wcs.Desktop/Views/TransportSchedulingView.axaml src/Wcs.Desktop/Views/TransportTrafficView.axaml
+            src/Wcs.Desktop/Views/TransportProductionView.axaml src/Wcs.Desktop/Views/TransportObservabilityView.axaml
+            src/Wcs.Desktop/Views/TransportResilienceView.axaml src/Wcs.Desktop/Views/TransportOptimizationView.axaml
+            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+            src/Wcs.Desktop/Views/TransportAdministrationView.axaml src/Wcs.Desktop/Views/DeviceListView.axaml
+            src/Wcs.Desktop/Views/TaskManagementView.axaml src/Wcs.Desktop/Views/AlarmPanelView.axaml
+            src/Wcs.Desktop/Views/EventLogView.axaml src/Wcs.Desktop/Views/ObjectTrackingView.axaml
+            src/Wcs.Desktop/Views/TrackingLogView.axaml src/Wcs.Desktop/Views/TransportSimulationView.axaml
+            src/Wcs.Desktop/Views/SimulationVerificationView.axaml
           )
-          for page in "${button_pages[@]}"; do
-            grep -q '<atom:Button' "$page"
-          done
+          for page in "${grid_pages[@]}"; do grep -q '<atom:DataGrid' "$page"; done
 
-          kpi_pages=(
-            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
-            src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
-            src/Wcs.Desktop/Views/FeatureCenterView.axaml
-            src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
-            src/Wcs.Desktop/Views/TransportTrafficView.axaml
-            src/Wcs.Desktop/Views/TransportProductionView.axaml
-            src/Wcs.Desktop/Views/TransportObservabilityView.axaml
-            src/Wcs.Desktop/Views/TransportResilienceView.axaml
-            src/Wcs.Desktop/Views/TransportOptimizationView.axaml
-            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
-            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
-            src/Wcs.Desktop/Views/TransportAdministrationView.axaml
-            src/Wcs.Desktop/Views/DeviceListView.axaml
-            src/Wcs.Desktop/Views/TaskManagementView.axaml
-            src/Wcs.Desktop/Views/AlarmPanelView.axaml
-            src/Wcs.Desktop/Views/EventLogView.axaml
+          button_pages=(
+            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
+            src/Wcs.Desktop/Views/FeatureCenterView.axaml src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+            src/Wcs.Desktop/Views/TransportSchedulingView.axaml src/Wcs.Desktop/Views/TransportTrafficView.axaml
+            src/Wcs.Desktop/Views/TransportProductionView.axaml src/Wcs.Desktop/Views/TransportObservabilityView.axaml
+            src/Wcs.Desktop/Views/TransportResilienceView.axaml src/Wcs.Desktop/Views/TransportOptimizationView.axaml
+            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+            src/Wcs.Desktop/Views/TransportAdministrationView.axaml src/Wcs.Desktop/Views/DeviceListView.axaml
+            src/Wcs.Desktop/Views/TaskManagementView.axaml src/Wcs.Desktop/Views/AlarmPanelView.axaml
+            src/Wcs.Desktop/Views/ObjectTrackingView.axaml src/Wcs.Desktop/Views/TrackingLogView.axaml
+            src/Wcs.Desktop/Views/TransportSimulationView.axaml src/Wcs.Desktop/Views/SimulationVerificationView.axaml
           )
-          for page in "${kpi_pages[@]}"; do
-            grep -q '<atom:Card' "$page"
-            grep -q '<atom:Statistic' "$page"
-          done
+          for page in "${button_pages[@]}"; do grep -q '<atom:Button' "$page"; done
+
+          statistic_pages=(
+            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
+            src/Wcs.Desktop/Views/FeatureCenterView.axaml src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+            src/Wcs.Desktop/Views/TransportSchedulingView.axaml src/Wcs.Desktop/Views/TransportTrafficView.axaml
+            src/Wcs.Desktop/Views/TransportProductionView.axaml src/Wcs.Desktop/Views/TransportObservabilityView.axaml
+            src/Wcs.Desktop/Views/TransportResilienceView.axaml src/Wcs.Desktop/Views/TransportOptimizationView.axaml
+            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+            src/Wcs.Desktop/Views/TransportAdministrationView.axaml src/Wcs.Desktop/Views/DeviceListView.axaml
+            src/Wcs.Desktop/Views/TaskManagementView.axaml src/Wcs.Desktop/Views/AlarmPanelView.axaml
+            src/Wcs.Desktop/Views/EventLogView.axaml src/Wcs.Desktop/Views/DashboardView.axaml
+            src/Wcs.Desktop/Views/ObjectTrackingView.axaml src/Wcs.Desktop/Views/TransportSimulationView.axaml
+            src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+          )
+          for page in "${statistic_pages[@]}"; do grep -q '<atom:Statistic' "$page"; done
 
           tab_pages=(
-            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
-            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
-            src/Wcs.Desktop/Views/TransportTrafficView.axaml
-            src/Wcs.Desktop/Views/TransportProductionView.axaml
-            src/Wcs.Desktop/Views/TransportObservabilityView.axaml
-            src/Wcs.Desktop/Views/TransportResilienceView.axaml
-            src/Wcs.Desktop/Views/TransportOptimizationView.axaml
-            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
-            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
-            src/Wcs.Desktop/Views/TransportAdministrationView.axaml
+            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml src/Wcs.Desktop/Views/TransportSchedulingView.axaml
+            src/Wcs.Desktop/Views/TransportTrafficView.axaml src/Wcs.Desktop/Views/TransportProductionView.axaml
+            src/Wcs.Desktop/Views/TransportObservabilityView.axaml src/Wcs.Desktop/Views/TransportResilienceView.axaml
+            src/Wcs.Desktop/Views/TransportOptimizationView.axaml src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
+            src/Wcs.Desktop/Views/TransportCommissioningView.axaml src/Wcs.Desktop/Views/TransportAdministrationView.axaml
+            src/Wcs.Desktop/Views/TransportSimulationView.axaml
           )
-          for page in "${tab_pages[@]}"; do
-            grep -q '<atom:TabControl' "$page"
-          done
+          for page in "${tab_pages[@]}"; do grep -q '<atom:TabControl' "$page"; done
 
           line_edit_pages=(
-            src/Wcs.Desktop/Views/FeatureCenterView.axaml
-            src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
-            src/Wcs.Desktop/Views/TaskManagementView.axaml
-            src/Wcs.Desktop/Views/AlarmPanelView.axaml
+            src/Wcs.Desktop/Views/FeatureCenterView.axaml src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+            src/Wcs.Desktop/Views/TransportCommissioningView.axaml src/Wcs.Desktop/Views/TaskManagementView.axaml
+            src/Wcs.Desktop/Views/AlarmPanelView.axaml src/Wcs.Desktop/Views/TrackingLogView.axaml
           )
-          for page in "${line_edit_pages[@]}"; do
-            grep -q '<atom:LineEdit' "$page"
-          done
-
+          for page in "${line_edit_pages[@]}"; do grep -q '<atom:LineEdit' "$page"; done
       - name: Write exact-head UI evidence
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/desktop-atomui
           cat > artifacts/desktop-atomui/evidence.json <<EOF
-          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":17,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
+          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":24,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
           EOF
-
       - uses: actions/upload-artifact@v4
         with:
           name: wcs-desktop-atomui-${{ github.run_number }}
