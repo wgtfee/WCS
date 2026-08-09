@@ -18,9 +18,13 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>();
         services.AddHttpClient<ISimulationVerificationApiService, SimulationVerificationApiService>();
         services.AddHttpClient<IModelOpsApiService, ModelOpsApiService>();
+        services.AddHttpClient<IFeatureCenterApiService, FeatureCenterApiService>();
+        services.AddHttpClient<IShadowDecisionApiService, ShadowDecisionApiService>();
         services.AddHttpClient<IMaintenanceLearningApiService, MaintenanceLearningApiService>();
         services.AddHttpClient<IDigitalTwinOptimizerApiService, DigitalTwinOptimizerApiService>();
         services.AddHttpClient<IBoundedAutomationReadinessApiService, BoundedAutomationReadinessApiService>();
+        services.AddHttpClient<IIndustrialIntelligenceOverviewApiService, IndustrialIntelligenceOverviewApiService>();
+        services.AddHttpClient<IAssetIntelligenceApiService, AssetIntelligenceApiService>();
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
         services.AddSingleton<IDataProvider, ApiDataProvider>();
         services.AddTransient<LoginViewModel>();
@@ -45,7 +49,11 @@ public static class ServiceCollectionExtensions
         services.AddTransient<TransportResilienceViewModel>();
         services.AddTransient<TransportSimulationViewModel>();
         services.AddTransient<SimulationVerificationViewModel>();
+        services.AddTransient<AssetIntelligenceViewModel>();
+        services.AddTransient<IndustrialIntelligenceOverviewViewModel>();
         services.AddTransient<ModelOpsViewModel>();
+        services.AddTransient<FeatureCenterViewModel>();
+        services.AddTransient<ShadowDecisionViewModel>();
         services.AddTransient<MaintenanceLearningViewModel>();
         services.AddTransient<DigitalTwinOptimizerViewModel>();
         services.AddTransient<BoundedAutomationReadinessViewModel>();
