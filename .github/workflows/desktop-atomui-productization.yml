@@ -85,6 +85,15 @@ jobs:
           grep -q '<atom:ListView' src/Wcs.Desktop/Controls/NotificationCenterView.axaml
           grep -q '<atom:Button' src/Wcs.Desktop/Controls/ClosableTabControl.axaml
 
+      - name: Audit residual native product controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -nE --include='*.axaml' '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])|<TreeView([ >])|<ListBox([ >])' src/Wcs.Desktop/Views src/Wcs.Desktop/Controls; then
+            echo 'Residual native product controls detected; migrate them or explicitly redesign the gate.' >&2
+            exit 1
+          fi
+
       - name: Verify product control coverage
         shell: bash
         run: |
@@ -114,7 +123,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/desktop-atomui
           cat > artifacts/desktop-atomui/evidence.json <<EOF
-          {"schema":"wcs-desktop-atomui-productization/v2","head_sha":"${EVIDENCE_HEAD_SHA}","routedPageCount":28,"auxiliaryPageCount":2,"shellSurfaceCount":7,"totalGovernedSurfaceCount":37,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"atomUiTreeView":true,"atomUiListView":true,"legacyFluentFallbackRetained":true,"controlLogicChanged":false}
+          {"schema":"wcs-desktop-atomui-productization/v2","head_sha":"${EVIDENCE_HEAD_SHA}","routedPageCount":28,"auxiliaryPageCount":2,"shellSurfaceCount":7,"totalGovernedSurfaceCount":37,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"atomUiTreeView":true,"atomUiListView":true,"legacyFluentFallbackRetained":true,"controlLogicChanged":false,"residualNativeProductControls":0}
           EOF
 
       - uses: actions/upload-artifact@v4
