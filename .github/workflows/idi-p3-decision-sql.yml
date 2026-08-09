@@ -1,0 +1,100 @@
+name: WCS IDI P3 Decision SQL Persistence
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligencePersistence.cs'
+      - 'src/Wcs.Host/Controllers/ShadowDecisionController.cs'
+      - 'src/Wcs.Simulator.Tests/DecisionIntelligenceSqlPersistenceTests.cs'
+      - '.github/workflows/idi-p3-decision-sql.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decision-sql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      EVIDENCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      WCS_P3_SQL_CONNECTION: Server=localhost,1433;Database=master;User Id=sa;Password=P3_Strong!Passw0rd;TrustServerCertificate=True;Encrypt=False
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: P3_Strong!Passw0rd
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'P3_Strong!Passw0rd' -C -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'P3_Strong!Passw0rd' -Q 'SELECT 1' || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=20s
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build P3 SQL integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+
+      - name: Run exactly 5 P3 SQL persistence tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/idi-p3-sql
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            -c Release --no-build \
+            --filter 'FullyQualifiedName~DecisionIntelligenceSqlPersistenceTests' \
+            --logger 'trx;LogFileName=idi-p3-sql.trx' \
+            --results-directory artifacts/idi-p3-sql
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          path='artifacts/idi-p3-sql/idi-p3-sql.trx'
+          root=ET.parse(path).getroot()
+          results=root.findall('.//{*}UnitTestResult')
+          failed=[x for x in results if x.attrib.get('outcome') != 'Passed']
+          assert len(results) == 5, f'expected exactly 5 P3 SQL tests, got {len(results)}'
+          assert not failed, f'failed P3 SQL tests: {[x.attrib.get("testName") for x in failed]}'
+          print('IDI-P3 SQL persistence tests: 5/5 success')
+          PY
+
+      - name: Verify SQL adapter remains outside production control path
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligencePersistence.cs'
+          grep -q 'SqlDecisionProposalStore' "$file"
+          grep -q 'AppendApprovalAsync' "$file"
+          grep -q 'RecordOutcomeAsync' "$file"
+          grep -q 'RecoverAsync' "$file"
+          ! grep -nE 'S7Client|S7RealClient|Snap7|S7CommPlusDriver|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|RouteReservationManager|WriteAsync\(' "$file"
+
+      - name: Write exact-head P3 SQL evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > artifacts/idi-p3-sql/evidence.json <<EOF
+          {"schema":"wcs-idi-p3-decision-sql/v1","head_sha":"${EVIDENCE_HEAD_SHA}","testCount":5,"allSuccess":true,"proposalOnly":true,"controlWriteAllowed":false,"productionAutomationAllowed":false,"approvalAudit":true,"outcomeRecovery":true}
+          EOF
+          test "$(jq -r '.head_sha' artifacts/idi-p3-sql/evidence.json)" = "$EVIDENCE_HEAD_SHA"
+          test "$(jq -r '.testCount' artifacts/idi-p3-sql/evidence.json)" -eq 5
+          test "$(jq -r '.controlWriteAllowed' artifacts/idi-p3-sql/evidence.json)" = 'false'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wcs-idi-p3-decision-sql-${{ github.run_number }}
+          path: artifacts/idi-p3-sql/**
+          if-no-files-found: error
+          retention-days: 30
