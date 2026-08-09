@@ -1,54 +1,42 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
-             xmlns:ml="using:Wcs.MaintenanceLearning"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.MaintenanceLearningView"
              x:DataType="vm:MaintenanceLearningViewModel">
   <ScrollViewer>
     <StackPanel Margin="24" Spacing="16">
-      <TextBlock Text="IDI-P4 Maintenance Learning" FontSize="24" FontWeight="SemiBold" />
-      <TextBlock Text="{Binding SafetyText}" TextWrapping="Wrap" Opacity="0.75" />
+      <StackPanel Spacing="4"><TextBlock Classes="wcs-page-title" Text="IDI-P4 Maintenance Learning"/><TextBlock Classes="wcs-page-subtitle" Text="维修干预、结果、MES Outbox 与学习证据的治理视图。"/></StackPanel>
+      <Border Classes="wcs-boundary-strip"><TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}"/></Border>
 
-      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="Environment" FontWeight="SemiBold" />
-        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Environment}" />
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="Mode" FontWeight="SemiBold" />
-        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ModeText}" />
-        <TextBlock Grid.Row="2" Grid.Column="0" Text="Recovery" FontWeight="SemiBold" />
-        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RecoveryText}" TextWrapping="Wrap" />
+      <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+        <atom:Card Grid.Column="0" Header="Environment" StyleVariant="Outlined"><TextBlock Text="{Binding Environment}" FontSize="18" FontWeight="SemiBold"/></atom:Card>
+        <atom:Card Grid.Column="1" Header="Mode" StyleVariant="Outlined"><TextBlock Text="{Binding ModeText}" TextWrapping="Wrap"/></atom:Card>
+        <atom:Card Grid.Column="2" Header="Recovery" StyleVariant="Outlined"><TextBlock Text="{Binding RecoveryText}" TextWrapping="Wrap"/></atom:Card>
       </Grid>
 
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button Content="刷新" Command="{Binding RefreshCommand}" />
-        <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" />
-      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="刷新" Command="{Binding RefreshCommand}"/><TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}"/></StackPanel>
 
-      <Border Padding="12" BorderThickness="1" CornerRadius="6">
+      <atom:Card Header="Intervention 查询" StyleVariant="Outlined">
         <StackPanel Spacing="8">
-          <TextBlock Text="Intervention 查询" FontWeight="SemiBold" />
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBox Width="280" PlaceholderText="InterventionId" Text="{Binding InterventionId}" />
-            <Button Content="查询" Command="{Binding FindInterventionCommand}" />
-          </StackPanel>
-          <TextBlock Text="{Binding InterventionText}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8"><atom:LineEdit Width="280" Watermark="InterventionId" Text="{Binding InterventionId}"/><atom:Button Content="查询" Command="{Binding FindInterventionCommand}"/></StackPanel>
+          <TextBlock Text="{Binding InterventionText}" TextWrapping="Wrap"/>
         </StackPanel>
-      </Border>
+      </atom:Card>
 
-      <TextBlock Text="Pending MES Outbox" FontSize="18" FontWeight="SemiBold" />
-      <ItemsControl ItemsSource="{Binding PendingOutbox}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="ml:MesOutboxEntry">
-            <Border Padding="10" Margin="0,0,0,8" BorderThickness="1" CornerRadius="4">
-              <Grid ColumnDefinitions="150,160,100,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="{Binding OutboxId}" />
-                <TextBlock Grid.Column="1" Text="{Binding InterventionId}" />
-                <TextBlock Grid.Column="2" Text="{Binding AttemptCount}" />
-                <TextBlock Grid.Column="3" Text="{Binding LastError}" TextWrapping="Wrap" />
-              </Grid>
-            </Border>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+      <atom:Card Header="Pending MES Outbox" StyleVariant="Outlined">
+        <StackPanel Spacing="8">
+          <atom:Statistic Header="Pending" Value="{Binding PendingOutbox.Count}" ContentFontSize="24"/>
+          <atom:DataGrid ItemsSource="{Binding PendingOutbox}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+            <atom:DataGrid.Columns>
+              <atom:DataGridTextColumn Header="OutboxId" Binding="{Binding OutboxId}" Width="180"/>
+              <atom:DataGridTextColumn Header="InterventionId" Binding="{Binding InterventionId}" Width="180"/>
+              <atom:DataGridTextColumn Header="Attempts" Binding="{Binding AttemptCount}" Width="90"/>
+              <atom:DataGridTextColumn Header="Last Error" Binding="{Binding LastError}" Width="*"/>
+            </atom:DataGrid.Columns>
+          </atom:DataGrid>
+        </StackPanel>
+      </atom:Card>
     </StackPanel>
   </ScrollViewer>
 </UserControl>
