@@ -49,6 +49,11 @@ public sealed class FeatureCenterApiService : IFeatureCenterApiService
     }
 }
 
+public enum FeatureDataTypeDto { Boolean = 0, Int64 = 1, Double = 2, String = 3 }
+public enum FeatureNullPolicyDto { Fail = 0, Default = 1, Ignore = 2 }
+public enum FeatureQualityStatusDto { Valid = 0, Stale = 1, Missing = 2, OutOfRange = 3, Invalid = 4 }
+public enum FeatureSchemaStatusDto { Draft = 0, Approved = 1, Retired = 2 }
+
 public sealed class FeatureListEnvelope { public IReadOnlyList<FeatureDefinitionDto> Values { get; init; } = []; }
 public sealed class FeatureSchemaEnvelope { public FeatureSchemaDto? Value { get; init; } }
 public sealed class FeatureSnapshotEnvelope { public FeatureSnapshotDto? Value { get; init; } }
@@ -59,13 +64,13 @@ public sealed class FeatureDefinitionDto
     public string FeatureId { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
     public string EntityType { get; init; } = string.Empty;
-    public string DataType { get; init; } = string.Empty;
+    public FeatureDataTypeDto DataType { get; init; }
     public string Unit { get; init; } = string.Empty;
     public string Source { get; init; } = string.Empty;
     public string Aggregation { get; init; } = string.Empty;
     public TimeSpan Window { get; init; }
     public TimeSpan Freshness { get; init; }
-    public string NullPolicy { get; init; } = string.Empty;
+    public FeatureNullPolicyDto NullPolicy { get; init; }
     public string Version { get; init; } = string.Empty;
     public string DefinitionHash { get; init; } = string.Empty;
     public string Owner { get; init; } = string.Empty;
@@ -76,7 +81,7 @@ public sealed class FeatureSchemaDto
     public string SchemaId { get; init; } = string.Empty;
     public string Version { get; init; } = string.Empty;
     public string SchemaHash { get; init; } = string.Empty;
-    public string Status { get; init; } = string.Empty;
+    public FeatureSchemaStatusDto Status { get; init; }
     public string ApprovedBy { get; init; } = string.Empty;
     public DateTimeOffset? ApprovedAtUtc { get; init; }
     public IReadOnlyList<FeatureSchemaItemDto> Items { get; init; } = [];
@@ -97,7 +102,7 @@ public sealed class FeatureSnapshotDto
     public string FeatureSchemaId { get; init; } = string.Empty;
     public string FeatureSchemaHash { get; init; } = string.Empty;
     public string ValuesHash { get; init; } = string.Empty;
-    public string QualityStatus { get; init; } = string.Empty;
+    public FeatureQualityStatusDto QualityStatus { get; init; }
     public string MaterializerVersion { get; init; } = string.Empty;
     public IReadOnlyList<FeatureValueDto> Values { get; init; } = [];
 }
@@ -106,7 +111,7 @@ public sealed class FeatureValueDto
 {
     public string FeatureId { get; init; } = string.Empty;
     public object? Value { get; init; }
-    public string QualityStatus { get; init; } = string.Empty;
+    public FeatureQualityStatusDto QualityStatus { get; init; }
     public DateTimeOffset ObservedAtUtc { get; init; }
 }
 
