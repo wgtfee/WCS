@@ -22,6 +22,8 @@
     </Application.Resources>
 
     <Application.Styles>
+        <!-- Legacy Avalonia pages still depend on Fluent templates during gradual AtomUI migration. -->
         <FluentTheme />
+        <StyleInclude Source="/Styles/AtomUIProductStyles.axaml" />
     </Application.Styles>
 </Application>
