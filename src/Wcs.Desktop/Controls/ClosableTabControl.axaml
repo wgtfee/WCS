@@ -6,90 +6,54 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:local="clr-namespace:Wcs.Desktop.Controls"
+    xmlns:atom="https://atomui.net"
     mc:Ignorable="d">
 
     <Grid RowDefinitions="Auto,*">
-
-        <!-- Tab Header bar -->
         <Border Grid.Row="0" Background="{DynamicResource BgSecondary}" Padding="4,0">
-
-            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Disabled">
-
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                 <ItemsControl ItemsSource="{Binding Tabs, ElementName=PART_Root}">
-
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Orientation="Horizontal"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
-
                     <ItemsControl.ItemTemplate>
-
                         <DataTemplate x:DataType="local:ClosableTabItem">
-
-                            <Border CornerRadius="4" Padding="12,6" Margin="2,4"
+                            <Border CornerRadius="6" Padding="12,6" Margin="2,4"
                                     BorderThickness="1" BorderBrush="{DynamicResource BorderColor}"
                                     Background="{DynamicResource TabBg}"
                                     PointerPressed="OnTabPointerPressed">
-
                                 <Border.ContextMenu>
                                     <ContextMenu>
-                                        <MenuItem Header="关闭"
-                                                  IsVisible="{Binding CanClose}"
-                                                  Click="OnCloseMenuItemClick"/>
-                                        <MenuItem Header="关闭左侧页面"
-                                                  Click="OnCloseLeftMenuItemClick"/>
-                                        <MenuItem Header="关闭右侧页面"
-                                                  Click="OnCloseRightMenuItemClick"/>
+                                        <MenuItem Header="关闭" IsVisible="{Binding CanClose}" Click="OnCloseMenuItemClick"/>
+                                        <MenuItem Header="关闭左侧页面" Click="OnCloseLeftMenuItemClick"/>
+                                        <MenuItem Header="关闭右侧页面" Click="OnCloseRightMenuItemClick"/>
                                         <Separator/>
-                                        <MenuItem Header="关闭全部页面"
-                                                  Click="OnCloseAllMenuItemClick"/>
-                                        <MenuItem Header="关闭其他页面"
-                                                  Click="OnCloseAllButThisMenuItemClick"/>
+                                        <MenuItem Header="关闭全部页面" Click="OnCloseAllMenuItemClick"/>
+                                        <MenuItem Header="关闭其他页面" Click="OnCloseAllButThisMenuItemClick"/>
                                     </ContextMenu>
                                 </Border.ContextMenu>
-
                                 <Grid ColumnDefinitions="*,Auto">
-
-                                    <TextBlock Grid.Column="0"
-                                               Text="{Binding Header}"
+                                    <TextBlock Grid.Column="0" Text="{Binding Header}"
                                                Foreground="{DynamicResource TextPrimary}"
-                                               FontSize="13"
-                                               VerticalAlignment="Center"/>
-
-                                    <Button Grid.Column="1"
-                                            Width="26"
-                                            Height="22"
-                                            Margin="6,0,-6,0"
-                                            Padding="4,1"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Foreground="{DynamicResource TextSecondary}"
-                                            Content="✕"
-                                            FontSize="11"
-                                            IsVisible="{Binding CanClose}"
-                                            Click="OnCloseButtonClick" />
-
+                                               FontSize="13" VerticalAlignment="Center"/>
+                                    <atom:Button Grid.Column="1"
+                                                 Width="26" Height="24"
+                                                 Margin="6,0,-6,0"
+                                                 Content="✕"
+                                                 FontSize="11"
+                                                 IsVisible="{Binding CanClose}"
+                                                 Click="OnCloseButtonClick" />
                                 </Grid>
-
                             </Border>
-
                         </DataTemplate>
-
                     </ItemsControl.ItemTemplate>
-
                 </ItemsControl>
-
             </ScrollViewer>
-
         </Border>
-
-        <!-- Content -->
         <Border Grid.Row="1" Background="{DynamicResource BgPrimary}">
             <ContentPresenter Content="{Binding SelectedTab.Content, ElementName=PART_Root}" />
         </Border>
-
     </Grid>
-
 </UserControl>
