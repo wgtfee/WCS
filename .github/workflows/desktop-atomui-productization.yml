@@ -1,0 +1,79 @@
+name: WCS Desktop AtomUI Productization
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Desktop/**'
+      - '.github/workflows/desktop-atomui-productization.yml'
+      - 'docs/交付文件/113-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  atomui-product-pages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      EVIDENCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Desktop Release
+        run: dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release
+
+      - name: Verify AtomUI runtime registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'WithAtomUIDefaultOptions' src/Wcs.Desktop/Program.cs
+          grep -q 'UseAtomUI' src/Wcs.Desktop/App.axaml.cs
+          grep -q 'UseDesktopControls' src/Wcs.Desktop/App.axaml.cs
+          grep -q 'UseDesktopDataGrid' src/Wcs.Desktop/App.axaml.cs
+          grep -q 'AtomUIProductStyles.axaml' src/Wcs.Desktop/App.axaml
+
+      - name: Verify first-wave product pages use AtomUI controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          pages=(
+            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
+            src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
+            src/Wcs.Desktop/Views/FeatureCenterView.axaml
+            src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+          )
+
+          for page in "${pages[@]}"; do
+            grep -q 'xmlns:atom="https://atomui.net"' "$page"
+            grep -q '<atom:Card' "$page"
+            grep -q '<atom:Button' "$page"
+            grep -q '<atom:DataGrid' "$page"
+            ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])' "$page"
+          done
+
+          grep -q '<atom:Statistic' src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
+          grep -q '<atom:TabControl' src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
+          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/FeatureCenterView.axaml
+          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+
+      - name: Write exact-head UI evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/desktop-atomui
+          cat > artifacts/desktop-atomui/evidence.json <<EOF
+          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":4,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wcs-desktop-atomui-${{ github.run_number }}
+          path: artifacts/desktop-atomui/**
+          if-no-files-found: error
+          retention-days: 30
