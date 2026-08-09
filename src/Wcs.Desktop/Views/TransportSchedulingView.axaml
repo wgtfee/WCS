@@ -1,98 +1,75 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.TransportSchedulingView"
              x:DataType="vm:TransportSchedulingViewModel"
              Background="{DynamicResource BgPrimary}">
     <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="16">
-            <StackPanel>
-                <TextBlock Text="EMS / RGV 调度中心"
-                           FontSize="24"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource TextPrimary}" />
-                <TextBlock Text="{Binding StatusText}"
-                           Margin="0,6,0,0"
-                           Foreground="{DynamicResource TextSecondary}" />
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-page-title" Text="EMS / RGV 调度中心" />
+                <TextBlock Classes="wcs-page-subtitle" Text="车辆、执行任务与路段预留的统一运行视图。" />
+                <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
             </StackPanel>
-
-            <Button Grid.Column="1"
-                    Content="刷新"
-                    Command="{Binding RefreshCommand}"
-                    Padding="20,8" />
+            <atom:Button Grid.Column="1" Content="刷新" Command="{Binding RefreshCommand}" Padding="20,8" />
         </Grid>
 
         <UniformGrid Grid.Row="1" Columns="4" Rows="1">
-            <Border Margin="0,0,8,0" Padding="16" CornerRadius="8"
-                    Background="{DynamicResource BgSecondary}">
-                <StackPanel>
-                    <TextBlock Text="在线车辆" Foreground="{DynamicResource TextSecondary}" />
-                    <TextBlock Text="{Binding OnlineVehicleCount}" FontSize="26" FontWeight="Bold" />
-                </StackPanel>
-            </Border>
-            <Border Margin="8,0" Padding="16" CornerRadius="8"
-                    Background="{DynamicResource BgSecondary}">
-                <StackPanel>
-                    <TextBlock Text="执行中车辆" Foreground="{DynamicResource TextSecondary}" />
-                    <TextBlock Text="{Binding ExecutingVehicleCount}" FontSize="26" FontWeight="Bold" />
-                </StackPanel>
-            </Border>
-            <Border Margin="8,0" Padding="16" CornerRadius="8"
-                    Background="{DynamicResource BgSecondary}">
-                <StackPanel>
-                    <TextBlock Text="等待 / 异常任务" Foreground="{DynamicResource TextSecondary}" />
-                    <TextBlock Text="{Binding WaitingExecutionCount}" FontSize="26" FontWeight="Bold" />
-                </StackPanel>
-            </Border>
-            <Border Margin="8,0,0,0" Padding="16" CornerRadius="8"
-                    Background="{DynamicResource BgSecondary}">
-                <StackPanel>
-                    <TextBlock Text="预留路段" Foreground="{DynamicResource TextSecondary}" />
-                    <TextBlock Text="{Binding ReservedEdgeCount}" FontSize="26" FontWeight="Bold" />
-                </StackPanel>
-            </Border>
+            <atom:Card Margin="0,0,8,0" StyleVariant="Outlined" IsHoverable="True">
+                <atom:Statistic Header="在线车辆" Value="{Binding OnlineVehicleCount}" ContentFontSize="26" />
+            </atom:Card>
+            <atom:Card Margin="8,0" StyleVariant="Outlined" IsHoverable="True">
+                <atom:Statistic Header="执行中车辆" Value="{Binding ExecutingVehicleCount}" ContentFontSize="26" />
+            </atom:Card>
+            <atom:Card Margin="8,0" StyleVariant="Outlined" IsHoverable="True">
+                <atom:Statistic Header="等待 / 异常任务" Value="{Binding WaitingExecutionCount}" ContentFontSize="26" />
+            </atom:Card>
+            <atom:Card Margin="8,0,0,0" StyleVariant="Outlined" IsHoverable="True">
+                <atom:Statistic Header="预留路段" Value="{Binding ReservedEdgeCount}" ContentFontSize="26" />
+            </atom:Card>
         </UniformGrid>
 
-        <TabControl Grid.Row="2">
-            <TabItem Header="车辆状态">
-                <DataGrid ItemsSource="{Binding Vehicles}" AutoGenerateColumns="False" IsReadOnly="True">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="*" />
-                        <DataGridTextColumn Header="类型" Binding="{Binding Kind}" Width="100" />
-                        <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="140" />
-                        <DataGridTextColumn Header="当前位置" Binding="{Binding CurrentNodeId}" Width="140" />
-                        <DataGridTextColumn Header="电量" Binding="{Binding BatteryPercent}" Width="90" />
-                        <DataGridTextColumn Header="任务数" Binding="{Binding ActiveTaskCount}" Width="90" />
-                        <DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
+        <atom:TabControl Grid.Row="2">
+            <atom:TabItem Header="车辆状态">
+                <atom:DataGrid ItemsSource="{Binding Vehicles}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None" IsFrameBorderVisible="True">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="*" />
+                        <atom:DataGridTextColumn Header="类型" Binding="{Binding Kind}" Width="100" />
+                        <atom:DataGridTextColumn Header="状态" Binding="{Binding State}" Width="140" />
+                        <atom:DataGridTextColumn Header="当前位置" Binding="{Binding CurrentNodeId}" Width="140" />
+                        <atom:DataGridTextColumn Header="电量" Binding="{Binding BatteryPercent}" Width="90" />
+                        <atom:DataGridTextColumn Header="任务数" Binding="{Binding ActiveTaskCount}" Width="90" />
+                        <atom:DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </atom:TabItem>
 
-            <TabItem Header="执行任务">
-                <DataGrid ItemsSource="{Binding Executions}" AutoGenerateColumns="False" IsReadOnly="True">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="任务号" Binding="{Binding RequestId}" Width="*" />
-                        <DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="130" />
-                        <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="160" />
-                        <DataGridTextColumn Header="当前节点" Binding="{Binding CurrentNodeId}" Width="130" />
-                        <DataGridTextColumn Header="反馈序号" Binding="{Binding LastFeedbackSequence}" Width="100" />
-                        <DataGridTextColumn Header="窗口" Binding="{Binding ReservationWindowEdges}" Width="80" />
-                        <DataGridTextColumn Header="异常" Binding="{Binding LastError}" Width="2*" />
-                        <DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
+            <atom:TabItem Header="执行任务">
+                <atom:DataGrid ItemsSource="{Binding Executions}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None" IsFrameBorderVisible="True">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="任务号" Binding="{Binding RequestId}" Width="*" />
+                        <atom:DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="130" />
+                        <atom:DataGridTextColumn Header="状态" Binding="{Binding State}" Width="160" />
+                        <atom:DataGridTextColumn Header="当前节点" Binding="{Binding CurrentNodeId}" Width="130" />
+                        <atom:DataGridTextColumn Header="反馈序号" Binding="{Binding LastFeedbackSequence}" Width="100" />
+                        <atom:DataGridTextColumn Header="窗口" Binding="{Binding ReservationWindowEdges}" Width="80" />
+                        <atom:DataGridTextColumn Header="异常" Binding="{Binding LastError}" Width="2*" />
+                        <atom:DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </atom:TabItem>
 
-            <TabItem Header="路段预留">
-                <DataGrid ItemsSource="{Binding Reservations}" AutoGenerateColumns="False" IsReadOnly="True">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="预留号" Binding="{Binding ReservationId}" Width="*" />
-                        <DataGridTextColumn Header="任务 / 所有者" Binding="{Binding OwnerId}" Width="*" />
-                        <DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="190" />
-                        <DataGridTextColumn Header="过期时间" Binding="{Binding ExpiresAtUtc}" Width="190" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
-        </TabControl>
+            <atom:TabItem Header="路段预留">
+                <atom:DataGrid ItemsSource="{Binding Reservations}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None" IsFrameBorderVisible="True">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="预留号" Binding="{Binding ReservationId}" Width="*" />
+                        <atom:DataGridTextColumn Header="任务 / 所有者" Binding="{Binding OwnerId}" Width="*" />
+                        <atom:DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="190" />
+                        <atom:DataGridTextColumn Header="过期时间" Binding="{Binding ExpiresAtUtc}" Width="190" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </atom:TabItem>
+        </atom:TabControl>
     </Grid>
 </UserControl>
