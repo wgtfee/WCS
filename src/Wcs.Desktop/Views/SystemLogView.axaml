@@ -1,22 +1,17 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.SysLogView"
              x:DataType="vm:SysLogViewModel"
              Background="{DynamicResource BgPrimary}">
-    <DockPanel Margin="16">
-        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="12" Margin="0,0,0,8">
-            <Grid ColumnDefinitions="Auto,*">
-                <TextBlock Text="系统日志" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
-                           VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="操作系统与服务运行日志" FontSize="13"
-                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="16,0,0,0"/>
-            </Grid>
-        </Border>
-        <TextBlock Text="页面开发中..."
-                   Foreground="{DynamicResource TextSecondary}"
-                   FontSize="16"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"/>
-    </DockPanel>
+    <StackPanel Margin="24" Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="wcs-page-title" Text="系统日志" />
+            <TextBlock Classes="wcs-page-subtitle" Text="操作系统与服务运行日志。" />
+        </StackPanel>
+        <atom:Card Header="System Log" StyleVariant="Outlined">
+            <TextBlock Classes="wcs-page-subtitle" Text="页面数据能力尚未接入；本次仅统一表现层，不虚构系统日志数据源。" TextWrapping="Wrap" />
+        </atom:Card>
+    </StackPanel>
 </UserControl>
