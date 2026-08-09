@@ -51,6 +51,9 @@ public sealed class ShadowDecisionApiService : IShadowDecisionApiService
     }
 }
 
+public enum DecisionProposalStatusDto { Shadow = 0, Blocked = 1, PendingApproval = 2, Approved = 3, Rejected = 4, Expired = 5, OutcomeRecorded = 6 }
+public enum ProposalTypeDto { MaintenanceWindowRecommendation = 0, AssetLoadReductionRecommendation = 1, VehicleSelectionRecommendation = 2, TaskPriorityRecommendation = 3, StandbyAssetRecommendation = 4, InspectionRecommendation = 5 }
+
 public sealed class DecisionProposalListEnvelope
 {
     public string Stage { get; init; } = string.Empty;
@@ -72,8 +75,8 @@ public sealed class DecisionProposalDetailDto
 public sealed class DecisionProposalDto
 {
     public string ProposalId { get; init; } = string.Empty;
-    public string Type { get; init; } = string.Empty;
-    public string Status { get; init; } = string.Empty;
+    public ProposalTypeDto Type { get; init; }
+    public DecisionProposalStatusDto Status { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset ExpiresAtUtc { get; init; }
     public string CorrelationId { get; init; } = string.Empty;
@@ -119,8 +122,8 @@ public sealed class DecisionConstraintDto
 public sealed class DecisionApprovalDto
 {
     public string ProposalId { get; init; } = string.Empty;
-    public string FromStatus { get; init; } = string.Empty;
-    public string ToStatus { get; init; } = string.Empty;
+    public DecisionProposalStatusDto FromStatus { get; init; }
+    public DecisionProposalStatusDto ToStatus { get; init; }
     public string Actor { get; init; } = string.Empty;
     public string Reason { get; init; } = string.Empty;
     public DateTimeOffset Utc { get; init; }
