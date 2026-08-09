@@ -1,78 +1,124 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.AssetIntelligenceView"
              x:DataType="vm:AssetIntelligenceViewModel">
   <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="24" RowSpacing="14">
-    <StackPanel Grid.Row="0" Spacing="6">
-      <TextBlock Text="智能运维中心" FontSize="24" FontWeight="SemiBold" />
-      <TextBlock Text="{Binding BoundaryText}" TextWrapping="Wrap" Opacity="0.75" />
+    <StackPanel Grid.Row="0" Spacing="8">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="wcs-page-title" Text="智能运维中心" />
+        <TextBlock Classes="wcs-page-subtitle"
+                   Text="统一查看资产健康、根因分析、维修建议与 Failure Forecast / RUL。" />
+      </StackPanel>
+      <Border Classes="wcs-boundary-strip">
+        <TextBlock Classes="wcs-page-subtitle" Text="{Binding BoundaryText}" />
+      </Border>
     </StackPanel>
 
     <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*,*" ColumnSpacing="10">
-      <Border Grid.Column="0" Padding="10" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Assets"/><TextBlock Text="{Binding TrackedAssetCount}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
-      <Border Grid.Column="1" Padding="10" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Degraded &lt; 70"/><TextBlock Text="{Binding DegradedAssetCount}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
-      <Border Grid.Column="2" Padding="10" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Root Cause"/><TextBlock Text="{Binding RootCauseCount}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
-      <Border Grid.Column="3" Padding="10" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Maintenance"/><TextBlock Text="{Binding MaintenanceCount}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
-      <Border Grid.Column="4" Padding="10" BorderThickness="1" CornerRadius="6"><StackPanel><TextBlock Text="Forecast"/><TextBlock Text="{Binding ForecastCount}" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+      <atom:Card Grid.Column="0" StyleVariant="Outlined" IsHoverable="True">
+        <atom:Statistic Header="Assets" Value="{Binding TrackedAssetCount}" ContentFontSize="26" />
+      </atom:Card>
+      <atom:Card Grid.Column="1" StyleVariant="Outlined" IsHoverable="True">
+        <atom:Statistic Header="Degraded &lt; 70" Value="{Binding DegradedAssetCount}" ContentFontSize="26" />
+      </atom:Card>
+      <atom:Card Grid.Column="2" StyleVariant="Outlined" IsHoverable="True">
+        <atom:Statistic Header="Root Cause" Value="{Binding RootCauseCount}" ContentFontSize="26" />
+      </atom:Card>
+      <atom:Card Grid.Column="3" StyleVariant="Outlined" IsHoverable="True">
+        <atom:Statistic Header="Maintenance" Value="{Binding MaintenanceCount}" ContentFontSize="26" />
+      </atom:Card>
+      <atom:Card Grid.Column="4" StyleVariant="Outlined" IsHoverable="True">
+        <atom:Statistic Header="Forecast" Value="{Binding ForecastCount}" ContentFontSize="26" />
+      </atom:Card>
     </Grid>
 
-    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
-      <Button Content="刷新智能运维" Command="{Binding RefreshCommand}" />
-      <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10">
+      <atom:Button ButtonType="Primary" Content="刷新智能运维" Command="{Binding RefreshCommand}" />
+      <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
     </StackPanel>
 
-    <TabControl Grid.Row="3">
-      <TabItem Header="Health">
-        <DataGrid ItemsSource="{Binding HealthAssets}" AutoGenerateColumns="False" IsReadOnly="True">
-          <DataGrid.Columns>
-            <DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="160" />
-            <DataGridTextColumn Header="Health" Binding="{Binding HealthScore}" Width="90" />
-            <DataGridTextColumn Header="Grade" Binding="{Binding Grade}" Width="100" />
-            <DataGridTextColumn Header="Fusion Risk" Binding="{Binding FusionRiskScore}" Width="100" />
-            <DataGridTextColumn Header="Sources" Binding="{Binding IndependentSourceCount}" Width="80" />
-            <DataGridTextColumn Header="Summary" Binding="{Binding Summary}" Width="*" />
-            <DataGridTextColumn Header="Calculated" Binding="{Binding CalculatedAtUtc}" Width="180" />
-          </DataGrid.Columns>
-        </DataGrid>
-      </TabItem>
-      <TabItem Header="Root Cause">
-        <DataGrid ItemsSource="{Binding RootCauses}" AutoGenerateColumns="False" IsReadOnly="True">
-          <DataGrid.Columns>
-            <DataGridTextColumn Header="Analysis" Binding="{Binding AnalysisId}" Width="190" />
-            <DataGridTextColumn Header="Trigger Event" Binding="{Binding TriggerEventId}" Width="190" />
-            <DataGridTextColumn Header="Primary Cause" Binding="{Binding PrimaryNodeId}" Width="170" />
-            <DataGridTextColumn Header="Review" Binding="{Binding ReviewDecision}" Width="100" />
-            <DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="180" />
-          </DataGrid.Columns>
-        </DataGrid>
-      </TabItem>
-      <TabItem Header="Maintenance">
-        <DataGrid ItemsSource="{Binding Maintenance}" AutoGenerateColumns="False" IsReadOnly="True">
-          <DataGrid.Columns>
-            <DataGridTextColumn Header="Recommendation" Binding="{Binding RecommendationId}" Width="200" />
-            <DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="140" />
-            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
-            <DataGridTextColumn Header="Summary" Binding="{Binding Summary}" Width="*" />
-            <DataGridTextColumn Header="MES WorkOrder" Binding="{Binding MesWorkOrderNo}" Width="150" />
-            <DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="180" />
-          </DataGrid.Columns>
-        </DataGrid>
-      </TabItem>
-      <TabItem Header="Failure Forecast / RUL">
-        <DataGrid ItemsSource="{Binding Forecasts}" AutoGenerateColumns="False" IsReadOnly="True">
-          <DataGrid.Columns>
-            <DataGridTextColumn Header="Forecast" Binding="{Binding ForecastId}" Width="190" />
-            <DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="140" />
-            <DataGridTextColumn Header="P24" Binding="{Binding P24}" Width="90" />
-            <DataGridTextColumn Header="P72" Binding="{Binding P72}" Width="90" />
-            <DataGridTextColumn Header="P168" Binding="{Binding P168}" Width="90" />
-            <DataGridTextColumn Header="RUL median(h)" Binding="{Binding RulMedianHours}" Width="110" />
-            <DataGridTextColumn Header="Model" Binding="{Binding ModelVersion}" Width="120" />
-            <DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="180" />
-          </DataGrid.Columns>
-        </DataGrid>
-      </TabItem>
-    </TabControl>
+    <atom:Card Grid.Row="3" StyleVariant="Outlined">
+      <atom:TabControl>
+        <atom:TabItem Header="Health">
+          <atom:DataGrid ItemsSource="{Binding HealthAssets}"
+                         AutoGenerateColumns="False"
+                         IsReadOnly="True"
+                         CanUserResizeColumns="True"
+                         CanUserSortColumns="True"
+                         IsFrameBorderVisible="True"
+                         PaginationVisibility="None">
+            <atom:DataGrid.Columns>
+              <atom:DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="160" />
+              <atom:DataGridTextColumn Header="Health" Binding="{Binding HealthScore}" Width="90" />
+              <atom:DataGridTextColumn Header="Grade" Binding="{Binding Grade}" Width="100" />
+              <atom:DataGridTextColumn Header="Fusion Risk" Binding="{Binding FusionRiskScore}" Width="100" />
+              <atom:DataGridTextColumn Header="Sources" Binding="{Binding IndependentSourceCount}" Width="80" />
+              <atom:DataGridTextColumn Header="Summary" Binding="{Binding Summary}" Width="*" />
+              <atom:DataGridTextColumn Header="Calculated" Binding="{Binding CalculatedAtUtc}" Width="180" />
+            </atom:DataGrid.Columns>
+          </atom:DataGrid>
+        </atom:TabItem>
+
+        <atom:TabItem Header="Root Cause">
+          <atom:DataGrid ItemsSource="{Binding RootCauses}"
+                         AutoGenerateColumns="False"
+                         IsReadOnly="True"
+                         CanUserResizeColumns="True"
+                         CanUserSortColumns="True"
+                         IsFrameBorderVisible="True"
+                         PaginationVisibility="None">
+            <atom:DataGrid.Columns>
+              <atom:DataGridTextColumn Header="Analysis" Binding="{Binding AnalysisId}" Width="190" />
+              <atom:DataGridTextColumn Header="Trigger Event" Binding="{Binding TriggerEventId}" Width="190" />
+              <atom:DataGridTextColumn Header="Primary Cause" Binding="{Binding PrimaryNodeId}" Width="170" />
+              <atom:DataGridTextColumn Header="Review" Binding="{Binding ReviewDecision}" Width="100" />
+              <atom:DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="*" />
+            </atom:DataGrid.Columns>
+          </atom:DataGrid>
+        </atom:TabItem>
+
+        <atom:TabItem Header="Maintenance">
+          <atom:DataGrid ItemsSource="{Binding Maintenance}"
+                         AutoGenerateColumns="False"
+                         IsReadOnly="True"
+                         CanUserResizeColumns="True"
+                         CanUserSortColumns="True"
+                         IsFrameBorderVisible="True"
+                         PaginationVisibility="None">
+            <atom:DataGrid.Columns>
+              <atom:DataGridTextColumn Header="Recommendation" Binding="{Binding RecommendationId}" Width="200" />
+              <atom:DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="140" />
+              <atom:DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+              <atom:DataGridTextColumn Header="Summary" Binding="{Binding Summary}" Width="*" />
+              <atom:DataGridTextColumn Header="MES WorkOrder" Binding="{Binding MesWorkOrderNo}" Width="150" />
+              <atom:DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="180" />
+            </atom:DataGrid.Columns>
+          </atom:DataGrid>
+        </atom:TabItem>
+
+        <atom:TabItem Header="Failure Forecast / RUL">
+          <atom:DataGrid ItemsSource="{Binding Forecasts}"
+                         AutoGenerateColumns="False"
+                         IsReadOnly="True"
+                         CanUserResizeColumns="True"
+                         CanUserSortColumns="True"
+                         IsFrameBorderVisible="True"
+                         PaginationVisibility="None">
+            <atom:DataGrid.Columns>
+              <atom:DataGridTextColumn Header="Forecast" Binding="{Binding ForecastId}" Width="190" />
+              <atom:DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="140" />
+              <atom:DataGridTextColumn Header="P24" Binding="{Binding P24}" Width="90" />
+              <atom:DataGridTextColumn Header="P72" Binding="{Binding P72}" Width="90" />
+              <atom:DataGridTextColumn Header="P168" Binding="{Binding P168}" Width="90" />
+              <atom:DataGridTextColumn Header="RUL median(h)" Binding="{Binding RulMedianHours}" Width="110" />
+              <atom:DataGridTextColumn Header="Model" Binding="{Binding ModelVersion}" Width="120" />
+              <atom:DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="*" />
+            </atom:DataGrid.Columns>
+          </atom:DataGrid>
+        </atom:TabItem>
+      </atom:TabControl>
+    </atom:Card>
   </Grid>
 </UserControl>
