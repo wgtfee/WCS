@@ -1,0 +1,93 @@
+name: WCS Intelligence Productization
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Desktop/**'
+      - 'src/Wcs.Host/Controllers/ShadowDecisionController.cs'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligencePersistence.cs'
+      - '.github/workflows/intelligence-productization.yml'
+      - 'docs/交付文件/112-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  productization:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Host Release
+        run: dotnet build src/Wcs.Host/Wcs.Host.csproj -c Release
+
+      - name: Build Desktop Release
+        run: dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release
+
+      - name: Build simulator contracts
+        run: dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release
+
+      - name: Re-run P2 Feature Center contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build \
+            --filter 'FullyQualifiedName~FeatureCenter' --logger 'console;verbosity=normal'
+
+      - name: Re-run P3 Shadow Decision contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build \
+            --filter 'FullyQualifiedName~DecisionIntelligenceContractTests' --logger 'console;verbosity=normal'
+
+      - name: Verify product pages are wired
+        shell: bash
+        run: |
+          set -euo pipefail
+          menu='src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs'
+          di='src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs'
+          for route in AssetIntelligence IndustrialIntelligenceOverview FeatureCenter ShadowDecision; do
+            grep -q "Url = \"/$route\"" "$menu"
+            grep -q "AddTransient<${route}ViewModel>" "$di"
+            test -f "src/Wcs.Desktop/ViewModels/${route}ViewModel.cs"
+            test -f "src/Wcs.Desktop/Views/${route}View.axaml"
+            test -f "src/Wcs.Desktop/Views/${route}View.axaml.cs"
+          done
+          grep -q 'AddHttpClient<IFeatureCenterApiService, FeatureCenterApiService>' "$di"
+          grep -q 'AddHttpClient<IShadowDecisionApiService, ShadowDecisionApiService>' "$di"
+          grep -q 'AddHttpClient<IIndustrialIntelligenceOverviewApiService, IndustrialIntelligenceOverviewApiService>' "$di"
+          grep -q 'AddHttpClient<IAssetIntelligenceApiService, AssetIntelligenceApiService>' "$di"
+
+      - name: Verify P3 remains governance-only and zero-control
+        shell: bash
+        run: |
+          set -euo pipefail
+          controller='src/Wcs.Host/Controllers/ShadowDecisionController.cs'
+          persistence='src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligencePersistence.cs'
+          grep -q 'controlWriteAllowed = false' "$controller"
+          grep -q 'productionAutomationAllowed = false' "$controller"
+          grep -q 'EffectiveMaximumAutomationLevel <= AutomationLevel.L1' "$controller"
+          ! grep -nE 'S7Client|S7RealClient|Snap7|S7CommPlusDriver|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|RouteReservationManager|WriteAsync\(' "$controller" "$persistence"
+          ! grep -R -nE 'PlcForceWrite|SafetyReset|SafetyDoorBypass|LightCurtainBypass' \
+            src/Wcs.Desktop/ViewModels/FeatureCenterViewModel.cs \
+            src/Wcs.Desktop/ViewModels/ShadowDecisionViewModel.cs \
+            src/Wcs.Desktop/ViewModels/IndustrialIntelligenceOverviewViewModel.cs \
+            src/Wcs.Desktop/ViewModels/AssetIntelligenceViewModel.cs
+
+      - name: Verify P3 persistence governance tables
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligencePersistence.cs'
+          grep -q 'SqlDecisionProposalStore' "$file"
+          grep -q 'AppendApprovalAsync' "$file"
+          grep -q 'RecordOutcomeAsync' "$file"
+          grep -q 'IDecisionRecoveryStore' "$file"
