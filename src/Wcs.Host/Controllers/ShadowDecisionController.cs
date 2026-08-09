@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Wcs.DecisionIntelligence;
 using Wcs.IndustrialIntelligence.Governance;
 using Wcs.Infrastructure.IndustrialIntelligence;
+using DecisionStatus = Wcs.DecisionIntelligence.DecisionProposalStatus;
 
 [ApiController]
 [Route("api/industrial-intelligence/proposals")]
@@ -20,7 +21,7 @@ public sealed class ShadowDecisionController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> List(
-        [FromQuery] DecisionProposalStatus? status = null,
+        [FromQuery] DecisionStatus? status = null,
         [FromQuery] ProposalType? type = null,
         [FromQuery] int take = 100,
         CancellationToken ct = default)
@@ -73,11 +74,11 @@ public sealed class ShadowDecisionController : ControllerBase
 
     [HttpPost("{proposalId}/approve")]
     public Task<IActionResult> Approve(string proposalId, [FromBody] DecisionGovernanceActionRequest request, CancellationToken ct) =>
-        Transition(proposalId, DecisionProposalStatus.Approved, request, ct);
+        Transition(proposalId, DecisionStatus.Approved, request, ct);
 
     [HttpPost("{proposalId}/reject")]
     public Task<IActionResult> Reject(string proposalId, [FromBody] DecisionGovernanceActionRequest request, CancellationToken ct) =>
-        Transition(proposalId, DecisionProposalStatus.Rejected, request, ct);
+        Transition(proposalId, DecisionStatus.Rejected, request, ct);
 
     [HttpPost("{proposalId}/outcome")]
     public async Task<IActionResult> Outcome(string proposalId, [FromBody] DecisionOutcomeRequest request, CancellationToken ct)
@@ -93,7 +94,7 @@ public sealed class ShadowDecisionController : ControllerBase
             var store = GetFactory().CreateStore();
             var proposal = await store.GetAsync(proposalId.Trim(), ct);
             if (proposal is null) return NotFound();
-            if (proposal.Status != DecisionProposalStatus.Approved)
+            if (proposal.Status != DecisionStatus.Approved)
                 return Conflict(new { failClosed = true, error = "Outcome can only be recorded for an approved proposal." });
 
             var outcome = new DecisionOutcome(
@@ -112,7 +113,7 @@ public sealed class ShadowDecisionController : ControllerBase
 
     private async Task<IActionResult> Transition(
         string proposalId,
-        DecisionProposalStatus target,
+        DecisionStatus target,
         DecisionGovernanceActionRequest request,
         CancellationToken ct)
     {
@@ -129,8 +130,8 @@ public sealed class ShadowDecisionController : ControllerBase
             var now = DateTimeOffset.UtcNow;
             if (proposal.IsExpired(now))
                 return Conflict(new { failClosed = true, error = "Expired proposal cannot transition." });
-            if (proposal.Status is DecisionProposalStatus.Blocked or DecisionProposalStatus.Approved or
-                DecisionProposalStatus.Rejected or DecisionProposalStatus.OutcomeRecorded or DecisionProposalStatus.Expired)
+            if (proposal.Status is DecisionStatus.Blocked or DecisionStatus.Approved or
+                DecisionStatus.Rejected or DecisionStatus.OutcomeRecorded or DecisionStatus.Expired)
                 return Conflict(new { failClosed = true, error = $"Proposal in state {proposal.Status} cannot transition to {target}." });
 
             var hash = DecisionHash.Sha256(
