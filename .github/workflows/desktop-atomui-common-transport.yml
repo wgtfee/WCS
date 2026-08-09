@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -44,7 +46,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          changed="$(git diff --name-only origin/${{ github.base_ref }}...HEAD)"
+          git fetch origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}" --depth=1
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)"
           echo "$changed"
           if echo "$changed" | grep -E '^src/(Wcs.Core|Wcs.Infrastructure|Wcs.Host)/'; then
             echo 'Control/backend scope changed in UI-only migration.' >&2
