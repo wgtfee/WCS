@@ -1,36 +1,28 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
-             xmlns:ctl="using:Wcs.Desktop.Controls"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.DashboardView"
              x:DataType="vm:DashboardViewModel"
              Background="{DynamicResource BgPrimary}">
     <ScrollViewer Padding="24">
         <StackPanel Spacing="16">
-            <TextBlock Text="System Overview" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" />
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-page-title" Text="System Overview" />
+                <TextBlock Classes="wcs-page-subtitle" Text="设备、任务、报警、对象跟踪与资源锁的统一运行概览。" />
+            </StackPanel>
 
-            <!-- Summary Cards -->
-            <WrapPanel>
-                <ctl:OverviewCard Label="Devices" Value="{Binding DeviceCount}"
-                                  BackgroundColor="#1565C0" />
-                <ctl:OverviewCard Label="Active Tasks" Value="{Binding ActiveTaskCount}"
-                                  BackgroundColor="#2E7D32" />
-                <ctl:OverviewCard Label="Active Alarms" Value="{Binding ActiveAlarmCount}"
-                                  BackgroundColor="#C62828" />
-                <ctl:OverviewCard Label="Tracked Objects" Value="{Binding TrackedObjectCount}"
-                                  BackgroundColor="#6A1B9A" />
-                <ctl:OverviewCard Label="Resource Locks" Value="{Binding ActiveLockCount}"
-                                  BackgroundColor="#E65100" />
-            </WrapPanel>
+            <UniformGrid Columns="5" Rows="1">
+                <atom:Card Margin="0,0,6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Devices" Value="{Binding DeviceCount}" ContentFontSize="26" /></atom:Card>
+                <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Active Tasks" Value="{Binding ActiveTaskCount}" ContentFontSize="26" /></atom:Card>
+                <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Active Alarms" Value="{Binding ActiveAlarmCount}" ContentFontSize="26" /></atom:Card>
+                <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Tracked Objects" Value="{Binding TrackedObjectCount}" ContentFontSize="26" /></atom:Card>
+                <atom:Card Margin="6,0,0,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Resource Locks" Value="{Binding ActiveLockCount}" ContentFontSize="26" /></atom:Card>
+            </UniformGrid>
 
-            <!-- Quick Actions -->
-            <Border Background="{DynamicResource BgSecondary}" CornerRadius="8" Padding="16" Margin="0,16,0,0">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Quick Actions" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+            <atom:Card Header="Quick Actions" StyleVariant="Outlined">
+                <TextBlock Classes="wcs-page-subtitle" Text="运行入口由左侧导航统一承载，避免在总览页复制控制命令。" />
+            </atom:Card>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
