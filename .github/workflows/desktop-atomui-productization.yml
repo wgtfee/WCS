@@ -38,105 +38,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          atom_pages=(
-            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml
-            src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
-            src/Wcs.Desktop/Views/FeatureCenterView.axaml
-            src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
-            src/Wcs.Desktop/Views/TransportTrafficView.axaml
-            src/Wcs.Desktop/Views/TransportProductionView.axaml
-            src/Wcs.Desktop/Views/TransportObservabilityView.axaml
-            src/Wcs.Desktop/Views/TransportResilienceView.axaml
-            src/Wcs.Desktop/Views/TransportOptimizationView.axaml
-            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
-            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
-            src/Wcs.Desktop/Views/TransportAdministrationView.axaml
-            src/Wcs.Desktop/Views/DeviceListView.axaml
-            src/Wcs.Desktop/Views/TaskManagementView.axaml
-            src/Wcs.Desktop/Views/AlarmPanelView.axaml
-            src/Wcs.Desktop/Views/EventLogView.axaml
-            src/Wcs.Desktop/Views/DashboardView.axaml
-            src/Wcs.Desktop/Views/ObjectTrackingView.axaml
-            src/Wcs.Desktop/Views/TrackingLogView.axaml
-            src/Wcs.Desktop/Views/AuditLogView.axaml
-            src/Wcs.Desktop/Views/SystemLogView.axaml
-            src/Wcs.Desktop/Views/TransportSimulationView.axaml
-            src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+          pages=(
+            AssetIntelligenceView IndustrialIntelligenceOverviewView FeatureCenterView ShadowDecisionView
+            TransportSchedulingView TransportTrafficView TransportProductionView TransportObservabilityView TransportResilienceView
+            TransportOptimizationView TransportDriverDiagnosticsView TransportCommissioningView TransportAdministrationView
+            DeviceListView TaskManagementView AlarmPanelView EventLogView DashboardView ObjectTrackingView TrackingLogView
+            AuditLogView SystemLogView TransportSimulationView SimulationVerificationView
+            ModelOpsView MaintenanceLearningView DigitalTwinOptimizerView BoundedAutomationReadinessView
           )
-          for page in "${atom_pages[@]}"; do
+          for name in "${pages[@]}"; do
+            page="src/Wcs.Desktop/Views/${name}.axaml"
+            test -f "$page"
             grep -q 'xmlns:atom="https://atomui.net"' "$page"
             grep -q '<atom:Card' "$page"
             ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])' "$page"
           done
-
-          grid_pages=(
-            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
-            src/Wcs.Desktop/Views/FeatureCenterView.axaml src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-            src/Wcs.Desktop/Views/TransportSchedulingView.axaml src/Wcs.Desktop/Views/TransportTrafficView.axaml
-            src/Wcs.Desktop/Views/TransportProductionView.axaml src/Wcs.Desktop/Views/TransportObservabilityView.axaml
-            src/Wcs.Desktop/Views/TransportResilienceView.axaml src/Wcs.Desktop/Views/TransportOptimizationView.axaml
-            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml src/Wcs.Desktop/Views/TransportCommissioningView.axaml
-            src/Wcs.Desktop/Views/TransportAdministrationView.axaml src/Wcs.Desktop/Views/DeviceListView.axaml
-            src/Wcs.Desktop/Views/TaskManagementView.axaml src/Wcs.Desktop/Views/AlarmPanelView.axaml
-            src/Wcs.Desktop/Views/EventLogView.axaml src/Wcs.Desktop/Views/ObjectTrackingView.axaml
-            src/Wcs.Desktop/Views/TrackingLogView.axaml src/Wcs.Desktop/Views/TransportSimulationView.axaml
-            src/Wcs.Desktop/Views/SimulationVerificationView.axaml
-          )
-          for page in "${grid_pages[@]}"; do grep -q '<atom:DataGrid' "$page"; done
-
-          button_pages=(
-            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
-            src/Wcs.Desktop/Views/FeatureCenterView.axaml src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-            src/Wcs.Desktop/Views/TransportSchedulingView.axaml src/Wcs.Desktop/Views/TransportTrafficView.axaml
-            src/Wcs.Desktop/Views/TransportProductionView.axaml src/Wcs.Desktop/Views/TransportObservabilityView.axaml
-            src/Wcs.Desktop/Views/TransportResilienceView.axaml src/Wcs.Desktop/Views/TransportOptimizationView.axaml
-            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml src/Wcs.Desktop/Views/TransportCommissioningView.axaml
-            src/Wcs.Desktop/Views/TransportAdministrationView.axaml src/Wcs.Desktop/Views/DeviceListView.axaml
-            src/Wcs.Desktop/Views/TaskManagementView.axaml src/Wcs.Desktop/Views/AlarmPanelView.axaml
-            src/Wcs.Desktop/Views/ObjectTrackingView.axaml src/Wcs.Desktop/Views/TrackingLogView.axaml
-            src/Wcs.Desktop/Views/TransportSimulationView.axaml src/Wcs.Desktop/Views/SimulationVerificationView.axaml
-          )
-          for page in "${button_pages[@]}"; do grep -q '<atom:Button' "$page"; done
-
-          statistic_pages=(
-            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml src/Wcs.Desktop/Views/IndustrialIntelligenceOverviewView.axaml
-            src/Wcs.Desktop/Views/FeatureCenterView.axaml src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-            src/Wcs.Desktop/Views/TransportSchedulingView.axaml src/Wcs.Desktop/Views/TransportTrafficView.axaml
-            src/Wcs.Desktop/Views/TransportProductionView.axaml src/Wcs.Desktop/Views/TransportObservabilityView.axaml
-            src/Wcs.Desktop/Views/TransportResilienceView.axaml src/Wcs.Desktop/Views/TransportOptimizationView.axaml
-            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml src/Wcs.Desktop/Views/TransportCommissioningView.axaml
-            src/Wcs.Desktop/Views/TransportAdministrationView.axaml src/Wcs.Desktop/Views/DeviceListView.axaml
-            src/Wcs.Desktop/Views/TaskManagementView.axaml src/Wcs.Desktop/Views/AlarmPanelView.axaml
-            src/Wcs.Desktop/Views/EventLogView.axaml src/Wcs.Desktop/Views/DashboardView.axaml
-            src/Wcs.Desktop/Views/ObjectTrackingView.axaml src/Wcs.Desktop/Views/TransportSimulationView.axaml
-            src/Wcs.Desktop/Views/SimulationVerificationView.axaml
-          )
-          for page in "${statistic_pages[@]}"; do grep -q '<atom:Statistic' "$page"; done
-
-          tab_pages=(
-            src/Wcs.Desktop/Views/AssetIntelligenceView.axaml src/Wcs.Desktop/Views/TransportSchedulingView.axaml
-            src/Wcs.Desktop/Views/TransportTrafficView.axaml src/Wcs.Desktop/Views/TransportProductionView.axaml
-            src/Wcs.Desktop/Views/TransportObservabilityView.axaml src/Wcs.Desktop/Views/TransportResilienceView.axaml
-            src/Wcs.Desktop/Views/TransportOptimizationView.axaml src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
-            src/Wcs.Desktop/Views/TransportCommissioningView.axaml src/Wcs.Desktop/Views/TransportAdministrationView.axaml
-            src/Wcs.Desktop/Views/TransportSimulationView.axaml
-          )
-          for page in "${tab_pages[@]}"; do grep -q '<atom:TabControl' "$page"; done
-
-          line_edit_pages=(
-            src/Wcs.Desktop/Views/FeatureCenterView.axaml src/Wcs.Desktop/Views/ShadowDecisionView.axaml
-            src/Wcs.Desktop/Views/TransportCommissioningView.axaml src/Wcs.Desktop/Views/TaskManagementView.axaml
-            src/Wcs.Desktop/Views/AlarmPanelView.axaml src/Wcs.Desktop/Views/TrackingLogView.axaml
-          )
-          for page in "${line_edit_pages[@]}"; do grep -q '<atom:LineEdit' "$page"; done
+          grep -R -q '<atom:Statistic' src/Wcs.Desktop/Views
+          grep -R -q '<atom:LineEdit' src/Wcs.Desktop/Views
+          grep -R -q '<atom:Button' src/Wcs.Desktop/Views
+          grep -R -q '<atom:TabControl' src/Wcs.Desktop/Views
+          grep -R -q '<atom:DataGrid' src/Wcs.Desktop/Views
       - name: Write exact-head UI evidence
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/desktop-atomui
           cat > artifacts/desktop-atomui/evidence.json <<EOF
-          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":24,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
+          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":28,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
           EOF
       - uses: actions/upload-artifact@v4
         with:

@@ -1,67 +1,35 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
-             xmlns:idi="using:Wcs.IndustrialIntelligence.Governance"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.BoundedAutomationReadinessView"
              x:DataType="vm:BoundedAutomationReadinessViewModel">
   <ScrollViewer>
     <StackPanel Margin="24" Spacing="16">
-      <TextBlock Text="IDI-P6 Bounded Automation Readiness" FontSize="24" FontWeight="SemiBold" />
-      <TextBlock Text="{Binding SafetyText}" TextWrapping="Wrap" Opacity="0.75" />
-
-      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="Environment" FontWeight="SemiBold" />
-        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Environment}" />
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="Mode / Boundary" FontWeight="SemiBold" />
-        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ModeText}" TextWrapping="Wrap" />
-        <TextBlock Grid.Row="2" Grid.Column="0" Text="Final Claim" FontWeight="SemiBold" />
-        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ClaimText}" FontWeight="SemiBold" />
+      <StackPanel Spacing="4"><TextBlock Classes="wcs-page-title" Text="IDI-P6 Bounded Automation Readiness"/><TextBlock Classes="wcs-page-subtitle" Text="软件侧自动化就绪度与永久禁止项的只读治理视图。"/></StackPanel>
+      <Border Classes="wcs-boundary-strip"><TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}"/></Border>
+      <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+        <atom:Card Header="Environment" StyleVariant="Outlined"><TextBlock Text="{Binding Environment}" FontSize="18" FontWeight="SemiBold"/></atom:Card>
+        <atom:Card Grid.Column="1" Header="Mode / Boundary" StyleVariant="Outlined"><TextBlock Text="{Binding ModeText}" TextWrapping="Wrap"/></atom:Card>
+        <atom:Card Grid.Column="2" Header="Final Claim" StyleVariant="Outlined"><TextBlock Text="{Binding ClaimText}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/></atom:Card>
       </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="刷新只读 Evidence" Command="{Binding RefreshCommand}"/><TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}"/></StackPanel>
 
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button Content="刷新只读 Evidence" Command="{Binding RefreshCommand}" />
-        <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
-      </StackPanel>
+      <atom:Card Header="永久禁止自动化操作" StyleVariant="Outlined">
+        <ItemsControl ItemsSource="{Binding PermanentProhibitions}"><ItemsControl.ItemTemplate><DataTemplate><Border Padding="8" Margin="0,0,0,6" BorderThickness="1" CornerRadius="4" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="{Binding}" TextWrapping="Wrap"/></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+      </atom:Card>
 
-      <TextBlock Text="永久禁止自动化操作" FontSize="18" FontWeight="SemiBold" />
-      <ItemsControl ItemsSource="{Binding PermanentProhibitions}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate>
-            <Border Padding="8" Margin="0,0,0,6" BorderThickness="1" CornerRadius="4">
-              <TextBlock Text="{Binding}" />
-            </Border>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-
-      <TextBlock Text="最近 Readiness Evidence" FontSize="18" FontWeight="SemiBold" />
-      <ItemsControl ItemsSource="{Binding Evidence}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="idi:BoundedAutomationReadinessEvidenceRecord">
-            <Border Padding="10" Margin="0,0,0,8" BorderThickness="1" CornerRadius="4">
-              <Grid ColumnDefinitions="180,80,120,120,*,160" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="{Binding EvaluationId}" />
-                <TextBlock Grid.Column="1" Text="{Binding RequestedLevel}" />
-                <TextBlock Grid.Column="2" Text="{Binding SoftwareSideReady}" />
-                <TextBlock Grid.Column="3" Text="{Binding ProductionEnablementAllowed}" />
-                <TextBlock Grid.Column="4" Text="{Binding DecisionHash}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="5" Text="{Binding EvaluatedAtUtc}" />
-              </Grid>
-            </Border>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-
-      <Border Padding="12" BorderThickness="1" CornerRadius="6">
-        <StackPanel Spacing="8">
-          <TextBlock Text="Evidence 查询（只读）" FontWeight="SemiBold" />
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBox Width="320" PlaceholderText="EvaluationId" Text="{Binding EvaluationId}" />
-            <Button Content="读取 Evidence" Command="{Binding LoadEvidenceCommand}" />
-          </StackPanel>
-          <TextBlock Text="{Binding SelectedEvidenceText}" TextWrapping="Wrap" />
+      <atom:Card Header="最近 Readiness Evidence" StyleVariant="Outlined">
+        <StackPanel Spacing="8"><atom:Statistic Header="Evidence" Value="{Binding Evidence.Count}" ContentFontSize="24"/>
+          <atom:DataGrid ItemsSource="{Binding Evidence}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+            <atom:DataGrid.Columns><atom:DataGridTextColumn Header="EvaluationId" Binding="{Binding EvaluationId}" Width="180"/><atom:DataGridTextColumn Header="Requested Level" Binding="{Binding RequestedLevel}" Width="100"/><atom:DataGridCheckBoxColumn Header="Software Ready" Binding="{Binding SoftwareSideReady}" Width="110"/><atom:DataGridCheckBoxColumn Header="Production Allowed" Binding="{Binding ProductionEnablementAllowed}" Width="130"/><atom:DataGridTextColumn Header="DecisionHash" Binding="{Binding DecisionHash}" Width="*"/><atom:DataGridTextColumn Header="Evaluated" Binding="{Binding EvaluatedAtUtc}" Width="180"/></atom:DataGrid.Columns>
+          </atom:DataGrid>
         </StackPanel>
-      </Border>
+      </atom:Card>
+
+      <atom:Card Header="Evidence 查询（只读）" StyleVariant="Outlined">
+        <StackPanel Spacing="8"><StackPanel Orientation="Horizontal" Spacing="8"><atom:LineEdit Width="320" Watermark="EvaluationId" Text="{Binding EvaluationId}"/><atom:Button Content="读取 Evidence" Command="{Binding LoadEvidenceCommand}"/></StackPanel><TextBlock Text="{Binding SelectedEvidenceText}" TextWrapping="Wrap"/></StackPanel>
+      </atom:Card>
     </StackPanel>
   </ScrollViewer>
 </UserControl>
