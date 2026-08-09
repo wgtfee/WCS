@@ -1,86 +1,50 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.TransportAdministrationView"
              x:DataType="vm:TransportAdministrationViewModel"
              Background="{DynamicResource BgPrimary}">
     <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="16">
-            <StackPanel>
-                <TextBlock Text="EMS / RGV 配置与审计"
-                           FontSize="24"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource TextPrimary}" />
-                <TextBlock Text="版本化配置、双人审批、操作审计和运行日志"
-                           Margin="0,4,0,0"
-                           Foreground="{DynamicResource TextSecondary}" />
-                <TextBlock Text="{Binding StatusText}"
-                           Margin="0,4,0,0"
-                           Foreground="{DynamicResource TextSecondary}" />
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-page-title" Text="EMS / RGV 配置与审计" />
+                <TextBlock Classes="wcs-page-subtitle" Text="版本化配置、双人审批、操作审计和运行日志。" />
+                <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
             </StackPanel>
-            <Button Grid.Column="1" Content="刷新" Command="{Binding RefreshCommand}" Padding="20,8" />
+            <atom:Button Grid.Column="1" Content="刷新" Command="{Binding RefreshCommand}" />
         </Grid>
 
         <UniformGrid Grid.Row="1" Columns="6" Rows="1">
-            <Border Margin="0,0,6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}"><StackPanel><TextBlock Text="配置版本" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ConfigurationVersion}" FontSize="24" FontWeight="Bold" /></StackPanel></Border>
-            <Border Margin="6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}"><StackPanel><TextBlock Text="交通资源" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding TrafficResourceCount}" FontSize="24" FontWeight="Bold" /></StackPanel></Border>
-            <Border Margin="6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}"><StackPanel><TextBlock Text="充电站" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding ChargingStationCount}" FontSize="24" FontWeight="Bold" /></StackPanel></Border>
-            <Border Margin="6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}"><StackPanel><TextBlock Text="车辆定义" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding VehicleDefinitionCount}" FontSize="24" FontWeight="Bold" /></StackPanel></Border>
-            <Border Margin="6,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}"><StackPanel><TextBlock Text="待审批" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding PendingApprovalCount}" FontSize="24" FontWeight="Bold" /></StackPanel></Border>
-            <Border Margin="6,0,0,0" Padding="14" CornerRadius="8" Background="{DynamicResource BgSecondary}"><StackPanel><TextBlock Text="执行失败" Foreground="{DynamicResource TextSecondary}" /><TextBlock Text="{Binding FailedOperationCount}" FontSize="24" FontWeight="Bold" /></StackPanel></Border>
+            <atom:Card Margin="0,0,6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="配置版本" Value="{Binding ConfigurationVersion}" ContentFontSize="24" /></atom:Card>
+            <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="交通资源" Value="{Binding TrafficResourceCount}" ContentFontSize="24" /></atom:Card>
+            <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="充电站" Value="{Binding ChargingStationCount}" ContentFontSize="24" /></atom:Card>
+            <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="车辆定义" Value="{Binding VehicleDefinitionCount}" ContentFontSize="24" /></atom:Card>
+            <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="待审批" Value="{Binding PendingApprovalCount}" ContentFontSize="24" /></atom:Card>
+            <atom:Card Margin="6,0,0,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="执行失败" Value="{Binding FailedOperationCount}" ContentFontSize="24" /></atom:Card>
         </UniformGrid>
 
-        <TabControl Grid.Row="2">
-            <TabItem Header="驱动配置">
-                <DataGrid ItemsSource="{Binding Drivers}" AutoGenerateColumns="False" IsReadOnly="True">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="驱动号" Binding="{Binding DriverId}" Width="*" />
-                        <DataGridTextColumn Header="车辆类型" Binding="{Binding Kind}" Width="120" />
-                        <DataGridTextColumn Header="协议" Binding="{Binding Protocol}" Width="140" />
-                        <DataGridTextColumn Header="端点" Binding="{Binding Endpoint}" Width="2*" />
-                        <DataGridTextColumn Header="轮询(ms)" Binding="{Binding PollIntervalMs}" Width="100" />
-                        <DataGridTextColumn Header="命令超时(ms)" Binding="{Binding CommandTimeoutMs}" Width="120" />
-                        <DataGridCheckBoxColumn Header="启用" Binding="{Binding Enabled}" Width="70" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
-            <TabItem Header="审批操作">
-                <DataGrid ItemsSource="{Binding Operations}" AutoGenerateColumns="False" IsReadOnly="True">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="操作号" Binding="{Binding OperationId}" Width="*" />
-                        <DataGridTextColumn Header="类型" Binding="{Binding OperationType}" Width="160" />
-                        <DataGridTextColumn Header="目标" Binding="{Binding TargetId}" Width="*" />
-                        <DataGridTextColumn Header="申请人" Binding="{Binding RequestedByName}" Width="140" />
-                        <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="130" />
-                        <DataGridTextColumn Header="独立审批数" Binding="{Binding Approvals.Count}" Width="110" />
-                        <DataGridTextColumn Header="过期时间" Binding="{Binding ExpiresAtUtc}" Width="190" />
-                        <DataGridTextColumn Header="结果" Binding="{Binding ResultMessage}" Width="2*" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
-            <TabItem Header="审计记录">
-                <DataGrid ItemsSource="{Binding Audits}" AutoGenerateColumns="False" IsReadOnly="True">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="时间" Binding="{Binding OccurredAtUtc}" Width="190" />
-                        <DataGridTextColumn Header="操作" Binding="{Binding Action}" Width="160" />
-                        <DataGridTextColumn Header="操作人" Binding="{Binding ActorName}" Width="140" />
-                        <DataGridTextColumn Header="目标" Binding="{Binding TargetId}" Width="*" />
-                        <DataGridCheckBoxColumn Header="成功" Binding="{Binding Success}" Width="70" />
-                        <DataGridTextColumn Header="详情" Binding="{Binding Detail}" Width="2*" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
-            <TabItem Header="运行日志">
-                <DataGrid ItemsSource="{Binding Journal}" AutoGenerateColumns="False" IsReadOnly="True">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="类别" Binding="{Binding Category}" Width="160" />
-                        <DataGridTextColumn Header="记录号" Binding="{Binding RecordId}" Width="*" />
-                        <DataGridTextColumn Header="业务时间" Binding="{Binding OccurredAtUtc}" Width="190" />
-                        <DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" />
-                        <DataGridTextColumn Header="JSON" Binding="{Binding PayloadJson}" Width="3*" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
-        </TabControl>
+        <atom:TabControl Grid.Row="2">
+            <atom:TabItem Header="驱动配置">
+                <atom:DataGrid ItemsSource="{Binding Drivers}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None"><atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="驱动号" Binding="{Binding DriverId}" Width="*" /><atom:DataGridTextColumn Header="车辆类型" Binding="{Binding Kind}" Width="120" /><atom:DataGridTextColumn Header="协议" Binding="{Binding Protocol}" Width="140" /><atom:DataGridTextColumn Header="端点" Binding="{Binding Endpoint}" Width="2*" /><atom:DataGridTextColumn Header="轮询(ms)" Binding="{Binding PollIntervalMs}" Width="100" /><atom:DataGridTextColumn Header="命令超时(ms)" Binding="{Binding CommandTimeoutMs}" Width="120" /><atom:DataGridCheckBoxColumn Header="启用" Binding="{Binding Enabled}" Width="70" />
+                </atom:DataGrid.Columns></atom:DataGrid>
+            </atom:TabItem>
+            <atom:TabItem Header="审批操作">
+                <atom:DataGrid ItemsSource="{Binding Operations}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None"><atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="操作号" Binding="{Binding OperationId}" Width="*" /><atom:DataGridTextColumn Header="类型" Binding="{Binding OperationType}" Width="160" /><atom:DataGridTextColumn Header="目标" Binding="{Binding TargetId}" Width="*" /><atom:DataGridTextColumn Header="申请人" Binding="{Binding RequestedByName}" Width="140" /><atom:DataGridTextColumn Header="状态" Binding="{Binding State}" Width="130" /><atom:DataGridTextColumn Header="独立审批数" Binding="{Binding Approvals.Count}" Width="110" /><atom:DataGridTextColumn Header="过期时间" Binding="{Binding ExpiresAtUtc}" Width="190" /><atom:DataGridTextColumn Header="结果" Binding="{Binding ResultMessage}" Width="2*" />
+                </atom:DataGrid.Columns></atom:DataGrid>
+            </atom:TabItem>
+            <atom:TabItem Header="审计记录">
+                <atom:DataGrid ItemsSource="{Binding Audits}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None"><atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="时间" Binding="{Binding OccurredAtUtc}" Width="190" /><atom:DataGridTextColumn Header="操作" Binding="{Binding Action}" Width="160" /><atom:DataGridTextColumn Header="操作人" Binding="{Binding ActorName}" Width="140" /><atom:DataGridTextColumn Header="目标" Binding="{Binding TargetId}" Width="*" /><atom:DataGridCheckBoxColumn Header="成功" Binding="{Binding Success}" Width="70" /><atom:DataGridTextColumn Header="详情" Binding="{Binding Detail}" Width="2*" />
+                </atom:DataGrid.Columns></atom:DataGrid>
+            </atom:TabItem>
+            <atom:TabItem Header="运行日志">
+                <atom:DataGrid ItemsSource="{Binding Journal}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None"><atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="类别" Binding="{Binding Category}" Width="160" /><atom:DataGridTextColumn Header="记录号" Binding="{Binding RecordId}" Width="*" /><atom:DataGridTextColumn Header="业务时间" Binding="{Binding OccurredAtUtc}" Width="190" /><atom:DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" /><atom:DataGridTextColumn Header="JSON" Binding="{Binding PayloadJson}" Width="3*" />
+                </atom:DataGrid.Columns></atom:DataGrid>
+            </atom:TabItem>
+        </atom:TabControl>
     </Grid>
 </UserControl>

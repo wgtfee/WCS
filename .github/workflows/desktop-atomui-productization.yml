@@ -52,6 +52,10 @@ jobs:
             src/Wcs.Desktop/Views/TransportProductionView.axaml
             src/Wcs.Desktop/Views/TransportObservabilityView.axaml
             src/Wcs.Desktop/Views/TransportResilienceView.axaml
+            src/Wcs.Desktop/Views/TransportOptimizationView.axaml
+            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
+            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+            src/Wcs.Desktop/Views/TransportAdministrationView.axaml
           )
 
           for page in "${pages[@]}"; do
@@ -71,6 +75,10 @@ jobs:
             src/Wcs.Desktop/Views/TransportProductionView.axaml
             src/Wcs.Desktop/Views/TransportObservabilityView.axaml
             src/Wcs.Desktop/Views/TransportResilienceView.axaml
+            src/Wcs.Desktop/Views/TransportOptimizationView.axaml
+            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
+            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+            src/Wcs.Desktop/Views/TransportAdministrationView.axaml
           )
           for page in "${kpi_pages[@]}"; do
             grep -q '<atom:Card' "$page"
@@ -84,6 +92,10 @@ jobs:
             src/Wcs.Desktop/Views/TransportProductionView.axaml
             src/Wcs.Desktop/Views/TransportObservabilityView.axaml
             src/Wcs.Desktop/Views/TransportResilienceView.axaml
+            src/Wcs.Desktop/Views/TransportOptimizationView.axaml
+            src/Wcs.Desktop/Views/TransportDriverDiagnosticsView.axaml
+            src/Wcs.Desktop/Views/TransportCommissioningView.axaml
+            src/Wcs.Desktop/Views/TransportAdministrationView.axaml
           )
           for page in "${tab_pages[@]}"; do
             grep -q '<atom:TabControl' "$page"
@@ -91,6 +103,7 @@ jobs:
 
           grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/FeatureCenterView.axaml
           grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/ShadowDecisionView.axaml
+          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/TransportCommissioningView.axaml
 
       - name: Write exact-head UI evidence
         shell: bash
@@ -98,7 +111,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/desktop-atomui
           cat > artifacts/desktop-atomui/evidence.json <<EOF
-          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":9,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
+          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":13,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
           EOF
 
       - uses: actions/upload-artifact@v4
