@@ -7,6 +7,7 @@ on:
       - 'src/Wcs.Desktop/**'
       - '.github/workflows/desktop-atomui-productization.yml'
       - 'docs/交付文件/113-*'
+      - 'docs/交付文件/114-*'
   workflow_dispatch:
 
 permissions:
@@ -20,11 +21,15 @@ jobs:
       EVIDENCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
       - name: Build Desktop Release
         run: dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release
+
       - name: Verify AtomUI runtime registration
         shell: bash
         run: |
@@ -34,7 +39,8 @@ jobs:
           grep -q 'UseDesktopControls' src/Wcs.Desktop/App.axaml.cs
           grep -q 'UseDesktopDataGrid' src/Wcs.Desktop/App.axaml.cs
           grep -q 'AtomUIProductStyles.axaml' src/Wcs.Desktop/App.axaml
-      - name: Verify migrated product pages use AtomUI controls
+
+      - name: Verify all routed product pages use AtomUI controls
         shell: bash
         run: |
           set -euo pipefail
@@ -53,19 +59,75 @@ jobs:
             grep -q '<atom:Card' "$page"
             ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])' "$page"
           done
+
+      - name: Verify login shell and auxiliary surfaces use AtomUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          surfaces=(
+            src/Wcs.Desktop/Views/LoginView.axaml
+            src/Wcs.Desktop/Views/ChangePasswordPage.axaml
+            src/Wcs.Desktop/Views/MainWindow.axaml
+            src/Wcs.Desktop/Controls/ConfirmDialog.axaml
+            src/Wcs.Desktop/Controls/ProfileMenuView.axaml
+            src/Wcs.Desktop/Controls/UserProfileOverlay.axaml
+            src/Wcs.Desktop/Controls/ChangePasswordOverlay.axaml
+            src/Wcs.Desktop/Controls/NotificationCenterView.axaml
+            src/Wcs.Desktop/Controls/ClosableTabControl.axaml
+          )
+          for surface in "${surfaces[@]}"; do
+            test -f "$surface"
+            grep -q 'xmlns:atom="https://atomui.net"' "$surface"
+            ! grep -nE '<Button([ >])|<TextBox([ >])|<TreeView([ >])|<ListBox([ >])' "$surface"
+          done
+          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/LoginView.axaml
+          grep -q '<atom:Card' src/Wcs.Desktop/Views/LoginView.axaml
+          grep -q '<atom:TreeView' src/Wcs.Desktop/Views/MainWindow.axaml
+          grep -q '<atom:Button' src/Wcs.Desktop/Views/MainWindow.axaml
+          grep -q '<atom:ListView' src/Wcs.Desktop/Controls/NotificationCenterView.axaml
+          grep -q '<atom:Button' src/Wcs.Desktop/Controls/ClosableTabControl.axaml
+
+      - name: Audit residual native product controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -nE --include='*.axaml' '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])|<TreeView([ >])|<ListBox([ >])' src/Wcs.Desktop/Views src/Wcs.Desktop/Controls; then
+            echo 'Residual native product controls detected; migrate them or explicitly redesign the gate.' >&2
+            exit 1
+          fi
+
+      - name: Verify product control coverage
+        shell: bash
+        run: |
+          set -euo pipefail
           grep -R -q '<atom:Statistic' src/Wcs.Desktop/Views
           grep -R -q '<atom:LineEdit' src/Wcs.Desktop/Views
           grep -R -q '<atom:Button' src/Wcs.Desktop/Views
           grep -R -q '<atom:TabControl' src/Wcs.Desktop/Views
           grep -R -q '<atom:DataGrid' src/Wcs.Desktop/Views
+          grep -R -q '<atom:TreeView' src/Wcs.Desktop/Views/MainWindow.axaml
+          grep -R -q '<atom:ListView' src/Wcs.Desktop/Controls/NotificationCenterView.axaml
+
+      - name: Verify UI-only safety boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only origin/develop...HEAD)"
+          echo "$changed"
+          if echo "$changed" | grep -E '^src/(Wcs.Core|Wcs.Infrastructure|Wcs.Host|Wcs.Application)/'; then
+            echo 'AtomUI migration must not modify control/runtime projects.' >&2
+            exit 1
+          fi
+
       - name: Write exact-head UI evidence
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/desktop-atomui
           cat > artifacts/desktop-atomui/evidence.json <<EOF
-          {"schema":"wcs-desktop-atomui-productization/v1","head_sha":"${EVIDENCE_HEAD_SHA}","pageCount":28,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"legacyFluentFallbackRetained":true}
+          {"schema":"wcs-desktop-atomui-productization/v2","head_sha":"${EVIDENCE_HEAD_SHA}","routedPageCount":28,"auxiliaryPageCount":2,"shellSurfaceCount":7,"totalGovernedSurfaceCount":37,"atomUiRuntime":true,"atomUiCard":true,"atomUiStatistic":true,"atomUiLineEdit":true,"atomUiButton":true,"atomUiTabControl":true,"atomUiDataGrid":true,"atomUiTreeView":true,"atomUiListView":true,"legacyFluentFallbackRetained":true,"controlLogicChanged":false,"residualNativeProductControls":0}
           EOF
+
       - uses: actions/upload-artifact@v4
         with:
           name: wcs-desktop-atomui-${{ github.run_number }}
