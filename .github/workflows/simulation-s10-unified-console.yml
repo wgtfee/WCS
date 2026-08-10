@@ -8,9 +8,13 @@ on:
     paths:
       - 'src/Wcs.Host/Controllers/SimulationVerificationOverviewController.cs'
       - 'src/Wcs.Desktop/Services/SimulationVerificationApiService.cs'
+      - 'src/Wcs.Desktop/Services/SimulationInspectionApiService.cs'
       - 'src/Wcs.Desktop/ViewModels/SimulationVerificationViewModel.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationInspectionViewModel.cs'
       - 'src/Wcs.Desktop/Views/SimulationVerificationView.axaml'
       - 'src/Wcs.Desktop/Views/SimulationVerificationView.axaml.cs'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs'
       - 'src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs'
       - 'src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs'
       - 'src/Wcs.Simulator.Tests/SimulationUnifiedConsoleTests.cs'
@@ -101,16 +105,45 @@ jobs:
           ! grep -q '/api/hil/verification' "$service"
           ! grep -Eq 'PLC.*Write|CommandBus|TaskScheduler|TaskOrchestrator|RouteReservation|SiteAccepted[[:space:]]*=' "$service" "$view"
 
+      - name: Verify S2-S8 layered inspection is GET-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          service='src/Wcs.Desktop/Services/SimulationInspectionApiService.cs'
+          vm='src/Wcs.Desktop/ViewModels/SimulationVerificationInspectionViewModel.cs'
+          view='src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml'
+          grep -q 'ISimulationInspectionApiService' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
+          grep -q 'GetAsync' "$service"
+          grep -q '/api/simulation/virtual-plc/' "$service"
+          grep -q '/api/simulation/virtual-rgv/' "$service"
+          grep -q '/api/simulation/virtual-traffic/' "$service"
+          grep -q '/api/simulation/virtual-external/' "$service"
+          grep -q '/api/simulation/virtual-health/' "$service"
+          grep -q '/api/simulation/virtual-integration/' "$service"
+          grep -q '/api/simulation/capacity-readiness/status' "$service"
+          ! grep -Eq 'PostAsync|PostAsJsonAsync|PutAsync|PatchAsync|DeleteAsync|HttpMethod\.(Post|Put|Patch|Delete)' "$service"
+          ! grep -q '/api/hil/verification' "$service"
+          grep -q 'S2～S8 分层只读检查' "$view"
+          grep -q 'InspectStatusCommand' "$view"
+          grep -q 'InspectAuditCommand' "$view"
+          grep -q 'SelectedRun.IsTerminal' "$vm"
+
       - name: Verify AtomUI operation surface
         shell: bash
         run: |
           set -euo pipefail
-          view='src/Wcs.Desktop/Views/SimulationVerificationView.axaml'
-          grep -q '<atom:TabControl' "$view"
-          grep -q '<atom:DataGrid' "$view"
-          grep -q '<atom:LineEdit' "$view"
-          grep -q '<atom:Button' "$view"
-          ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])' "$view"
+          views=(
+            src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+            src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml
+          )
+          for view in "${views[@]}"; do
+            grep -q 'xmlns:atom="https://atomui.net"' "$view"
+            grep -q '<atom:DataGrid' "$view"
+            grep -q '<atom:Button' "$view"
+            ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])' "$view"
+          done
+          grep -q '<atom:TabControl' src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/SimulationVerificationView.axaml
 
       - name: Write S10 contract evidence
         shell: bash
@@ -123,6 +156,7 @@ jobs:
           desktop_build=true
           overview_api_read_only=true
           desktop_governed_simulation_execution=true
+          layered_s2_s8_inspection_read_only=true
           direct_virtual_runtime_control=false
           remote_control_allowed=false
           real_hil_control=false
