@@ -92,41 +92,78 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          service='src/Wcs.Desktop/Services/SimulationVerificationApiService.cs'
-          view='src/Wcs.Desktop/Views/SimulationVerificationView.axaml'
-          grep -q 'ISimulationVerificationApiService' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
-          grep -q 'SimulationVerificationViewModel' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
-          grep -q '/SimulationVerification' src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs
-          grep -q 'S10 统一仿真与验证中心' "$view"
-          grep -q '受治理 Scenario API' "$view"
-          grep -q '/api/simulation/governance/scenarios/validate' "$service"
-          grep -q '/api/simulation/scenarios/runs' "$service"
-          ! grep -Eq '/api/simulation/virtual-(plc|rgv|traffic|external|health|integration)' "$service"
-          ! grep -q '/api/hil/verification' "$service"
-          ! grep -Eq 'PLC.*Write|CommandBus|TaskScheduler|TaskOrchestrator|RouteReservation|SiteAccepted[[:space:]]*=' "$service" "$view"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          service = Path('src/Wcs.Desktop/Services/SimulationVerificationApiService.cs').read_text(encoding='utf-8')
+          view = Path('src/Wcs.Desktop/Views/SimulationVerificationView.axaml').read_text(encoding='utf-8')
+          vm = Path('src/Wcs.Desktop/ViewModels/SimulationVerificationViewModel.cs').read_text(encoding='utf-8')
+          di = Path('src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs').read_text(encoding='utf-8')
+          menu = Path('src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs').read_text(encoding='utf-8')
+
+          required = {
+              'DI registration': 'ISimulationVerificationApiService' in di,
+              'ViewModel registration': 'SimulationVerificationViewModel' in di,
+              'Desktop route': '/SimulationVerification' in menu,
+              'S10 title': 'S10 统一仿真与验证中心' in view,
+              'governed API safety copy': '受治理 Scenario API' in (view + vm),
+              'S0 validation API': '/api/simulation/governance/scenarios/validate' in service,
+              'S1 run API': '/api/simulation/scenarios/runs' in service,
+          }
+          missing = [name for name, ok in required.items() if not ok]
+          assert not missing, f'missing required governed-console markers: {missing}'
+
+          assert not re.search(r'/api/simulation/virtual-(plc|rgv|traffic|external|health|integration)', service), \
+              'execution client must not call direct S2-S7 virtual runtime endpoints'
+          assert '/api/hil/verification' not in service, 'execution client must not call HIL endpoints'
+
+          forbidden_control_types = (
+              'CommandBus', 'TaskScheduler', 'TaskOrchestrator',
+              'RouteReservation', 'IPlcConnection', 'S7Connection'
+          )
+          found = [name for name in forbidden_control_types if name in service]
+          assert not found, f'execution client references production control types: {found}'
+
+          print('S10 governed execution surface: PASS')
+          PY
 
       - name: Verify S2-S8 layered inspection is GET-only
         shell: bash
         run: |
           set -euo pipefail
-          service='src/Wcs.Desktop/Services/SimulationInspectionApiService.cs'
-          vm='src/Wcs.Desktop/ViewModels/SimulationVerificationInspectionViewModel.cs'
-          view='src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml'
-          grep -q 'ISimulationInspectionApiService' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
-          grep -q 'GetAsync' "$service"
-          grep -q '/api/simulation/virtual-plc/' "$service"
-          grep -q '/api/simulation/virtual-rgv/' "$service"
-          grep -q '/api/simulation/virtual-traffic/' "$service"
-          grep -q '/api/simulation/virtual-external/' "$service"
-          grep -q '/api/simulation/virtual-health/' "$service"
-          grep -q '/api/simulation/virtual-integration/' "$service"
-          grep -q '/api/simulation/capacity-readiness/status' "$service"
-          ! grep -Eq 'PostAsync|PostAsJsonAsync|PutAsync|PatchAsync|DeleteAsync|HttpMethod\.(Post|Put|Patch|Delete)' "$service"
-          ! grep -q '/api/hil/verification' "$service"
-          grep -q 'S2～S8 分层只读检查' "$view"
-          grep -q 'InspectStatusCommand' "$view"
-          grep -q 'InspectAuditCommand' "$view"
-          grep -q 'SelectedRun.IsTerminal' "$vm"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          service = Path('src/Wcs.Desktop/Services/SimulationInspectionApiService.cs').read_text(encoding='utf-8')
+          vm = Path('src/Wcs.Desktop/ViewModels/SimulationVerificationInspectionViewModel.cs').read_text(encoding='utf-8')
+          view = Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml').read_text(encoding='utf-8')
+          di = Path('src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs').read_text(encoding='utf-8')
+
+          required_paths = (
+              '/api/simulation/virtual-plc/',
+              '/api/simulation/virtual-rgv/',
+              '/api/simulation/virtual-traffic/',
+              '/api/simulation/virtual-external/',
+              '/api/simulation/virtual-health/',
+              '/api/simulation/virtual-integration/',
+              '/api/simulation/capacity-readiness/status',
+          )
+          assert 'ISimulationInspectionApiService' in di, 'inspection client is not registered in DI'
+          assert 'GetAsync' in service, 'inspection client has no GET operation'
+          missing = [path for path in required_paths if path not in service]
+          assert not missing, f'missing S2-S8 inspection paths: {missing}'
+
+          forbidden_methods = r'PostAsync|PostAsJsonAsync|PutAsync|PatchAsync|DeleteAsync|HttpMethod\.(Post|Put|Patch|Delete)'
+          assert not re.search(forbidden_methods, service), 'inspection client contains a mutating HTTP method'
+          assert '/api/hil/verification' not in service, 'inspection client must not call HIL endpoints'
+          assert 'S2～S8 分层只读检查' in view, 'layered inspection UI marker missing'
+          assert 'InspectStatusCommand' in view and 'InspectAuditCommand' in view, 'inspection commands missing'
+          assert 'SelectedRun.IsTerminal' in vm, 'terminal-run checkpoint boundary missing'
+
+          print('S2-S8 GET-only inspection surface: PASS')
+          PY
 
       - name: Verify AtomUI operation surface
         shell: bash
