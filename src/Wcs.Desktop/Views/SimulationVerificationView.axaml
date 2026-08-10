@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:views="using:Wcs.Desktop.Views"
              xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.SimulationVerificationView"
              x:DataType="vm:SimulationVerificationViewModel"
@@ -9,7 +10,7 @@
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Spacing="4">
                 <TextBlock Classes="wcs-page-title" Text="S10 统一仿真与验证中心" />
-                <TextBlock Classes="wcs-page-subtitle" Text="统一管理 S0～S8 受治理仿真、虚拟时间、故障场景、断言与 Evidence；S9 真实 HIL 始终保持独立现场证据边界。" />
+                <TextBlock Classes="wcs-page-subtitle" Text="统一管理 S0～S8 受治理仿真、虚拟时间、故障场景、分层状态、断言与 Evidence；S9 真实 HIL 始终保持独立现场证据边界。" />
                 <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
             </StackPanel>
             <atom:Button Grid.Column="1" Content="刷新全部" Command="{Binding RefreshCommand}" />
@@ -20,7 +21,7 @@
                 <TextBlock Classes="wcs-section-title" Text="安全边界" />
                 <TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}" TextWrapping="Wrap" />
                 <TextBlock Classes="wcs-page-subtitle" Text="{Binding ExecutionBoundaryText}" TextWrapping="Wrap" />
-                <TextBlock Classes="wcs-page-subtitle" Text="界面不直接写虚拟 PLC/RGV/Traffic，也不提供真实 HIL、机械安全或 Site Acceptance 操作；S2～S8 的动作必须作为受治理 Scenario DSL 进入 S1 Run。" TextWrapping="Wrap" />
+                <TextBlock Classes="wcs-page-subtitle" Text="界面不直接写虚拟 PLC/RGV/Traffic，也不提供真实 HIL、机械安全或 Site Acceptance 操作；S2～S8 的动作必须作为受治理 Scenario DSL 进入 S1 Run，分层页面只调用 GET inspection。" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
 
@@ -158,6 +159,10 @@
                 </Grid>
             </atom:TabItem>
 
+            <atom:TabItem Header="S2～S8 分层检查">
+                <views:SimulationStageInspectionView />
+            </atom:TabItem>
+
             <atom:TabItem Header="断言与 Evidence">
                 <Grid ColumnDefinitions="2*,*" ColumnSpacing="14">
                     <atom:Card Header="Checkpoint Assertion Outcomes" StyleVariant="Outlined">
@@ -189,7 +194,7 @@
                                 <TextBlock Text="{Binding SelectedRun.FinalStateHash}" TextWrapping="Wrap" />
                                 <TextBlock Classes="wcs-section-title" Text="Evidence Hash" Margin="0,8,0,0" />
                                 <TextBlock Text="{Binding SelectedRun.EvidenceHash}" TextWrapping="Wrap" />
-                                <TextBlock Classes="wcs-page-subtitle" Text="Completed/Failed/Cancelled 为终态；Checkpoint 仅对非终态 Run 开放，这是 S1 RunRegistry 的既有约束。" TextWrapping="Wrap" Margin="0,8,0,0" />
+                                <TextBlock Classes="wcs-page-subtitle" Text="Completed/Failed/Cancelled 为终态；Checkpoint 与 S2～S7 inspection 仅对非终态 Run 开放，这是 S1 RunRegistry 的既有约束。" TextWrapping="Wrap" Margin="0,8,0,0" />
                             </StackPanel>
                         </atom:Card>
                     </StackPanel>
