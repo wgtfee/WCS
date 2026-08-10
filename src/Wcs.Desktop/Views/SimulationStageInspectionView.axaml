@@ -9,12 +9,13 @@
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                 <StackPanel Spacing="4">
                     <TextBlock Text="无需手写 DSL：载入模板后，仍必须回到“场景治理”执行 Manifest + SHA-256 校验注册，之后才能创建 Run。" TextWrapping="Wrap" />
-                    <TextBlock Classes="wcs-toolbar-status" Text="模板只描述 Simulation State 行为，不直接操作生产 PLC、RGV、Traffic、MES 或真实 HIL。" TextWrapping="Wrap" />
+                    <TextBlock Classes="wcs-toolbar-status" Text="模板只描述 Simulation State 行为，不直接操作生产 PLC、RGV、Traffic、MES 或真实 HIL；S8 为 Capacity/HIL-readiness 证据层，保持只读检查。" TextWrapping="Wrap" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                     <atom:Button Content="S2 PLC 断线恢复" Command="{Binding LoadPlcDisconnectPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
                     <atom:Button Content="S3/S4 双 RGV 死锁" Command="{Binding LoadTrafficDeadlockPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
                     <atom:Button Content="S5 外部超时恢复" Command="{Binding LoadExternalTimeoutPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                    <atom:Button Content="S6 Health/RUL 72h" Command="{Binding LoadHealthRulPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
                     <atom:Button Content="S7 全链恢复/幂等" Command="{Binding LoadIntegratedRecoveryPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
                 </StackPanel>
             </Grid>
