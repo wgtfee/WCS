@@ -6,6 +6,8 @@ namespace Wcs.Host.Tests.IndustrialSecurity;
 public sealed class WcsManagementPermissionCodesTests
 {
     [Theory]
+    [InlineData(WcsManagementPermissionCodes.RuntimeView, WcsManagementPermissionCodes.RuntimeView)]
+    [InlineData(WcsManagementPermissionCodes.RuntimeOperate, WcsManagementPermissionCodes.RuntimeOperate)]
     [InlineData(WcsManagementPermissionCodes.AdministrationView, TransportPermissions.ReadAdministration)]
     [InlineData(WcsManagementPermissionCodes.ConfigurationChange, TransportPermissions.ChangeConfiguration)]
     [InlineData(WcsManagementPermissionCodes.TaskReassign, TransportPermissions.ReassignTask)]

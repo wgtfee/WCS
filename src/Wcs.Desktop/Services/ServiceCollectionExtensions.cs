@@ -23,12 +23,23 @@ public static class ServiceCollectionExtensions
         // All WCS HTTP clients share the same bearer-token handler. In IAM mode the
         // token comes from DesktopIamAuthService; in Local compatibility mode the
         // existing local token in IAuthState is forwarded unchanged.
+        services.AddTransient<WcsGatewayPathHandler>();
         services.AddTransient<WcsBearerTokenHandler>();
+        services.AddHttpClient("WcsGateway", (sp, client) =>
+            {
+                var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<WcsDesktopOptions>>().Value;
+                client.BaseAddress = new Uri(options.ServerUrl.TrimEnd('/') + "/");
+            })
+            .AddHttpMessageHandler<WcsGatewayPathHandler>()
+            .AddHttpMessageHandler<WcsBearerTokenHandler>();
         services.AddHttpClient<IWcsApiService, WcsApiService>()
+            .AddHttpMessageHandler<WcsGatewayPathHandler>()
             .AddHttpMessageHandler<WcsBearerTokenHandler>();
         services.AddHttpClient<ITransportResilienceApiService, TransportResilienceApiService>()
+            .AddHttpMessageHandler<WcsGatewayPathHandler>()
             .AddHttpMessageHandler<WcsBearerTokenHandler>();
         services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>()
+            .AddHttpMessageHandler<WcsGatewayPathHandler>()
             .AddHttpMessageHandler<WcsBearerTokenHandler>();
 
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();

@@ -49,6 +49,8 @@ try
     builder.Services.AddScoped<IPermissionCodeMapper, WcsPermissionCodeMapper>();
     builder.Services.AddScoped<IUserPermissionProvider, WcsLocalPermissionProvider>();
     builder.Services.AddScoped<IPermissionProvider, WcsLocalPermissionProvider>();
+    if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("WcsDb")))
+        builder.Services.AddHostedService<WcsPermissionManifestHostedService>();
     var centralizedAuthentication = builder.Configuration.GetValue<string>("Security:Authentication:Mode")
         ?.Equals("Centralized", StringComparison.OrdinalIgnoreCase) == true;
     if (centralizedAuthentication)
@@ -293,11 +295,20 @@ try
     if (centralizedAuthentication)
         app.UseAuthorization();
 
+    if (centralizedAuthentication)
+        app.UseMiddleware<WcsApiPermissionMiddleware>();
+
     if (transportObservability.EnablePrometheusEndpoint)
         app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
-    app.MapHub<WcsHub>("/wcs");
-    app.MapControllers();
+    var wcsHub = app.MapHub<WcsHub>("/wcs");
+    var controllers = app.MapControllers();
+    if (centralizedAuthentication)
+    {
+        wcsHub.RequireAuthorization()
+            .WithMetadata(new PermissionAttribute(WcsManagementPermissionCodes.RuntimeView));
+        controllers.RequireAuthorization();
+    }
     app.MapIndustrialSecurityCacheInvalidation();
     app.MapIndustrialLocalUserManagementInfo();
     app.MapIndustrialEmergencyValidation();

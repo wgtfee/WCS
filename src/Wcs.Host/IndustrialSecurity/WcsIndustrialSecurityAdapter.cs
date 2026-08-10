@@ -7,7 +7,9 @@ using System.Threading.Tasks;
 using Industrial.Security.Abstractions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using SqlSugar;
 using Wcs.Core.TransportScheduling;
+using Wcs.Infrastructure.Persistence;
 
 namespace Wcs.Host.IndustrialSecurity;
 
@@ -17,6 +19,8 @@ namespace Wcs.Host.IndustrialSecurity;
 /// </summary>
 public static class WcsManagementPermissionCodes
 {
+    public const string RuntimeView = "wcs.runtime.view";
+    public const string RuntimeOperate = "wcs.runtime.operate";
     public const string AdministrationView = "wcs.administration.view";
     public const string OperationManage = "wcs.operation.manage";
     public const string ConfigurationChange = "wcs.configuration.change";
@@ -32,6 +36,8 @@ public static class WcsManagementPermissionCodes
     public static readonly IReadOnlyDictionary<string, string> CanonicalToTransport =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            [RuntimeView] = RuntimeView,
+            [RuntimeOperate] = RuntimeOperate,
             [AdministrationView] = TransportPermissions.ReadAdministration,
             // Preserve the existing WCS.Task.Edit gate as the coarse operation-management
             // permission. The governance service still performs operation-specific checks.
@@ -171,6 +177,8 @@ public sealed class WcsLocalPermissionSource(IHttpContextAccessor httpContextAcc
 {
     internal static readonly string[] AllPermissions =
     [
+        WcsManagementPermissionCodes.RuntimeView,
+        WcsManagementPermissionCodes.RuntimeOperate,
         TransportPermissions.ReadAdministration,
         TransportPermissions.ChangeConfiguration,
         TransportPermissions.ReassignTask,
@@ -260,33 +268,85 @@ public sealed class WcsLocalPermissionProvider(IHttpContextAccessor httpContextA
     }
 }
 
-/// <summary>
-/// WCS has no independent business-user master data that must be preserved. In centralized
-/// management mode the stable IAM user id itself is sufficient as the compatibility local id.
-/// The mapping is intentionally transient and is not written to Wcs_ShadowUser, so enabling
-/// IAM never pollutes the runtime database with synthetic users.
-/// </summary>
-public sealed class WcsShadowUserResolver : IShadowUserResolver
+/// <summary>Persists the stable IAM-to-WCS identity used by local audit records.</summary>
+public sealed class WcsShadowUserResolver(ISqlSugarClient db) : IShadowUserResolver
 {
-    public Task<ShadowUserSnapshot?> ResolveAsync(string iamUserId, CancellationToken cancellationToken = default)
-        => Task.FromResult<ShadowUserSnapshot?>(null);
+    public async Task<ShadowUserSnapshot?> ResolveAsync(string iamUserId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(iamUserId)) return null;
+        cancellationToken.ThrowIfCancellationRequested();
+        var entity = await db.Queryable<WcsShadowUserEntity>()
+            .Where(x => x.IamUserId == iamUserId)
+            .FirstAsync();
+        return entity is null ? null : ToSnapshot(entity);
+    }
 
-    public Task<ShadowUserSnapshot?> EnsureAsync(
+    public async Task<ShadowUserSnapshot?> EnsureAsync(
         string iamUserId,
         string? userName,
         string? displayName,
         CancellationToken cancellationToken = default)
-        => Task.FromResult<ShadowUserSnapshot?>(new ShadowUserSnapshot(
-            $"iam:{iamUserId}",
-            IndustrialSystemCodes.Wcs,
-            iamUserId,
-            iamUserId,
-            userName,
-            displayName,
-            null,
-            null,
-            IdentitySource.Platform,
-            "Active",
-            DateTime.UtcNow,
-            DateTime.UtcNow));
+    {
+        if (string.IsNullOrWhiteSpace(iamUserId)) return null;
+        cancellationToken.ThrowIfCancellationRequested();
+        var entity = await db.Queryable<WcsShadowUserEntity>()
+            .Where(x => x.IamUserId == iamUserId)
+            .FirstAsync();
+        if (entity is not null)
+        {
+            entity.UserName = Normalize(userName, 100);
+            entity.DisplayName = Normalize(displayName, 200);
+            entity.Status = "Active";
+            entity.UpdatedAt = DateTime.UtcNow;
+            await db.Updateable(entity).ExecuteCommandAsync();
+            return ToSnapshot(entity);
+        }
+
+        entity = new WcsShadowUserEntity
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            IamUserId = iamUserId,
+            LocalUserId = Normalize($"wcs:{iamUserId}", 100)!,
+            UserName = Normalize(userName, 100),
+            DisplayName = Normalize(displayName, 200),
+            Status = "Active",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        try
+        {
+            await db.Insertable(entity).ExecuteCommandAsync();
+            return ToSnapshot(entity);
+        }
+        catch
+        {
+            // A concurrent first request may have inserted the unique IAM mapping.
+            var existing = await db.Queryable<WcsShadowUserEntity>()
+                .Where(x => x.IamUserId == iamUserId)
+                .FirstAsync();
+            if (existing is null) throw;
+            return ToSnapshot(existing);
+        }
+    }
+
+    private static ShadowUserSnapshot ToSnapshot(WcsShadowUserEntity entity) => new(
+        entity.Id,
+        IndustrialSystemCodes.Wcs,
+        entity.LocalUserId,
+        entity.IamUserId,
+        entity.UserName,
+        entity.DisplayName,
+        null,
+        null,
+        IdentitySource.Platform,
+        entity.Status,
+        entity.CreatedAt,
+        entity.UpdatedAt);
+
+    private static string? Normalize(string? value, int maxLength)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized)) return null;
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
+    }
 }

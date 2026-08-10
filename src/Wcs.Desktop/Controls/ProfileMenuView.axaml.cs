@@ -123,6 +123,11 @@ public partial class ProfileMenuView : UserControl
         var confirm = new ConfirmDialog("确认注销", "确定要注销登录吗？");
         var result = await confirm.ShowDialog<bool>(window);
         if (result)
+        {
+            var auth = App.GetService<IDesktopIamAuthService>();
+            if (auth is not null)
+                await auth.LogoutAsync();
             Environment.Exit(0);
+        }
     }
 }

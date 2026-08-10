@@ -2,6 +2,7 @@ using Avalonia.Threading;
 using Microsoft.AspNetCore.SignalR.Client;
 using Wcs.Desktop.Interface;
 using Wcs.Desktop.Models;
+using Microsoft.Extensions.Options;
 
 namespace Wcs.Desktop.Services;
 
@@ -10,13 +11,23 @@ namespace Wcs.Desktop.Services;
 /// </summary>
 public class WcsRealtimeService : IWcsRealtimeService, IAsyncDisposable
 {
+    private readonly IDesktopIamAuthService _iamAuth;
     private readonly IAuthState _authState;
+    private readonly DesktopIamOptions _iamOptions;
+    private readonly WcsDesktopOptions _desktopOptions;
     private HubConnection? _connection;
     private bool _isConnected;
 
-    public WcsRealtimeService(IAuthState authState)
+    public WcsRealtimeService(
+        IDesktopIamAuthService iamAuth,
+        IAuthState authState,
+        IOptions<DesktopIamOptions> iamOptions,
+        IOptions<WcsDesktopOptions> desktopOptions)
     {
+        _iamAuth = iamAuth;
         _authState = authState;
+        _iamOptions = iamOptions.Value;
+        _desktopOptions = desktopOptions.Value;
     }
 
     public bool IsConnected => _isConnected;
@@ -30,14 +41,20 @@ public class WcsRealtimeService : IWcsRealtimeService, IAsyncDisposable
 
     public async Task ConnectAsync(string serverUrl, CancellationToken ct = default)
     {
+        if (_connection is not null)
+            await DisconnectAsync();
+
+        var gateway = string.IsNullOrWhiteSpace(serverUrl) ? _desktopOptions.ServerUrl : serverUrl;
+        var hubPath = "/" + _desktopOptions.SignalRPath.Trim('/');
         _connection = new HubConnectionBuilder()
-            .WithUrl($"{serverUrl.TrimEnd('/')}/wcs", options =>
+            .WithUrl($"{gateway.TrimEnd('/')}{hubPath}", options =>
             {
                 // SignalR transports use AccessTokenProvider for HTTP negotiation and
                 // automatically map the token to the access_token query parameter when
                 // WebSockets/SSE require it.
-                options.AccessTokenProvider = () => Task.FromResult<string?>(
-                    string.IsNullOrWhiteSpace(_authState.Token) ? null : _authState.Token);
+                options.AccessTokenProvider = async () => _iamOptions.Enabled
+                    ? await _iamAuth.GetAccessTokenAsync()
+                    : _authState.Token;
             })
             .WithAutomaticReconnect()
             .Build();

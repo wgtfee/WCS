@@ -10,6 +10,7 @@ using System.Net.NetworkInformation;
 using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
 using Wcs.Desktop.Interface;
 using Wcs.Desktop.Models;
 using Wcs.Entity;
@@ -21,14 +22,18 @@ namespace Wcs.Desktop.Services
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IAuthState _authState;
 
-        public ApiDataProvider(IHttpClientFactory httpClientFactory, IAuthState authState)
+        public ApiDataProvider(
+            IHttpClientFactory httpClientFactory,
+            IAuthState authState,
+            IOptions<WcsDesktopOptions> options)
         {
             _httpClientFactory = httpClientFactory;
             _authState = authState;
+            Url = options.Value.ServerUrl.TrimEnd('/');
         }
 
         #region 设置信息
-        public string Url { get; set; } = "http://localhost:9991";
+        public string Url { get; set; }
         public IAppHeader Header { get; set; }
         public TimeSpan TimeOut { get; set; } = TimeSpan.FromSeconds(30);
 
@@ -301,7 +306,7 @@ namespace Wcs.Desktop.Services
         #region HTTP 核心方法
         public async Task<string> GetAsync(string url, TimeSpan timeSpan, Dictionary<string, string>? header = null)
         {
-            using var client = _httpClientFactory.CreateClient();
+            using var client = _httpClientFactory.CreateClient("WcsGateway");
             client.Timeout = timeSpan;
 
             if (header != null)
@@ -378,7 +383,7 @@ namespace Wcs.Desktop.Services
 
         private HttpClient CreateClient()
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = _httpClientFactory.CreateClient("WcsGateway");
             client.Timeout = TimeOut;
 
             client.DefaultRequestHeaders.Accept.Clear();
@@ -443,7 +448,7 @@ namespace Wcs.Desktop.Services
         /// </summary>
         public async Task<string> PostFormWithAuthAsync(string url, Dictionary<string, string> formData)
         {
-            using var client = _httpClientFactory.CreateClient();
+            using var client = _httpClientFactory.CreateClient("WcsGateway");
             client.Timeout = TimeOut;
 
             // 添加认证头
@@ -466,7 +471,7 @@ namespace Wcs.Desktop.Services
 
         public async Task<string> PostAsyncJson(string url, string json, TimeSpan timeSpan, Dictionary<string, string>? header = null)
         {
-            using var client = _httpClientFactory.CreateClient();
+            using var client = _httpClientFactory.CreateClient("WcsGateway");
             client.Timeout = timeSpan;
 
             if (header != null)

@@ -16,6 +16,7 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     private readonly IWcsRealtimeService _realtime;
     private readonly IServiceProvider _serviceProvider;
     private readonly IDataProvider _dataProvider;
+    private readonly WcsDesktopOptions _options;
     private readonly ClosableTabItem _homeTab;
 
     [ObservableProperty] private string _connectionText = "Disconnected";
@@ -36,6 +37,7 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         _realtime = realtime;
         _serviceProvider = serviceProvider;
         _dataProvider = dataprovider;
+        _options = options.Value;
         _homeTab = new ClosableTabItem { Header = "Dashboard", Content = dashboard, CanClose = false, IsSelected = true };
         Tabs.Add(_homeTab);
         SelectedTabItem = _homeTab;
@@ -51,7 +53,19 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     [RelayCommand] private void ToggleSidebar() => IsSidebarCollapsed = !IsSidebarCollapsed;
     private void CloseCollapsedFlyout() { IsCollapsedFlyoutOpen = false; ActiveFlyoutChildren = null; }
 
-    public async Task InitializeAsync() { ConnectionText = "Connecting..."; await Task.CompletedTask; }
+    public async Task InitializeAsync()
+    {
+        ConnectionText = "Connecting...";
+        try
+        {
+            await _realtime.ConnectAsync(_options.ServerUrl);
+        }
+        catch
+        {
+            ConnectionText = "Disconnected";
+            throw;
+        }
+    }
 
     private static List<MenuItemDto> BuildDefaultMenus()
     {

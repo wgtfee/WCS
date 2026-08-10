@@ -34,6 +34,7 @@ public partial class LoginViewModel : ObservableObject
     public bool UseIam { get; }
     public bool UseLocalLogin => !UseIam;
     public string LoginModeText => UseIam ? "统一身份认证（IAM + PKCE）" : "本地兼容登录";
+    public string LoginButtonText => UseIam ? "在浏览器中登录" : "登 录";
 
     [ObservableProperty]
     private string _userName = "admin";
@@ -107,13 +108,13 @@ public partial class LoginViewModel : ObservableObject
     [RelayCommand]
     private async Task LoginAsync()
     {
-        if (string.IsNullOrWhiteSpace(UserName))
+        if (!UseIam && string.IsNullOrWhiteSpace(UserName))
         {
             ErrorMessage = "请输入用户名";
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(Password))
+        if (!UseIam && string.IsNullOrWhiteSpace(Password))
         {
             ErrorMessage = "请输入密码";
             return;
@@ -151,7 +152,7 @@ public partial class LoginViewModel : ObservableObject
 
     private async Task LoginWithIamAsync()
     {
-        var result = await _iamAuth.LoginAsync(UserName, Password);
+        var result = await _iamAuth.LoginAsync();
         if (!result.Success || string.IsNullOrWhiteSpace(result.AccessToken))
         {
             ErrorMessage = result.Error ?? "IAM 登录失败";
@@ -159,13 +160,14 @@ public partial class LoginViewModel : ObservableObject
         }
 
         _authState.Token = result.AccessToken;
-        _authState.UserName = result.UserName ?? result.DisplayName ?? UserName;
+        var resolvedUserName = result.UserName ?? result.DisplayName ?? "IAM User";
+        _authState.UserName = resolvedUserName;
         UserInfo.User = new UserDto
         {
-            Name = result.DisplayName ?? result.UserName ?? UserName,
+            Name = result.DisplayName ?? resolvedUserName,
             RoleId = 0,
         };
-        UserInfo.UserName = result.UserName ?? result.DisplayName ?? UserName;
+        UserInfo.UserName = resolvedUserName;
         LoginSuccess?.Invoke();
     }
 

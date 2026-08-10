@@ -5,7 +5,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.28.0" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="S7netplus" Version="0.20.0" />

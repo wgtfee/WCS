@@ -6,6 +6,30 @@
       "dotnetRunMessages": true,
       "applicationUrl": "http://localhost:5003",
       "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development",
+        "Security__Authentication__Mode": "Centralized",
+        "Security__Authorization__Mode": "Centralized",
+        "Security__LocalUserManagementMode": "Hidden",
+        "Security__Central__Authority": "http://localhost:5100",
+        "Security__Central__Audience": "industrial-platform",
+        "Security__Central__PermissionFailureMode": "FailClosed",
+        "Security__Central__ShadowCentralAuthorization": "false",
+        "Security__Central__SystemCode": "WCS",
+        "Security__Central__ShadowUserProvisioning": "AutoCreate",
+        "Security__Central__RequireSystemAccess": "true",
+        "Security__Central__AllowEmergencyLocalLogin": "false",
+        "Security__ResourceSync__Enabled": "true",
+        "Security__ResourceSync__SystemCode": "WCS",
+        "Security__ResourceSync__ManifestPath": "permission-manifest.json",
+        "Security__ResourceSync__ClientId": "wcs-service",
+        "Security__ResourceSync__ClientSecret": "wcs-sync-secret-2026"
+      }
+    },
+    "Wcs.Host.Local": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://localhost:5003",
+      "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
     },
@@ -29,7 +53,8 @@
         "Security__ResourceSync__Enabled": "true",
         "Security__ResourceSync__SystemCode": "WCS",
         "Security__ResourceSync__ManifestPath": "permission-manifest.json",
-        "Security__ResourceSync__ClientId": "wcs-service"
+        "Security__ResourceSync__ClientId": "wcs-service",
+        "Security__ResourceSync__ClientSecret": "wcs-sync-secret-2026"
       }
     }
   }

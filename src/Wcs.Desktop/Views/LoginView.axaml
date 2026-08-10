@@ -54,7 +54,7 @@
             </StackPanel>
 
             <StackPanel Grid.Row="1" Spacing="15">
-                <StackPanel Spacing="5">
+                <StackPanel Spacing="5" IsVisible="{Binding UseLocalLogin}">
                     <TextBlock Text="用户名" Foreground="{DynamicResource TextSecondary}"/>
                     <TextBox Text="{Binding UserName, Mode=TwoWay}"
                              PlaceholderText="请输入用户名"
@@ -68,7 +68,7 @@
                     </TextBox>
                 </StackPanel>
 
-                <StackPanel Spacing="5">
+                <StackPanel Spacing="5" IsVisible="{Binding UseLocalLogin}">
                     <TextBlock Text="密码" Foreground="{DynamicResource TextSecondary}"/>
                     <TextBox Text="{Binding Password, Mode=TwoWay}"
                              PasswordChar="*"
@@ -137,7 +137,7 @@
             </StackPanel>
 
             <atom:Button Grid.Row="2"
-                    Content="登 录"
+                    Content="{Binding LoginButtonText}"
                     Command="{Binding LoginCommand}"
                     IsEnabled="{Binding !IsLoading}"
                     HorizontalAlignment="Stretch"

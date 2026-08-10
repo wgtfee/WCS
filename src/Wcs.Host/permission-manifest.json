@@ -2,24 +2,46 @@
   "system": {
     "code": "WCS",
     "name": "Warehouse Control System",
-    "description": "Human management-plane permissions only. Automatic runtime scheduling and PLC processing are not IAM-gated."
+    "description": "WCS human management plane. Automatic scheduling, PLC polling and runtime workers do not depend on IAM."
   },
-  "version": "2.0.0",
+  "version": "3.0.0",
   "resources": [
     { "code": "wcs", "name": "WCS", "type": "System", "sort": 0, "enabled": true },
-    { "code": "wcs.transport", "name": "运输调度管理", "type": "Module", "parentCode": "wcs", "sort": 100, "enabled": true },
-    { "code": "wcs.transport.administration", "name": "运输调度管理面", "type": "Page", "parentCode": "wcs.transport", "route": "/wcs/transport/administration", "sort": 110, "enabled": true },
 
-    { "code": "wcs.administration.view", "name": "查看运行配置、操作、审计与日志", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/*", "httpMethod": "GET", "sort": 111, "enabled": true },
-    { "code": "wcs.operation.manage", "name": "申请与审批受控操作", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/operations*", "httpMethod": "POST", "sort": 112, "enabled": true },
-    { "code": "wcs.configuration.change", "name": "修改并应用运输配置", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/configuration/*", "httpMethod": "PUT", "sort": 120, "enabled": true },
-    { "code": "wcs.task.reassign", "name": "重新分配调度任务", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 130, "enabled": true },
-    { "code": "wcs.traffic.force-release", "name": "强制释放交通资源", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/operations/*/execute/traffic/*/force-release", "httpMethod": "POST", "sort": 140, "enabled": true },
-    { "code": "wcs.vehicle.override-low-battery", "name": "覆盖车辆低电量限制", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 150, "enabled": true },
-    { "code": "wcs.vehicle.manual-command", "name": "人工下发车辆/RGV驱动命令", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/operations/*/execute/driver/*/command", "httpMethod": "POST", "sort": 160, "enabled": true },
-    { "code": "wcs.plc.write-signal", "name": "人工写入PLC信号", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 170, "enabled": true },
-    { "code": "wcs.recovery.resolve-conflict", "name": "处理恢复冲突", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 180, "enabled": true },
-    { "code": "wcs.command.retry-compensation", "name": "重试命令补偿", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 190, "enabled": true },
-    { "code": "wcs.operation.approve-critical", "name": "审批关键危险操作", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 200, "enabled": true }
+    { "code": "wcs.runtime", "name": "运行监控", "type": "Module", "parentCode": "wcs", "sort": 100, "enabled": true },
+    { "code": "wcs.runtime.dashboard", "name": "运行总览", "type": "Page", "parentCode": "wcs.runtime", "route": "/wcs/dashboard", "sort": 110, "enabled": true },
+    { "code": "wcs.runtime.devices", "name": "设备状态", "type": "Page", "parentCode": "wcs.runtime", "route": "/wcs/devices", "sort": 120, "enabled": true },
+    { "code": "wcs.runtime.tasks", "name": "任务管理", "type": "Page", "parentCode": "wcs.runtime", "route": "/wcs/tasks", "sort": 130, "enabled": true },
+    { "code": "wcs.runtime.alarms", "name": "报警中心", "type": "Page", "parentCode": "wcs.runtime", "route": "/wcs/alarms", "sort": 140, "enabled": true },
+    { "code": "wcs.runtime.objects", "name": "物料追踪", "type": "Page", "parentCode": "wcs.runtime", "route": "/wcs/objects", "sort": 150, "enabled": true },
+    { "code": "wcs.runtime.logs", "name": "运行日志", "type": "Page", "parentCode": "wcs.runtime", "route": "/wcs/event-log", "sort": 160, "enabled": true },
+    { "code": "wcs.runtime.view", "name": "查看 WCS 运行数据", "type": "Action", "parentCode": "wcs.runtime", "apiPath": "/api/*", "httpMethod": "GET|HEAD", "sort": 180, "enabled": true },
+    { "code": "wcs.runtime.operate", "name": "执行 WCS 运行操作", "type": "Action", "parentCode": "wcs.runtime", "apiPath": "/api/*", "httpMethod": "POST|PUT|PATCH|DELETE", "sort": 190, "enabled": true },
+
+    { "code": "wcs.transport", "name": "运输调度", "type": "Module", "parentCode": "wcs", "sort": 200, "enabled": true },
+    { "code": "wcs.transport.scheduling", "name": "EMS / RGV 调度", "type": "Page", "parentCode": "wcs.transport", "route": "/wcs/transport/scheduling", "sort": 210, "enabled": true },
+    { "code": "wcs.transport.traffic", "name": "交通控制与死锁", "type": "Page", "parentCode": "wcs.transport", "route": "/wcs/transport/traffic", "sort": 220, "enabled": true },
+    { "code": "wcs.transport.optimization", "name": "充电与运行优化", "type": "Page", "parentCode": "wcs.transport", "route": "/wcs/transport/optimization", "sort": 230, "enabled": true },
+    { "code": "wcs.transport.production", "name": "生产级调度", "type": "Page", "parentCode": "wcs.transport", "route": "/wcs/transport/production", "sort": 240, "enabled": true },
+    { "code": "wcs.transport.observability", "name": "可观测性与一致性", "type": "Page", "parentCode": "wcs.transport", "route": "/wcs/transport/observability", "sort": 250, "enabled": true },
+    { "code": "wcs.transport.resilience", "name": "生产韧性与恢复演练", "type": "Page", "parentCode": "wcs.transport", "route": "/wcs/transport/resilience", "sort": 260, "enabled": true },
+    { "code": "wcs.transport.simulation", "name": "调度仿真与验收", "type": "Page", "parentCode": "wcs.transport", "route": "/wcs/transport/simulation", "sort": 270, "enabled": true },
+
+    { "code": "wcs.governance", "name": "配置与治理", "type": "Module", "parentCode": "wcs", "sort": 300, "enabled": true },
+    { "code": "wcs.transport.administration", "name": "配置与审计", "type": "Page", "parentCode": "wcs.governance", "route": "/wcs/transport/administration", "sort": 310, "enabled": true },
+    { "code": "wcs.transport.drivers", "name": "PLC 驱动诊断", "type": "Page", "parentCode": "wcs.governance", "route": "/wcs/transport/drivers", "sort": 320, "enabled": true },
+    { "code": "wcs.transport.commissioning", "name": "现场联调工作台", "type": "Page", "parentCode": "wcs.governance", "route": "/wcs/transport/commissioning", "sort": 330, "enabled": true },
+
+    { "code": "wcs.administration.view", "name": "查看运行配置、操作、审计与日志", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/*", "httpMethod": "GET", "sort": 400, "enabled": true },
+    { "code": "wcs.operation.manage", "name": "申请与审批受控操作", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/operations*", "httpMethod": "POST", "sort": 410, "enabled": true },
+    { "code": "wcs.configuration.change", "name": "修改并应用运输配置", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/configuration/*", "httpMethod": "PUT", "sort": 420, "enabled": true },
+    { "code": "wcs.task.reassign", "name": "重新分配调度任务", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 430, "enabled": true },
+    { "code": "wcs.traffic.force-release", "name": "强制释放交通资源", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/operations/*/execute/traffic/*/force-release", "httpMethod": "POST", "sort": 440, "enabled": true },
+    { "code": "wcs.vehicle.override-low-battery", "name": "覆盖车辆低电量限制", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 450, "enabled": true },
+    { "code": "wcs.vehicle.manual-command", "name": "人工下发车辆/RGV驱动命令", "type": "Action", "parentCode": "wcs.transport.administration", "apiPath": "/api/transport/administration/operations/*/execute/driver/*/command", "httpMethod": "POST", "sort": 460, "enabled": true },
+    { "code": "wcs.plc.write-signal", "name": "人工写入 PLC 信号", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 470, "enabled": true },
+    { "code": "wcs.recovery.resolve-conflict", "name": "处理恢复冲突", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 480, "enabled": true },
+    { "code": "wcs.command.retry-compensation", "name": "重试命令补偿", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 490, "enabled": true },
+    { "code": "wcs.operation.approve-critical", "name": "审批关键危险操作", "type": "Action", "parentCode": "wcs.transport.administration", "sort": 500, "enabled": true }
   ]
 }
