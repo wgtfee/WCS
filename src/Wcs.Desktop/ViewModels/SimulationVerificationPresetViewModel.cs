@@ -35,6 +35,16 @@ public partial class SimulationVerificationViewModel
         "S5 外部超时恢复：第一次请求超时，虚拟时间重试后成功，并验证 Circuit 关闭与故障窗口结束。 ");
 
     [RelayCommand]
+    private void LoadHealthRulPreset() => ApplyPreset(
+        "synthetic-health-rul",
+        20260801,
+        "synthetic-health-rul.json",
+        """
+        {"SchemaVersion":1,"ScenarioId":"synthetic-health-rul","Version":"1.0.0","Seed":20260801,"StartTimeUtc":"2026-08-01T00:00:00+00:00","DurationMilliseconds":259200000,"StopOnAssertionFailure":true,"Actions":[{"Id":"define","AtMilliseconds":0,"Order":0,"Kind":"health.asset.define","Target":"RGV-S6","Payload":{"InitialHealthScore":100,"InitialFusionRiskScore":0.05,"IndependentSourceCount":1}},{"Id":"degrade-48","AtMilliseconds":172800000,"Order":0,"Kind":"health.profile.linear","Target":"RGV-S6","Payload":{"TargetHealthScore":55,"TargetFusionRiskScore":0.75,"SampleIntervalMilliseconds":3600000,"Reason":"bearing-wear"}},{"Id":"forecast-48","AtMilliseconds":172800000,"Order":1,"Kind":"health.forecast.oracle","Target":"RGV-S6","Payload":{"FailureProbability24Hours":0.10,"FailureProbability72Hours":0.25,"FailureProbability168Hours":0.45,"RulLowerHours":120,"RulMedianHours":180,"RulUpperHours":260,"Phase":"degradation"}},{"Id":"degrade-72","AtMilliseconds":259200000,"Order":0,"Kind":"health.profile.linear","Target":"RGV-S6","Payload":{"TargetHealthScore":30,"TargetFusionRiskScore":0.95,"SampleIntervalMilliseconds":3600000,"Reason":"bearing-wear"}},{"Id":"forecast-72","AtMilliseconds":259200000,"Order":1,"Kind":"health.forecast.oracle","Target":"RGV-S6","Payload":{"FailureProbability24Hours":0.25,"FailureProbability72Hours":0.50,"FailureProbability168Hours":0.80,"RulLowerHours":40,"RulMedianHours":100,"RulUpperHours":160,"Phase":"degradation"}},{"Id":"outcome","AtMilliseconds":259200000,"Order":2,"Kind":"health.outcome.record","Target":"RGV-S6","Payload":{"Kind":"ObservedFailure","Note":"synthetic-bearing-failure"}}],"Assertions":[{"Id":"grade","AtMilliseconds":259200000,"Order":0,"Kind":"health.asset.grade","Target":"RGV-S6","Expected":"Critical"},{"Id":"score","AtMilliseconds":259200000,"Order":1,"Kind":"health.asset.score.at-most","Target":"RGV-S6","Expected":30},{"Id":"samples","AtMilliseconds":259200000,"Order":2,"Kind":"health.sample.count","Target":"RGV-S6","Expected":73},{"Id":"trend","AtMilliseconds":259200000,"Order":3,"Kind":"health.trend.direction","Target":"RGV-S6","Expected":"Deteriorating"},{"Id":"feature","AtMilliseconds":259200000,"Order":4,"Kind":"health.feature.valid","Target":"RGV-S6","Expected":true},{"Id":"contract","AtMilliseconds":259200000,"Order":5,"Kind":"health.forecast.contract.valid","Target":"RGV-S6","Expected":true},{"Id":"rul","AtMilliseconds":259200000,"Order":6,"Kind":"health.rul.nonincreasing","Target":"RGV-S6","Expected":true},{"Id":"probability","AtMilliseconds":259200000,"Order":7,"Kind":"health.probability.nondecreasing","Target":"RGV-S6","Expected":true},{"Id":"outcome-kind","AtMilliseconds":259200000,"Order":8,"Kind":"health.outcome.kind","Target":"RGV-S6","Expected":"ObservedFailure"}]}
+        """,
+        "S6 Health/RUL：用虚拟时间生成 72 小时轴承退化、两次 Forecast Oracle 和合成故障结果，验证健康等级、特征、概率与 RUL 单调性。 ");
+
+    [RelayCommand]
     private void LoadIntegratedRecoveryPreset() => ApplyPreset(
         "integrated-recovery-exactly-once",
         20260802,
