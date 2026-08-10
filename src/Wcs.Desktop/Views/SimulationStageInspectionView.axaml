@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
+             x:Class="Wcs.Desktop.Views.SimulationStageInspectionView"
+             x:DataType="vm:SimulationVerificationViewModel">
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+        <Grid ColumnDefinitions="2*,*" ColumnSpacing="12">
+            <atom:Card Header="S2～S8 分层只读检查" StyleVariant="Outlined">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{Binding InspectionTitle}" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding InspectionStatusText}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                        <atom:Button Content="读取状态" Command="{Binding InspectStatusCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                        <atom:Button Content="主要对象" Command="{Binding InspectPrimaryCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                        <atom:Button Content="异常 / 占用" Command="{Binding InspectSecondaryCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                        <atom:Button Content="审计" Command="{Binding InspectAuditCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                    </StackPanel>
+                </StackPanel>
+            </atom:Card>
+
+            <atom:Card Grid.Column="1" Header="当前上下文" StyleVariant="Outlined">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+                    <TextBlock Text="Stage" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="1" Text="{Binding SelectedStage.Id}" />
+                    <TextBlock Grid.Row="1" Text="Run" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedRun.RunId}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="2" Text="Run Status" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedRun.StatusText}" />
+                </Grid>
+            </atom:Card>
+        </Grid>
+
+        <UniformGrid Grid.Row="1" Columns="7" Rows="1">
+            <atom:Card Margin="0,0,3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S2 PLC"/><TextBlock Classes="wcs-toolbar-status" Text="Blocks / Faults / Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+            <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S3 RGV"/><TextBlock Classes="wcs-toolbar-status" Text="Vehicles / Occupancy / Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+            <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S4 Traffic"/><TextBlock Classes="wcs-toolbar-status" Text="Reservations / Deadlocks / Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+            <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S5 External"/><TextBlock Classes="wcs-toolbar-status" Text="Requests / Faults / Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+            <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S6 Health"/><TextBlock Classes="wcs-toolbar-status" Text="Assets / Health Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+            <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S7 Recovery"/><TextBlock Classes="wcs-toolbar-status" Text="Missions / Recovery Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+            <atom:Card Margin="3,0,0,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S8 Capacity"/><TextBlock Classes="wcs-toolbar-status" Text="8h / 24h Readiness Status" TextWrapping="Wrap"/></StackPanel></atom:Card>
+        </UniformGrid>
+
+        <atom:Card Grid.Row="2" Header="Inspection JSON 扁平视图" StyleVariant="Outlined">
+            <atom:DataGrid ItemsSource="{Binding InspectionItems}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                <atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="2*" />
+                    <atom:DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="3*" />
+                </atom:DataGrid.Columns>
+            </atom:DataGrid>
+        </atom:Card>
+    </Grid>
+</UserControl>
