@@ -181,6 +181,7 @@ jobs:
               'LoadPlcDisconnectPresetCommand',
               'LoadTrafficDeadlockPresetCommand',
               'LoadExternalTimeoutPresetCommand',
+              'LoadHealthRulPresetCommand',
               'LoadIntegratedRecoveryPresetCommand',
           )
           missing = [command for command in commands if command not in view]
@@ -190,6 +191,8 @@ jobs:
               'plc.connection.set', 'plc.connected',
               'rgv.segment.define', 'rgv.vehicle.define', 'traffic.reserve', 'traffic.deadlock.detect', 'traffic.deadlock.exists',
               'external.endpoint.define', 'external.fault.apply', 'external.request.invoke', 'external.request.state',
+              'health.asset.define', 'health.profile.linear', 'health.forecast.oracle', 'health.outcome.record',
+              'health.forecast.contract.valid', 'health.rul.nonincreasing', 'health.probability.nondecreasing',
               'integration.mission.define', 'integration.mission.dispatch', 'integration.mission.advance', 'integration.mission.ack',
               'integration.mission.consistent', 'integration.external.exactly-once',
           )
@@ -197,7 +200,7 @@ jobs:
           assert not absent, f'preset DSL marker missing: {absent}'
 
           raw_documents = re.findall(r'\n\s*"""\n\s*(\{.*?\})\n\s*""",', source, re.S)
-          assert len(raw_documents) == 4, f'expected 4 governed preset JSON documents, got {len(raw_documents)}'
+          assert len(raw_documents) == 5, f'expected 5 governed preset JSON documents, got {len(raw_documents)}'
           for index, raw in enumerate(raw_documents, 1):
               document = json.loads(raw)
               assert document['SchemaVersion'] == 1, f'preset {index} schema mismatch'
@@ -214,7 +217,7 @@ jobs:
           forbidden = ('/api/hil/verification', 'CommandBus', 'TaskScheduler', 'TaskOrchestrator', 'S7Connection')
           found = [value for value in forbidden if value in source]
           assert not found, f'preset library references forbidden production/HIL control surface: {found}'
-          print('Governed preset library: 4/4 JSON documents structurally valid')
+          print('Governed preset library: 5/5 JSON documents structurally valid')
           PY
 
       - name: Verify AtomUI operation surface
@@ -246,7 +249,7 @@ jobs:
           overview_api_read_only=true
           desktop_governed_simulation_execution=true
           layered_s2_s8_inspection_read_only=true
-          governed_preset_count=4
+          governed_preset_count=5
           direct_virtual_runtime_control=false
           remote_control_allowed=false
           real_hil_control=false
