@@ -145,7 +145,8 @@ public sealed class ManualSimulationClock : ISimulationClock
         if (!removed)
             return;
 
-        waiter.CancellationRegistration.Dispose();
+        // Do not Dispose the registration from inside its own callback; doing so can
+        // synchronously wait for the callback that is currently executing.
         waiter.Completion.TrySetCanceled(cancellationToken);
     }
 
