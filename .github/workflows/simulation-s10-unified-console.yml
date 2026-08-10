@@ -11,6 +11,7 @@ on:
       - 'src/Wcs.Desktop/Services/SimulationInspectionApiService.cs'
       - 'src/Wcs.Desktop/ViewModels/SimulationVerificationViewModel.cs'
       - 'src/Wcs.Desktop/ViewModels/SimulationVerificationInspectionViewModel.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationPresetViewModel.cs'
       - 'src/Wcs.Desktop/Views/SimulationVerificationView.axaml'
       - 'src/Wcs.Desktop/Views/SimulationVerificationView.axaml.cs'
       - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml'
@@ -165,6 +166,57 @@ jobs:
           print('S2-S8 GET-only inspection surface: PASS')
           PY
 
+      - name: Verify governed preset library
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          source = Path('src/Wcs.Desktop/ViewModels/SimulationVerificationPresetViewModel.cs').read_text(encoding='utf-8')
+          view = Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml').read_text(encoding='utf-8')
+
+          commands = (
+              'LoadPlcDisconnectPresetCommand',
+              'LoadTrafficDeadlockPresetCommand',
+              'LoadExternalTimeoutPresetCommand',
+              'LoadIntegratedRecoveryPresetCommand',
+          )
+          missing = [command for command in commands if command not in view]
+          assert not missing, f'missing preset UI commands: {missing}'
+
+          expected_markers = (
+              'plc.connection.set', 'plc.connected',
+              'rgv.segment.define', 'rgv.vehicle.define', 'traffic.reserve', 'traffic.deadlock.detect', 'traffic.deadlock.exists',
+              'external.endpoint.define', 'external.fault.apply', 'external.request.invoke', 'external.request.state',
+              'integration.mission.define', 'integration.mission.dispatch', 'integration.mission.advance', 'integration.mission.ack',
+              'integration.mission.consistent', 'integration.external.exactly-once',
+          )
+          absent = [marker for marker in expected_markers if marker not in source]
+          assert not absent, f'preset DSL marker missing: {absent}'
+
+          raw_documents = re.findall(r'\n\s*"""\n\s*(\{.*?\})\n\s*""",', source, re.S)
+          assert len(raw_documents) == 4, f'expected 4 governed preset JSON documents, got {len(raw_documents)}'
+          for index, raw in enumerate(raw_documents, 1):
+              document = json.loads(raw)
+              assert document['SchemaVersion'] == 1, f'preset {index} schema mismatch'
+              assert document['ScenarioId'], f'preset {index} ScenarioId missing'
+              assert document['Version'], f'preset {index} Version missing'
+              assert document['Seed'] != 0, f'preset {index} Seed must be non-zero'
+              assert document['DurationMilliseconds'] > 0, f'preset {index} duration must be positive'
+              timeline_ids = [item['Id'] for item in document.get('Actions', []) + document.get('Assertions', [])]
+              assert len(timeline_ids) == len(set(timeline_ids)), f'preset {index} duplicate timeline ids'
+              assert all(0 <= item['AtMilliseconds'] <= document['DurationMilliseconds']
+                         for item in document.get('Actions', []) + document.get('Assertions', [])), \
+                  f'preset {index} timeline item outside duration'
+
+          forbidden = ('/api/hil/verification', 'CommandBus', 'TaskScheduler', 'TaskOrchestrator', 'S7Connection')
+          found = [value for value in forbidden if value in source]
+          assert not found, f'preset library references forbidden production/HIL control surface: {found}'
+          print('Governed preset library: 4/4 JSON documents structurally valid')
+          PY
+
       - name: Verify AtomUI operation surface
         shell: bash
         run: |
@@ -194,6 +246,7 @@ jobs:
           overview_api_read_only=true
           desktop_governed_simulation_execution=true
           layered_s2_s8_inspection_read_only=true
+          governed_preset_count=4
           direct_virtual_runtime_control=false
           remote_control_allowed=false
           real_hil_control=false
