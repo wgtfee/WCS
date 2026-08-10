@@ -9,55 +9,192 @@
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Spacing="4">
                 <TextBlock Classes="wcs-page-title" Text="S10 统一仿真与验证中心" />
-                <TextBlock Classes="wcs-page-subtitle" Text="统一展示 S0～S9 能力、当前环境可用性、只读 API 与安全验收边界。" />
+                <TextBlock Classes="wcs-page-subtitle" Text="统一管理 S0～S8 受治理仿真、虚拟时间、故障场景、断言与 Evidence；S9 真实 HIL 始终保持独立现场证据边界。" />
                 <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
             </StackPanel>
-            <atom:Button Grid.Column="1" Content="刷新状态" Command="{Binding RefreshCommand}" />
+            <atom:Button Grid.Column="1" Content="刷新全部" Command="{Binding RefreshCommand}" />
         </Grid>
 
         <Border Grid.Row="1" Classes="wcs-boundary-strip">
             <StackPanel Spacing="4">
                 <TextBlock Classes="wcs-section-title" Text="安全边界" />
-                <TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}" />
-                <TextBlock Classes="wcs-page-subtitle" Text="本页面不提供场景执行、故障注入、PLC/RGV 控制、HIL 启动、机械安全确认或 Site Acceptance 写入入口。" />
+                <TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}" TextWrapping="Wrap" />
+                <TextBlock Classes="wcs-page-subtitle" Text="{Binding ExecutionBoundaryText}" TextWrapping="Wrap" />
+                <TextBlock Classes="wcs-page-subtitle" Text="界面不直接写虚拟 PLC/RGV/Traffic，也不提供真实 HIL、机械安全或 Site Acceptance 操作；S2～S8 的动作必须作为受治理 Scenario DSL 进入 S1 Run。" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
 
-        <UniformGrid Grid.Row="2" Columns="6" Rows="1">
-            <atom:Card Margin="0,0,4,0" StyleVariant="Outlined"><atom:Statistic Header="环境" Value="{Binding Environment}" ContentFontSize="18" /></atom:Card>
-            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="页面模式" Value="{Binding ModeText}" ContentFontSize="18" /></atom:Card>
-            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="仿真检查" Value="{Binding SimulationText}" ContentFontSize="18" /></atom:Card>
-            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="HIL 检查" Value="{Binding HilText}" ContentFontSize="18" /></atom:Card>
-            <atom:Card Margin="4,0" StyleVariant="Outlined"><StackPanel><atom:Statistic Header="可用阶段" Value="{Binding AvailableStageCount}" ContentFontSize="18"/><TextBlock Classes="wcs-toolbar-status" Text="{Binding TotalStageCount, StringFormat='总计 {0} 阶段'}"/></StackPanel></atom:Card>
-            <atom:Card Margin="4,0,0,0" StyleVariant="Outlined"><atom:Statistic Header="真实 HIL" Value="{Binding RealHilText}" ContentFontSize="18" /></atom:Card>
+        <UniformGrid Grid.Row="2" Columns="8" Rows="1">
+            <atom:Card Margin="0,0,4,0" StyleVariant="Outlined"><atom:Statistic Header="环境" Value="{Binding Environment}" ContentFontSize="16" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="控制面" Value="{Binding ModeText}" ContentFontSize="15" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="仿真" Value="{Binding SimulationText}" ContentFontSize="15" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="HIL" Value="{Binding HilText}" ContentFontSize="15" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="已注册场景" Value="{Binding RegisteredScenarioCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="Run" Value="{Binding RunCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="4,0" StyleVariant="Outlined"><atom:Statistic Header="失败/取消" Value="{Binding FailedRunCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="4,0,0,0" StyleVariant="Outlined"><atom:Statistic Header="真实 HIL" Value="{Binding RealHilText}" ContentFontSize="16" /></atom:Card>
         </UniformGrid>
 
-        <Grid Grid.Row="3" ColumnDefinitions="2*,*" ColumnSpacing="16">
-            <atom:Card Header="阶段能力矩阵" StyleVariant="Outlined">
-                <atom:DataGrid ItemsSource="{Binding Stages}" SelectedItem="{Binding SelectedStage}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
-                    <atom:DataGrid.Columns>
-                        <atom:DataGridTextColumn Header="阶段" Binding="{Binding Id}" Width="70" />
-                        <atom:DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="170" />
-                        <atom:DataGridTextColumn Header="当前状态" Binding="{Binding AvailabilityText}" Width="130" />
-                        <atom:DataGridTextColumn Header="RunId" Binding="{Binding RunIdRequirement}" Width="80" />
-                        <atom:DataGridTextColumn Header="执行边界" Binding="{Binding HardwareRequirement}" Width="100" />
-                        <atom:DataGridTextColumn Header="API 前缀" Binding="{Binding ApiPrefix}" Width="220" />
-                        <atom:DataGridTextColumn Header="能力" Binding="{Binding Capability}" Width="*" />
-                    </atom:DataGrid.Columns>
-                </atom:DataGrid>
-            </atom:Card>
+        <atom:TabControl Grid.Row="3">
+            <atom:TabItem Header="统一总览">
+                <Grid ColumnDefinitions="2*,*" ColumnSpacing="16">
+                    <atom:Card Header="S0～S10 阶段能力矩阵" StyleVariant="Outlined">
+                        <atom:DataGrid ItemsSource="{Binding Stages}" SelectedItem="{Binding SelectedStage}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                            <atom:DataGrid.Columns>
+                                <atom:DataGridTextColumn Header="阶段" Binding="{Binding Id}" Width="70" />
+                                <atom:DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="170" />
+                                <atom:DataGridTextColumn Header="当前状态" Binding="{Binding AvailabilityText}" Width="140" />
+                                <atom:DataGridTextColumn Header="RunId" Binding="{Binding RunIdRequirement}" Width="80" />
+                                <atom:DataGridTextColumn Header="边界" Binding="{Binding HardwareRequirement}" Width="100" />
+                                <atom:DataGridTextColumn Header="API 前缀" Binding="{Binding ApiPrefix}" Width="230" />
+                                <atom:DataGridTextColumn Header="能力" Binding="{Binding Capability}" Width="*" />
+                            </atom:DataGrid.Columns>
+                        </atom:DataGrid>
+                    </atom:Card>
 
-            <atom:Card Grid.Column="1" Header="选中阶段" StyleVariant="Outlined">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="{Binding SelectedStage.Id}" FontSize="26" FontWeight="Bold" />
-                    <TextBlock Text="{Binding SelectedStage.Name}" FontSize="17" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding SelectedStage.Capability}" TextWrapping="Wrap" />
-                    <TextBlock Classes="wcs-section-title" Text="只读 API" Margin="0,8,0,0" />
-                    <TextBlock Text="{Binding SelectedStage.ApiPrefix}" TextWrapping="Wrap" />
-                    <TextBlock Classes="wcs-section-title" Text="安全说明" Margin="0,8,0,0" />
-                    <TextBlock Text="{Binding SelectedStage.SafetyBoundary}" TextWrapping="Wrap" />
-                </StackPanel>
-            </atom:Card>
-        </Grid>
+                    <atom:Card Grid.Column="1" Header="选中阶段" StyleVariant="Outlined">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="{Binding SelectedStage.Id}" FontSize="26" FontWeight="Bold" />
+                            <TextBlock Text="{Binding SelectedStage.Name}" FontSize="17" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding SelectedStage.Capability}" TextWrapping="Wrap" />
+                            <TextBlock Classes="wcs-section-title" Text="检查 API" Margin="0,8,0,0" />
+                            <TextBlock Text="{Binding SelectedStage.ApiPrefix}" TextWrapping="Wrap" />
+                            <TextBlock Classes="wcs-section-title" Text="安全说明" Margin="0,8,0,0" />
+                            <TextBlock Text="{Binding SelectedStage.SafetyBoundary}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </atom:Card>
+                </Grid>
+            </atom:TabItem>
+
+            <atom:TabItem Header="场景治理">
+                <ScrollViewer>
+                    <StackPanel Spacing="14" Margin="0,4">
+                        <atom:Card Header="Scenario Manifest 与 DSL" StyleVariant="Outlined">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                                    <StackPanel Spacing="4"><TextBlock Text="ScenarioId"/><atom:LineEdit Text="{Binding ScenarioId}" Watermark="desktop-smoke" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Version"/><atom:LineEdit Text="{Binding ScenarioVersion}" Watermark="1.0.0" /></StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="Seed"/><atom:LineEdit Text="{Binding ScenarioSeedText}" Watermark="非 0 Int64" /></StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="4"><TextBlock Text="Scenario File"/><atom:LineEdit Text="{Binding ScenarioFile}" Watermark="scenario.json" /></StackPanel>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                    <StackPanel Spacing="4"><TextBlock Text="Source"/><atom:LineEdit Text="{Binding ScenarioSource}" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Approved By"/><atom:LineEdit Text="{Binding ScenarioApprovedBy}" /></StackPanel>
+                                </Grid>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="严格 JSON 场景正文（执行时会再次校验 Content SHA-256 与已注册 Manifest）" />
+                                    <atom:LineEdit Text="{Binding ScenarioJson}" Watermark="粘贴 S1～S8 Scenario DSL JSON" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <atom:Button Content="载入 Smoke 示例" Command="{Binding LoadSampleScenarioCommand}" />
+                                    <atom:Button Content="校验并注册" Command="{Binding RegisterScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </atom:Card>
+
+                        <atom:Card Header="已注册不可变场景版本" StyleVariant="Outlined">
+                            <atom:DataGrid ItemsSource="{Binding Scenarios}" SelectedItem="{Binding SelectedScenario}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None" MaxHeight="280">
+                                <atom:DataGrid.Columns>
+                                    <atom:DataGridTextColumn Header="场景" Binding="{Binding ScenarioId}" Width="220" />
+                                    <atom:DataGridTextColumn Header="版本" Binding="{Binding Version}" Width="120" />
+                                    <atom:DataGridTextColumn Header="Seed" Binding="{Binding Seed}" Width="120" />
+                                    <atom:DataGridTextColumn Header="Content SHA-256" Binding="{Binding ContentSha256}" Width="*" />
+                                    <atom:DataGridTextColumn Header="Manifest Hash" Binding="{Binding ManifestHash}" Width="*" />
+                                    <atom:DataGridTextColumn Header="注册时间" Binding="{Binding RegisteredAtUtc}" Width="190" />
+                                </atom:DataGrid.Columns>
+                            </atom:DataGrid>
+                        </atom:Card>
+                    </StackPanel>
+                </ScrollViewer>
+            </atom:TabItem>
+
+            <atom:TabItem Header="运行控制">
+                <Grid RowDefinitions="Auto,*" RowSpacing="12">
+                    <atom:Card Header="受治理 Run 控制" StyleVariant="Outlined">
+                        <Grid ColumnDefinitions="Auto,150,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+                            <TextBlock VerticalAlignment="Center" Text="Speed" />
+                            <atom:LineEdit Grid.Column="1" Text="{Binding SpeedFactorText}" Watermark="1" />
+                            <atom:Button Grid.Column="2" Content="创建 Paused Run" Command="{Binding CreateRunCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Grid.Column="3" Content="Step" Command="{Binding StepCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Grid.Column="4" Content="Resume" Command="{Binding ResumeCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Grid.Column="5" Content="Pause" Command="{Binding PauseCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Grid.Column="6" Content="虚拟时间 +10s" Command="{Binding Advance10SecondsCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Grid.Column="7" Content="设置速度" Command="{Binding SetSpeedCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Grid.Column="8" Content="Run To End" Command="{Binding RunToCompletionCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Grid.Column="9" Content="Cancel" Command="{Binding CancelRunCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                        </Grid>
+                    </atom:Card>
+
+                    <Grid Grid.Row="1" ColumnDefinitions="3*,*" ColumnSpacing="14">
+                        <atom:Card Header="Run Registry" StyleVariant="Outlined">
+                            <atom:DataGrid ItemsSource="{Binding Runs}" SelectedItem="{Binding SelectedRun}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                                <atom:DataGrid.Columns>
+                                    <atom:DataGridTextColumn Header="RunId" Binding="{Binding RunId}" Width="230" />
+                                    <atom:DataGridTextColumn Header="场景" Binding="{Binding Identity}" Width="200" />
+                                    <atom:DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="100" />
+                                    <atom:DataGridTextColumn Header="虚拟 Offset(ms)" Binding="{Binding CurrentOffsetMilliseconds}" Width="130" />
+                                    <atom:DataGridTextColumn Header="Timeline" Binding="{Binding ProgressText}" Width="110" />
+                                    <atom:DataGridTextColumn Header="断言数" Binding="{Binding AssertionCount}" Width="90" />
+                                    <atom:DataGridTextColumn Header="失败信息" Binding="{Binding FailureMessage}" Width="*" />
+                                    <atom:DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="190" />
+                                </atom:DataGrid.Columns>
+                            </atom:DataGrid>
+                        </atom:Card>
+
+                        <atom:Card Grid.Column="1" Header="Selected Run" StyleVariant="Outlined">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="wcs-section-title" Text="RunId" />
+                                <TextBlock Text="{Binding SelectedRun.RunId}" TextWrapping="Wrap" />
+                                <TextBlock Classes="wcs-section-title" Text="场景 / 状态" Margin="0,6,0,0" />
+                                <TextBlock Text="{Binding SelectedRun.Identity}" />
+                                <TextBlock Text="{Binding SelectedRun.StatusText}" FontWeight="SemiBold" />
+                                <TextBlock Classes="wcs-section-title" Text="执行进度" Margin="0,6,0,0" />
+                                <TextBlock Text="{Binding SelectedRun.ProgressText}" />
+                                <TextBlock Text="{Binding SelectedRun.CurrentOffsetMilliseconds, StringFormat='Offset {0} ms'}" />
+                                <atom:Button Content="读取 Checkpoint / 断言" Command="{Binding ReadCheckpointCommand}" IsEnabled="{Binding CanExecuteSimulation}" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </atom:Card>
+                    </Grid>
+                </Grid>
+            </atom:TabItem>
+
+            <atom:TabItem Header="断言与 Evidence">
+                <Grid ColumnDefinitions="2*,*" ColumnSpacing="14">
+                    <atom:Card Header="Checkpoint Assertion Outcomes" StyleVariant="Outlined">
+                        <atom:DataGrid ItemsSource="{Binding Assertions}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                            <atom:DataGrid.Columns>
+                                <atom:DataGridTextColumn Header="结果" Binding="{Binding ResultText}" Width="80" />
+                                <atom:DataGridTextColumn Header="Assertion" Binding="{Binding AssertionId}" Width="180" />
+                                <atom:DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="180" />
+                                <atom:DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="190" />
+                                <atom:DataGridTextColumn Header="Expected" Binding="{Binding Expected}" Width="150" />
+                                <atom:DataGridTextColumn Header="Actual" Binding="{Binding Actual}" Width="150" />
+                                <atom:DataGridTextColumn Header="虚拟时间(ms)" Binding="{Binding AtMilliseconds}" Width="120" />
+                                <atom:DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="*" />
+                            </atom:DataGrid.Columns>
+                        </atom:DataGrid>
+                    </atom:Card>
+
+                    <StackPanel Grid.Column="1" Spacing="12">
+                        <atom:Card Header="Checkpoint" StyleVariant="Outlined">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{Binding CheckpointStateText}" TextWrapping="Wrap" />
+                                <TextBlock Classes="wcs-section-title" Text="Checkpoint Hash" />
+                                <TextBlock Text="{Binding CheckpointHash}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </atom:Card>
+                        <atom:Card Header="终态 Evidence" StyleVariant="Outlined">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="wcs-section-title" Text="Final State Hash" />
+                                <TextBlock Text="{Binding SelectedRun.FinalStateHash}" TextWrapping="Wrap" />
+                                <TextBlock Classes="wcs-section-title" Text="Evidence Hash" Margin="0,8,0,0" />
+                                <TextBlock Text="{Binding SelectedRun.EvidenceHash}" TextWrapping="Wrap" />
+                                <TextBlock Classes="wcs-page-subtitle" Text="Completed/Failed/Cancelled 为终态；Checkpoint 仅对非终态 Run 开放，这是 S1 RunRegistry 的既有约束。" TextWrapping="Wrap" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </atom:Card>
+                    </StackPanel>
+                </Grid>
+            </atom:TabItem>
+        </atom:TabControl>
     </Grid>
 </UserControl>
