@@ -40,9 +40,34 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  simulator-tests:
+    name: Build and test Wcs.Simulator verification
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+      TEST_PROJECT: src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore $env:TEST_PROJECT
+      - run: dotnet build $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-restore
+      - run: dotnet test $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-build --verbosity normal --logger "trx;LogFileName=wcs-simulator-tests.trx" --results-directory TestResults
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulator-test-results-${{ github.run_number }}
+          path: TestResults
+          if-no-files-found: warn
+          retention-days: 14
+
   host-build:
     name: Build Wcs.Host
-    needs: core-tests
+    needs: [core-tests, simulator-tests]
     runs-on: windows-latest
     timeout-minutes: 20
     env:
@@ -60,7 +85,7 @@ jobs:
 
   desktop-build:
     name: Build Wcs.Desktop
-    needs: core-tests
+    needs: [core-tests, simulator-tests]
     runs-on: windows-latest
     timeout-minutes: 20
     env:
