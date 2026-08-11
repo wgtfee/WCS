@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<ITransportResilienceApiService, TransportResilienceApiService>();
         services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>();
         services.AddHttpClient<ISimulationVerificationApiService, SimulationVerificationApiService>();
+        services.AddHttpClient<ISimulationInspectionApiService, SimulationInspectionApiService>();
         services.AddHttpClient<IModelOpsApiService, ModelOpsApiService>();
         services.AddHttpClient<IFeatureCenterApiService, FeatureCenterApiService>();
         services.AddHttpClient<IShadowDecisionApiService, ShadowDecisionApiService>();

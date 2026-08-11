@@ -8,9 +8,14 @@ on:
     paths:
       - 'src/Wcs.Host/Controllers/SimulationVerificationOverviewController.cs'
       - 'src/Wcs.Desktop/Services/SimulationVerificationApiService.cs'
+      - 'src/Wcs.Desktop/Services/SimulationInspectionApiService.cs'
       - 'src/Wcs.Desktop/ViewModels/SimulationVerificationViewModel.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationInspectionViewModel.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationPresetViewModel.cs'
       - 'src/Wcs.Desktop/Views/SimulationVerificationView.axaml'
       - 'src/Wcs.Desktop/Views/SimulationVerificationView.axaml.cs'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs'
       - 'src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs'
       - 'src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs'
       - 'src/Wcs.Simulator.Tests/SimulationUnifiedConsoleTests.cs'
@@ -25,7 +30,7 @@ permissions:
 
 jobs:
   unified-console:
-    name: verify S10 unified read-only console and safety boundary
+    name: verify S10 governed simulation console and safety boundary
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -72,7 +77,7 @@ jobs:
           print('S10 unified console tests: 10/10 success')
           PY
 
-      - name: Verify unified HTTP surface is read-only
+      - name: Verify S10 overview HTTP surface remains read-only
         shell: bash
         run: |
           set -euo pipefail
@@ -84,15 +89,153 @@ jobs:
           grep -q 'MechanicalSafetyAccepted = false' "$file"
           grep -q 'SiteAccepted = false' "$file"
 
-      - name: Verify desktop route, DI, and safety copy
+      - name: Verify desktop uses only governed simulation execution APIs
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'ISimulationVerificationApiService' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
-          grep -q 'SimulationVerificationViewModel' src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs
-          grep -q '/SimulationVerification' src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs
-          grep -q 'S10 统一仿真与验证中心' src/Wcs.Desktop/Views/SimulationVerificationView.axaml
-          grep -q '不提供场景执行、故障注入、PLC/RGV 控制、HIL 启动' src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          service = Path('src/Wcs.Desktop/Services/SimulationVerificationApiService.cs').read_text(encoding='utf-8')
+          view = Path('src/Wcs.Desktop/Views/SimulationVerificationView.axaml').read_text(encoding='utf-8')
+          vm = Path('src/Wcs.Desktop/ViewModels/SimulationVerificationViewModel.cs').read_text(encoding='utf-8')
+          di = Path('src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs').read_text(encoding='utf-8')
+          menu = Path('src/Wcs.Desktop/ViewModels/MainWindowViewModel.cs').read_text(encoding='utf-8')
+
+          required = {
+              'DI registration': 'ISimulationVerificationApiService' in di,
+              'ViewModel registration': 'SimulationVerificationViewModel' in di,
+              'Desktop route': '/SimulationVerification' in menu,
+              'S10 title': 'S10 统一仿真与验证中心' in view,
+              'governed API safety copy': '受治理 Scenario API' in (view + vm),
+              'S0 validation API': '/api/simulation/governance/scenarios/validate' in service,
+              'S1 run API': '/api/simulation/scenarios/runs' in service,
+          }
+          missing = [name for name, ok in required.items() if not ok]
+          assert not missing, f'missing required governed-console markers: {missing}'
+
+          assert not re.search(r'/api/simulation/virtual-(plc|rgv|traffic|external|health|integration)', service), \
+              'execution client must not call direct S2-S7 virtual runtime endpoints'
+          assert '/api/hil/verification' not in service, 'execution client must not call HIL endpoints'
+
+          forbidden_control_types = (
+              'CommandBus', 'TaskScheduler', 'TaskOrchestrator',
+              'RouteReservation', 'IPlcConnection', 'S7Connection'
+          )
+          found = [name for name in forbidden_control_types if name in service]
+          assert not found, f'execution client references production control types: {found}'
+
+          print('S10 governed execution surface: PASS')
+          PY
+
+      - name: Verify S2-S8 layered inspection is GET-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          service = Path('src/Wcs.Desktop/Services/SimulationInspectionApiService.cs').read_text(encoding='utf-8')
+          vm = Path('src/Wcs.Desktop/ViewModels/SimulationVerificationInspectionViewModel.cs').read_text(encoding='utf-8')
+          view = Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml').read_text(encoding='utf-8')
+          di = Path('src/Wcs.Desktop/Services/ServiceCollectionExtensions.cs').read_text(encoding='utf-8')
+
+          required_paths = (
+              '/api/simulation/virtual-plc/',
+              '/api/simulation/virtual-rgv/',
+              '/api/simulation/virtual-traffic/',
+              '/api/simulation/virtual-external/',
+              '/api/simulation/virtual-health/',
+              '/api/simulation/virtual-integration/',
+              '/api/simulation/capacity-readiness/status',
+          )
+          assert 'ISimulationInspectionApiService' in di, 'inspection client is not registered in DI'
+          assert 'GetAsync' in service, 'inspection client has no GET operation'
+          missing = [path for path in required_paths if path not in service]
+          assert not missing, f'missing S2-S8 inspection paths: {missing}'
+
+          forbidden_methods = r'PostAsync|PostAsJsonAsync|PutAsync|PatchAsync|DeleteAsync|HttpMethod\.(Post|Put|Patch|Delete)'
+          assert not re.search(forbidden_methods, service), 'inspection client contains a mutating HTTP method'
+          assert '/api/hil/verification' not in service, 'inspection client must not call HIL endpoints'
+          assert 'S2～S8 分层只读检查' in view, 'layered inspection UI marker missing'
+          assert 'InspectStatusCommand' in view and 'InspectAuditCommand' in view, 'inspection commands missing'
+          assert 'SelectedRun.IsTerminal' in vm, 'terminal-run checkpoint boundary missing'
+
+          print('S2-S8 GET-only inspection surface: PASS')
+          PY
+
+      - name: Verify governed preset library
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          source = Path('src/Wcs.Desktop/ViewModels/SimulationVerificationPresetViewModel.cs').read_text(encoding='utf-8')
+          view = Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml').read_text(encoding='utf-8')
+
+          commands = (
+              'LoadPlcDisconnectPresetCommand',
+              'LoadTrafficDeadlockPresetCommand',
+              'LoadExternalTimeoutPresetCommand',
+              'LoadHealthRulPresetCommand',
+              'LoadIntegratedRecoveryPresetCommand',
+          )
+          missing = [command for command in commands if command not in view]
+          assert not missing, f'missing preset UI commands: {missing}'
+
+          expected_markers = (
+              'plc.connection.set', 'plc.connected',
+              'rgv.segment.define', 'rgv.vehicle.define', 'traffic.reserve', 'traffic.deadlock.detect', 'traffic.deadlock.exists',
+              'external.endpoint.define', 'external.fault.apply', 'external.request.invoke', 'external.request.state',
+              'health.asset.define', 'health.profile.linear', 'health.forecast.oracle', 'health.outcome.record',
+              'health.forecast.contract.valid', 'health.rul.nonincreasing', 'health.probability.nondecreasing',
+              'integration.mission.define', 'integration.mission.dispatch', 'integration.mission.advance', 'integration.mission.ack',
+              'integration.mission.consistent', 'integration.external.exactly-once',
+          )
+          absent = [marker for marker in expected_markers if marker not in source]
+          assert not absent, f'preset DSL marker missing: {absent}'
+
+          raw_documents = re.findall(r'\n\s*"""\n\s*(\{.*?\})\n\s*""",', source, re.S)
+          assert len(raw_documents) == 5, f'expected 5 governed preset JSON documents, got {len(raw_documents)}'
+          for index, raw in enumerate(raw_documents, 1):
+              document = json.loads(raw)
+              assert document['SchemaVersion'] == 1, f'preset {index} schema mismatch'
+              assert document['ScenarioId'], f'preset {index} ScenarioId missing'
+              assert document['Version'], f'preset {index} Version missing'
+              assert document['Seed'] != 0, f'preset {index} Seed must be non-zero'
+              assert document['DurationMilliseconds'] > 0, f'preset {index} duration must be positive'
+              timeline_ids = [item['Id'] for item in document.get('Actions', []) + document.get('Assertions', [])]
+              assert len(timeline_ids) == len(set(timeline_ids)), f'preset {index} duplicate timeline ids'
+              assert all(0 <= item['AtMilliseconds'] <= document['DurationMilliseconds']
+                         for item in document.get('Actions', []) + document.get('Assertions', [])), \
+                  f'preset {index} timeline item outside duration'
+
+          forbidden = ('/api/hil/verification', 'CommandBus', 'TaskScheduler', 'TaskOrchestrator', 'S7Connection')
+          found = [value for value in forbidden if value in source]
+          assert not found, f'preset library references forbidden production/HIL control surface: {found}'
+          print('Governed preset library: 5/5 JSON documents structurally valid')
+          PY
+
+      - name: Verify AtomUI operation surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          views=(
+            src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+            src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml
+          )
+          for view in "${views[@]}"; do
+            grep -q 'xmlns:atom="https://atomui.net"' "$view"
+            grep -q '<atom:DataGrid' "$view"
+            grep -q '<atom:Button' "$view"
+            ! grep -nE '<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])' "$view"
+          done
+          grep -q '<atom:TabControl' src/Wcs.Desktop/Views/SimulationVerificationView.axaml
+          grep -q '<atom:LineEdit' src/Wcs.Desktop/Views/SimulationVerificationView.axaml
 
       - name: Write S10 contract evidence
         shell: bash
@@ -103,8 +246,13 @@ jobs:
           stage=S10
           test_count=10
           desktop_build=true
-          host_api_read_only=true
+          overview_api_read_only=true
+          desktop_governed_simulation_execution=true
+          layered_s2_s8_inspection_read_only=true
+          governed_preset_count=5
+          direct_virtual_runtime_control=false
           remote_control_allowed=false
+          real_hil_control=false
           real_hil_claimed=false
           mechanical_safety_claimed=false
           site_acceptance_claimed=false
