@@ -75,9 +75,7 @@ public sealed class SimulationGovernanceControllerTests
             ["SimulationGovernance:Enabled"] = governanceEnabled.ToString(),
             ["SimulationGovernance:ScenarioDirectory"] = "data/simulation-scenarios",
             ["SimulationGovernance:MaximumScenarioBytes"] = "1048576",
-            ["SimulationGovernance:MaximumEvidenceRecords"] = "10000",
-            ["SimulationGovernance:AllowedEnvironments:0"] = "Simulation",
-            ["SimulationGovernance:AllowedEnvironments:1"] = "SimulationLoadTest"
+            ["SimulationGovernance:MaximumEvidenceRecords"] = "10000"
         };
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(values)
