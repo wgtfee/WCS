@@ -114,8 +114,10 @@ public sealed class SimulationVirtualRgvTests
 
         var restoredState = SimulationStateStore.FromCanonicalJson(state.ToCanonicalJson(), EngineOptions());
         var restored = new VirtualRgvRuntime(restoredState, Options());
-        Assert.Equal(runtime.GetVehicle("RGV1"), restored.GetVehicle("RGV1"));
-        Assert.Equal(runtime.ListAudit(), restored.ListAudit());
+        Assert.Equal(
+            JsonSerializer.Serialize(runtime.GetVehicle("RGV1")),
+            JsonSerializer.Serialize(restored.GetVehicle("RGV1")));
+        Assert.Equal(runtime.ListAudit().ToArray(), restored.ListAudit().ToArray());
         Assert.Equal(runtime.GetStatus(), restored.GetStatus());
     }
 
