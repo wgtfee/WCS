@@ -49,14 +49,32 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       CONFIGURATION: Release
       TEST_PROJECT: src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+      SIMULATOR_TEST_FILTER: FullyQualifiedName!~DecisionIntelligenceSqlPersistenceTests&FullyQualifiedName!~BoundedAutomationSqlEvidenceTests&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlRegistry_PersistsAcrossRegistryInstances&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlRegistry_RejectsSameVersionWithDifferentManifestHash&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlDeployment_RestartRecoveryRestoresChampionAndFallback&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlDeployment_ThreePromotionsKeepExactlyOneChampionAndOneFallback&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlAuditJournal_DuplicateAuditIdIsRejectedByAppendOnlyConstraint&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlQuarantine_PersistsFailClosedStateAndAuditAcrossInstances
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Verify dedicated SQL workflow ownership
+        shell: pwsh
+        run: |
+          $workflowPaths = @(
+            '.github/workflows/idi-p1-modelops.yml',
+            '.github/workflows/idi-p3-decision-sql.yml',
+            '.github/workflows/idi-p6-readiness-sql.yml'
+          )
+          foreach ($path in $workflowPaths) {
+            if (-not (Test-Path $path)) {
+              throw "Dedicated SQL workflow is missing: $path"
+            }
+            $content = Get-Content $path -Raw
+            if ($content -notmatch [regex]::Escape("- '.github/workflows/dotnet.yml'")) {
+              throw "Dedicated SQL workflow must be triggered when dotnet.yml changes: $path"
+            }
+          }
       - run: dotnet restore $env:TEST_PROJECT
       - run: dotnet build $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-restore
-      - run: dotnet test $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-build --verbosity normal --logger "trx;LogFileName=wcs-simulator-tests.trx" --results-directory TestResults
+      - run: dotnet test $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-build --filter "$env:SIMULATOR_TEST_FILTER" --verbosity normal --logger "trx;LogFileName=wcs-simulator-tests.trx" --results-directory TestResults
       - if: always()
         uses: actions/upload-artifact@v4
         with:
