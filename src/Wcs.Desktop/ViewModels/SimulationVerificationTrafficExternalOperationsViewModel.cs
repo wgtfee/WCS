@@ -339,12 +339,10 @@ public partial class SimulationVerificationViewModel
 
     private bool TrySupportedText(string? raw, IReadOnlyList<string> supported, out string value)
     {
-        value = raw?.Trim() ?? string.Empty;
-        var match = supported.FirstOrDefault(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase));
-        if (match is null)
-            return false;
-        value = match;
-        return true;
+        var candidate = raw?.Trim() ?? string.Empty;
+        var match = supported.FirstOrDefault(item => string.Equals(item, candidate, StringComparison.OrdinalIgnoreCase));
+        value = match ?? string.Empty;
+        return match is not null;
     }
 
     private bool PanelError(string message)
