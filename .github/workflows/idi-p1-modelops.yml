@@ -25,6 +25,7 @@ on:
       - 'docs/交付文件/00-*'
       - '.github/workflows/idi-p1-modelops.yml'
       - '.github/workflows/idi-p1-full-regression.yml'
+      - '.github/workflows/dotnet.yml'
   workflow_dispatch:
 
 permissions:
