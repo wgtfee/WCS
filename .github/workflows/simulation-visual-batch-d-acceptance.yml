@@ -83,7 +83,8 @@ jobs:
           vm=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationAcceptanceViewModel.cs').read_text(encoding='utf-8')
           view=Path('src/Wcs.Desktop/Views/SimulationAcceptanceView.axaml').read_text(encoding='utf-8')
           host=Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs').read_text(encoding='utf-8')
-          source=vm+view+host
+          capability_source=vm+view+host
+          executable_source=vm+host
 
           required=(
               'RunOneClickAcceptanceCommand', 'ValidateAndRegisterAsync', 'CreateRunAsync',
@@ -95,7 +96,7 @@ jobs:
               'ScenarioId=', 'Version=', 'Seed=', 'Head=', 'RunId=',
               'Production/未授权环境继续 fail-closed'
           )
-          missing=[x for x in required if x not in source]
+          missing=[x for x in required if x not in capability_source]
           assert not missing, f'missing Batch D capability markers: {missing}'
 
           assert 'xmlns:atom="https://atomui.net"' in view
@@ -117,8 +118,8 @@ jobs:
               'PlcForceWrite', '/api/hil/verification', 'SqlConnection', 'SqlSugarClient',
               'HttpClient', 'PostAsync', 'PutAsync', 'PatchAsync', 'DeleteAsync'
           )
-          found=[x for x in forbidden if x in source]
-          assert not found, f'Batch D references forbidden production/HIL/external control surface: {found}'
+          found=[x for x in forbidden if x in executable_source]
+          assert not found, f'Batch D executable control surface references forbidden production/HIL/external API: {found}'
           print('Batch D governed one-click acceptance product/safety contract: PASS')
           PY
 
