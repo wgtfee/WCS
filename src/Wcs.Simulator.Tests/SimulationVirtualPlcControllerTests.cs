@@ -140,6 +140,14 @@ public sealed class SimulationVirtualPlcControllerTests
             "Length": 1,
             "BitIndex": 0
           }
+        },
+        {
+          "Id": "clear-fault-later",
+          "AtMilliseconds": 900,
+          "Order": 0,
+          "Kind": "plc.fault.clear",
+          "Target": "controller-flip",
+          "Payload": {}
         }
       ],
       "Assertions": []
