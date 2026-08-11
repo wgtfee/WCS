@@ -33,9 +33,16 @@ jobs:
       - name: Build Desktop Release
         shell: bash
         run: |
-          set -euo pipefail
-          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj
-          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore
+          set -uo pipefail
+          mkdir -p artifacts/simulation-visual-batch-c
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj 2>&1 | tee artifacts/simulation-visual-batch-c/desktop-restore.log
+          restore_status=${PIPESTATUS[0]}
+          if [ "$restore_status" -ne 0 ]; then
+            exit "$restore_status"
+          fi
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore 2>&1 | tee artifacts/simulation-visual-batch-c/desktop-build.log
+          build_status=${PIPESTATUS[0]}
+          exit "$build_status"
 
       - name: Build Simulator tests
         shell: bash
