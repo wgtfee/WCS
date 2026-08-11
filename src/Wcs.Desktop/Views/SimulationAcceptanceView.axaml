@@ -1,0 +1,108 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
+             x:Class="Wcs.Desktop.Views.SimulationAcceptanceView"
+             x:DataType="vm:SimulationVerificationViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="14" Margin="0,4,0,10">
+            <Border Classes="wcs-boundary-strip">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="wcs-section-title" Text="Batch D · 一键运行与验收收口" />
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="生成/当前 Scenario → S0 Manifest + Content SHA-256 校验注册 → S1 隔离 Run → 起点 Checkpoint → Run To End → PASS/FAIL + FinalStateHash/EvidenceHash。仍只调用现有受治理 Scenario API。"
+                               TextWrapping="Wrap" />
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="Production、未授权环境继续 fail-closed；这里没有真实 PLC、CommandBus、TaskScheduler、TaskOrchestrator、DeviceManager、生产 Dispatch/Traffic/RouteReservation 或 HIL 控制入口。"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <atom:Card Header="一键验收" StyleVariant="Outlined">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="5">
+                            <TextBlock Text="结果" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="1" Text="{Binding AcceptanceResultText}" FontWeight="Bold" FontSize="20" />
+                            <TextBlock Grid.Row="1" Text="进度" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AcceptanceStatusText}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="2" Text="边界" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ExecutionBoundaryText}" TextWrapping="Wrap" />
+                        </Grid>
+                    </StackPanel>
+                    <atom:Button Grid.Column="1"
+                                 Content="一键生成并验收"
+                                 Command="{Binding RunOneClickAcceptanceCommand}"
+                                 IsEnabled="{Binding CanExecuteSimulation}"
+                                 VerticalAlignment="Center" />
+                </Grid>
+            </atom:Card>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                <atom:Card Header="可复验证据" StyleVariant="Outlined">
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="7">
+                        <TextBlock Text="Scenario" FontWeight="SemiBold"/><TextBlock Grid.Column="1" Text="{Binding AcceptanceScenarioIdentity}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="1" Text="Seed" FontWeight="SemiBold"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AcceptanceSeed}"/>
+                        <TextBlock Grid.Row="2" Text="Head" FontWeight="SemiBold"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AcceptanceHead}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="3" Text="Checkpoint" FontWeight="SemiBold"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AcceptanceCheckpointHash}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="4" Text="FinalStateHash" FontWeight="SemiBold"/><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AcceptanceFinalStateHash}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="5" Text="EvidenceHash" FontWeight="SemiBold"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AcceptanceEvidenceHash}" TextWrapping="Wrap"/>
+                    </Grid>
+                </atom:Card>
+
+                <atom:Card Grid.Column="1" Header="复验信息" StyleVariant="Outlined">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{Binding AcceptanceReproducibilityText}" TextWrapping="Wrap" />
+                        <TextBlock Classes="wcs-toolbar-status"
+                                   Text="Head 使用 S0 已接受的 immutable ScenarioManifestHash；配合 ScenarioId/Version/Seed/RunId 与 EvidenceHash 可复验同一治理输入。"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="高级控制仍保留在 S1 Run 控制区：Step / Pause / Resume / Advance / Run To End / Cancel。" TextWrapping="Wrap" />
+                    </StackPanel>
+                </atom:Card>
+            </Grid>
+
+            <atom:Card Header="失败断言 / 执行失败聚合" StyleVariant="Outlined">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <TextBlock Text="终止型断言失败会由现有 Run FailureMessage 聚合；执行前 Checkpoint 的断言快照继续进入 S10 Assertions。" TextWrapping="Wrap" />
+                    <atom:DataGrid Grid.Row="1"
+                                   ItemsSource="{Binding AcceptanceFailures}"
+                                   AutoGenerateColumns="False"
+                                   IsReadOnly="True"
+                                   MinHeight="140"
+                                   PaginationVisibility="None">
+                        <atom:DataGrid.Columns>
+                            <atom:DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="110" />
+                            <atom:DataGridTextColumn Header="Scenario" Binding="{Binding ScenarioIdentity}" Width="180" />
+                            <atom:DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
+                        </atom:DataGrid.Columns>
+                    </atom:DataGrid>
+                </Grid>
+            </atom:Card>
+
+            <atom:Card Header="历史 Run 对比" StyleVariant="Outlined">
+                <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+                    <TextBlock Text="{Binding AcceptanceHistorySummary}" TextWrapping="Wrap" />
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                        <atom:Button Content="与 Run 列表当前选中项对比" Command="{Binding CompareAcceptanceHistoryCommand}" />
+                        <TextBlock VerticalAlignment="Center" Classes="wcs-toolbar-status" Text="对比 FinalStateHash / EvidenceHash，不执行任何生产动作。" />
+                    </StackPanel>
+                    <atom:DataGrid Grid.Row="2"
+                                   ItemsSource="{Binding AcceptanceHistory}"
+                                   AutoGenerateColumns="False"
+                                   IsReadOnly="True"
+                                   MinHeight="180"
+                                   PaginationVisibility="None">
+                        <atom:DataGrid.Columns>
+                            <atom:DataGridTextColumn Header="Created" Binding="{Binding CreatedAtText}" Width="155" />
+                            <atom:DataGridTextColumn Header="RunId" Binding="{Binding RunIdText}" Width="250" />
+                            <atom:DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
+                            <atom:DataGridTextColumn Header="FinalStateHash" Binding="{Binding FinalStateHash}" Width="220" />
+                            <atom:DataGridTextColumn Header="EvidenceHash" Binding="{Binding EvidenceHash}" Width="220" />
+                            <atom:DataGridTextColumn Header="Compare" Binding="{Binding Comparison}" Width="*" />
+                        </atom:DataGrid.Columns>
+                    </atom:DataGrid>
+                </Grid>
+            </atom:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
