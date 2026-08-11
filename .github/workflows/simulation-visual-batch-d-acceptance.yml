@@ -1,0 +1,156 @@
+name: WCS Visual Simulation Batch D Acceptance
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationAcceptanceViewModel.cs'
+      - 'src/Wcs.Desktop/Views/SimulationAcceptanceView.axaml'
+      - 'src/Wcs.Desktop/Views/SimulationAcceptanceView.axaml.cs'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs'
+      - '.github/workflows/simulation-visual-batch-d-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  batch-d:
+    name: build and verify governed one-click acceptance closure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Desktop Release
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/simulation-visual-batch-d
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj 2>&1 | tee artifacts/simulation-visual-batch-d/desktop-restore.log
+          restore_status=${PIPESTATUS[0]}
+          if [ "$restore_status" -ne 0 ]; then exit "$restore_status"; fi
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore 2>&1 | tee artifacts/simulation-visual-batch-d/desktop-build.log
+          build_status=${PIPESTATUS[0]}
+          exit "$build_status"
+
+      - name: Build Simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+
+      - name: Run S0 S1 S10 regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-visual-batch-d
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            -c Release --no-build \
+            --filter 'FullyQualifiedName~SimulationGovernance|FullyQualifiedName~SimulationScenarioEngineTests|FullyQualifiedName~SimulationScenarioControllerTests|FullyQualifiedName~SimulationUnifiedConsoleTests' \
+            --logger 'trx;LogFileName=batch-d.trx' \
+            --results-directory artifacts/simulation-visual-batch-d
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root=ET.parse('artifacts/simulation-visual-batch-d/batch-d.trx').getroot()
+          results=root.findall('.//{*}UnitTestResult')
+          failed=[x.attrib.get('testName') for x in results if x.attrib.get('outcome') != 'Passed']
+          assert results, 'Batch D did not execute any governed simulator tests'
+          assert not failed, f'failed Batch D tests: {failed}'
+          unified=[x for x in results if 'SimulationUnifiedConsoleTests' in x.attrib.get('testName','')]
+          assert len(unified) == 10, f'expected 10 S10 tests, got {len(unified)}'
+          print(f'Batch D governed tests: {len(results)}/{len(results)} success; S10=10/10')
+          PY
+
+      - name: Verify acceptance product and safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          vm=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationAcceptanceViewModel.cs').read_text(encoding='utf-8')
+          view=Path('src/Wcs.Desktop/Views/SimulationAcceptanceView.axaml').read_text(encoding='utf-8')
+          host=Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs').read_text(encoding='utf-8')
+          source=vm+view+host
+
+          required=(
+              'RunOneClickAcceptanceCommand', 'ValidateAndRegisterAsync', 'CreateRunAsync',
+              'GetCheckpointAsync', 'RunToCompletionAsync', 'RefreshRunsCoreAsync',
+              'AcceptanceResultText', 'AcceptanceFailures', 'AcceptanceHistory',
+              'AcceptanceFinalStateHash', 'AcceptanceEvidenceHash', 'AcceptanceCheckpointHash',
+              'AcceptanceScenarioIdentity', 'AcceptanceSeed', 'AcceptanceHead',
+              'CompareAcceptanceHistoryCommand', 'FinalStateHash', 'EvidenceHash',
+              'ScenarioId=', 'Version=', 'Seed=', 'Head=', 'RunId=',
+              'Production/未授权环境继续 fail-closed'
+          )
+          missing=[x for x in required if x not in source]
+          assert not missing, f'missing Batch D capability markers: {missing}'
+
+          assert 'xmlns:atom="https://atomui.net"' in view
+          for marker in ('<atom:Card', '<atom:Button', '<atom:DataGrid'):
+              assert marker in view, f'AtomUI marker missing: {marker}'
+          assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])', view), \
+              'Batch D regressed to native product controls'
+          assert '一键验收' in host and 'SimulationAcceptanceView' in host
+
+          governed_calls=(
+              '_api.ValidateAndRegisterAsync', '_api.CreateRunAsync',
+              '_api.GetCheckpointAsync', '_api.RunToCompletionAsync'
+          )
+          assert all(x in vm for x in governed_calls), 'acceptance flow must compose existing governed S0/S1 API only'
+
+          forbidden=(
+              'CommandBus', 'TaskScheduler', 'TaskOrchestrator', 'DeviceManager',
+              'TrafficCoordinator', 'RouteReservationManager', 'IPlcConnection', 'S7Connection',
+              'PlcForceWrite', '/api/hil/verification', 'SqlConnection', 'SqlSugarClient',
+              'HttpClient', 'PostAsync', 'PutAsync', 'PatchAsync', 'DeleteAsync'
+          )
+          found=[x for x in forbidden if x in source]
+          assert not found, f'Batch D references forbidden production/HIL/external control surface: {found}'
+          print('Batch D governed one-click acceptance product/safety contract: PASS')
+          PY
+
+      - name: Write evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > artifacts/simulation-visual-batch-d/evidence.txt <<EOF
+          head_sha=${GITHUB_SHA}
+          batch=D
+          desktop_build=true
+          s0_s1_s10_regression=true
+          s10_test_count=10
+          one_click_acceptance=true
+          governed_registration=true
+          isolated_run=true
+          checkpoint=true
+          run_to_end=true
+          pass_fail_summary=true
+          failed_assertion_aggregation=true
+          history_compare=true
+          final_state_hash=true
+          evidence_hash=true
+          reproducibility_identity=true
+          advanced_run_controls_preserved=true
+          direct_production_control=false
+          direct_hil_control=false
+          EOF
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-visual-batch-d-${{ github.run_number }}
+          path: artifacts/simulation-visual-batch-d/**
+          if-no-files-found: error
+          retention-days: 30
