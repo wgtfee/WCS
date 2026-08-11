@@ -8,6 +8,7 @@ on:
       - 'src/Wcs.Host/Controllers/ShadowDecisionController.cs'
       - 'src/Wcs.Simulator.Tests/DecisionIntelligenceSqlPersistenceTests.cs'
       - '.github/workflows/idi-p3-decision-sql.yml'
+      - '.github/workflows/dotnet.yml'
   workflow_dispatch:
 
 permissions:
