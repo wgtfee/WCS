@@ -9,6 +9,8 @@ on:
       - 'src/Wcs.Desktop/Views/SimulationAcceptanceView.axaml'
       - 'src/Wcs.Desktop/Views/SimulationAcceptanceView.axaml.cs'
       - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs'
+      - 'src/Wcs.Simulator.Tests/SimulationGovernanceTests.cs'
+      - 'src/Wcs.Simulator.Tests/SimulationGovernanceControllerTests.cs'
       - '.github/workflows/simulation-visual-batch-d-acceptance.yml'
   workflow_dispatch:
 
