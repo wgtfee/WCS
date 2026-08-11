@@ -114,8 +114,11 @@ jobs:
           )
           assert all(x in vm for x in assertions), 'automatic assertion catalog incomplete'
 
-          assert 'ScenarioVersion = "1.0.0"' not in vm, 'Timeline generator must not reset user version to 1.0.0'
-          assert '["Version"] = version' in vm, 'Timeline generator must preserve selected Scenario Version'
+          generator_start = vm.index('private bool TryGenerateTimelineScenario()')
+          generator_end = vm.index('private bool TryParseTimelineItem(', generator_start)
+          generator = vm[generator_start:generator_end]
+          assert 'ScenarioVersion = "1.0.0"' not in generator, 'Timeline generator must not reset user version to 1.0.0'
+          assert '["Version"] = version' in generator, 'Timeline generator must preserve selected Scenario Version'
           assert 'Directory.CreateDirectory(TimelineTemplateDirectory())' in vm
           assert 'Environment.SpecialFolder.LocalApplicationData' in vm
           assert 'Path.Combine(TimelineTemplateDirectory(), normalizedName + ".json")' in vm
