@@ -283,7 +283,8 @@ public sealed class SimulationScenarioEngineTests
                 AtMilliseconds = 300,
                 Order = 1,
                 Kind = "state.exists",
-                Target = "counter"
+                Target = "counter",
+                Expected = Json("null")
             }
         ]
     };
