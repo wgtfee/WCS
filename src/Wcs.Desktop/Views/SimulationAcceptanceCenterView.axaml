@@ -21,9 +21,9 @@
         <Grid Grid.Row="1" ColumnDefinitions="330,*" ColumnSpacing="14">
             <atom:Card Header="验收场景模板" StyleVariant="Outlined">
                 <Grid RowDefinitions="*,Auto" RowSpacing="10">
-                    <ListBox ItemsSource="{Binding AcceptanceTemplates}"
-                             SelectedItem="{Binding SelectedAcceptanceTemplate}">
-                        <ListBox.ItemTemplate>
+                    <atom:ListView ItemsSource="{Binding AcceptanceTemplates}"
+                                   SelectedItem="{Binding SelectedAcceptanceTemplate}">
+                        <atom:ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:SimulationAcceptanceTemplateItem">
                                 <StackPanel Margin="8" Spacing="3">
                                     <TextBlock Text="{Binding Category}" FontSize="11" Opacity="0.65" />
@@ -31,8 +31,8 @@
                                     <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
                                 </StackPanel>
                             </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                        </atom:ListView.ItemTemplate>
+                    </atom:ListView>
                     <TextBlock Grid.Row="1"
                                Text="场景库不直接控制真实设备；Production / 未授权环境继续 fail-closed。"
                                TextWrapping="Wrap"
