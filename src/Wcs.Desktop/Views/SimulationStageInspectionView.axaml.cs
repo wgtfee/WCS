@@ -22,6 +22,11 @@ public partial class SimulationStageInspectionView : UserControl
                 Header = "多故障时间轴",
                 Content = new SimulationTimelineEditorView()
             });
+            tabs.Items.Add(new AtomTabItem
+            {
+                Header = "一键验收",
+                Content = new SimulationAcceptanceView()
+            });
         }
     }
 }
