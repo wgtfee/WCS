@@ -193,8 +193,6 @@ public sealed class SimulationScenarioControllerTests
             ["SimulationGovernance:MaximumRegisteredScenarioVersions"] = "10000",
             ["SimulationGovernance:MaximumEvidenceRecords"] = "10000",
             ["SimulationGovernance:MaximumEvidenceValueCharacters"] = "4096",
-            ["SimulationGovernance:AllowedEnvironments:0"] = "Simulation",
-            ["SimulationGovernance:AllowedEnvironments:1"] = "SimulationLoadTest",
             ["SimulationScenarioEngine:MaximumTimelineItems"] = "100000",
             ["SimulationScenarioEngine:MaximumStateEntries"] = "10000",
             ["SimulationScenarioEngine:MaximumStateValueCharacters"] = "4096",
