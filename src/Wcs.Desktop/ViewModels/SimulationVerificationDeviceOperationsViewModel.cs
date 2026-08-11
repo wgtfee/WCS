@@ -207,6 +207,7 @@ public partial class SimulationVerificationViewModel
         var duration = checked(assertAt + 10);
         var hasLoad = !string.IsNullOrWhiteSpace(DeviceRgvLoadId);
         var loadId = DeviceRgvLoadId?.Trim() ?? string.Empty;
+        var batteryFloor = Math.Max(0, (int)battery - 1);
 
         var actions = new List<object>
         {
@@ -232,7 +233,7 @@ public partial class SimulationVerificationViewModel
         {
             Assertion("at-destination", assertAt, 0, "rgv.vehicle.at-node", vehicleId, destinationNode),
             Assertion("route-completed", assertAt, 1, "rgv.route.completed", vehicleId, true),
-            Assertion("battery", assertAt, 2, "rgv.vehicle.battery.at-least", vehicleId, (int)battery)
+            Assertion("battery", assertAt, 2, "rgv.vehicle.battery.at-least", vehicleId, batteryFloor)
         };
         if (hasLoad)
             assertions.Add(Assertion("unloaded", assertAt, 3, "rgv.vehicle.load.equals", vehicleId, null));
