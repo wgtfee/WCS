@@ -14,6 +14,8 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <atom:Button Content="⚙ 生成场景" Command="{Binding GenerateAcceptanceLibraryScenarioCommand}" />
                     <atom:Button Content="▶ 生成并一键验收" Command="{Binding GenerateAndRunAcceptanceLibraryScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                    <atom:Button Content="🧩 进入高级编辑" Click="OnOpenAdvancedEditorClick" />
+                    <atom:Button Content="📋 查看完整执行详情" Click="OnOpenAcceptanceDetailsClick" />
                 </StackPanel>
             </Grid>
         </atom:Card>
@@ -162,8 +164,10 @@
 
                     <atom:Card Header="使用说明" StyleVariant="Outlined">
                         <StackPanel Spacing="5">
-                            <TextBlock Text="普通验收：选择模板并修改参数后，直接点击“生成并一键验收”。" TextWrapping="Wrap" />
-                            <TextBlock Text="高级组合：先生成场景，再到“多故障时间轴”继续追加/排序/编辑；执行详情到“一键验收”查看 Hash、失败断言和历史 Run。" TextWrapping="Wrap" Opacity="0.75" />
+                            <TextBlock Text="测试人员：在场景库选择模板并修改参数，直接点击“生成并一键验收”。" TextWrapping="Wrap" />
+                            <TextBlock Text="高级测试人员：点击“进入高级编辑”，跳到现有多故障时间轴继续追加、排序和编辑。" TextWrapping="Wrap" Opacity="0.75" />
+                            <TextBlock Text="查看 Hash、失败断言、Checkpoint 和历史 Run：点击“查看完整执行详情”，跳到现有一键验收详情页。" TextWrapping="Wrap" Opacity="0.75" />
+                            <TextBlock Text="调试人员：使用设备操作面板与 Traffic / External 专项页面做底层行为诊断。" TextWrapping="Wrap" Opacity="0.75" />
                         </StackPanel>
                     </atom:Card>
                 </StackPanel>
