@@ -98,7 +98,7 @@ jobs:
               'DurationMillisecondsText', 'AtMillisecondsText', 'BodyJson',
               'ApplyDurationToKnownAction', 'AppendKnownRecoveryAction',
               'LocalApplicationData', 'SimulationTemplates',
-              'RegisterScenarioAsync', 'Content SHA-256'
+              'RegisterScenarioAsync', 'Manifest/SHA-256'
           )
           missing=[x for x in required if x not in source]
           assert not missing, f'missing Batch C capability markers: {missing}'
