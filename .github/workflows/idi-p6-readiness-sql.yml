@@ -9,6 +9,7 @@ on:
       - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
       - 'src/Wcs.Simulator.Tests/BoundedAutomationSqlEvidenceTests.cs'
       - '.github/workflows/idi-p6-readiness-sql.yml'
+      - '.github/workflows/dotnet.yml'
   workflow_dispatch:
 
 permissions:
