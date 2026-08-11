@@ -100,12 +100,12 @@ jobs:
           assert 'Simulation Acceptance Center' in vm
           assert '仿真验收中心' in host and 'SimulationAcceptanceCenterView' in host
           assert 'xmlns:atom="https://atomui.net"' in view
-          for marker in ('<atom:Card', '<atom:LineEdit', '<atom:Button'):
+          for marker in ('<atom:Card', '<atom:LineEdit', '<atom:Button', '<atom:ListView'):
               assert marker in view, f'AtomUI marker missing: {marker}'
           assert 'GenerateAcceptanceLibraryScenarioCommand' in view
           assert 'GenerateAndRunAcceptanceLibraryScenarioCommand' in view
           assert 'Production / 未授权环境继续 fail-closed' in view
-          assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])', view), \
+          assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])|<ListBox([ >])', view), \
               'acceptance center regressed to native primary product controls'
 
           forbidden=(
@@ -134,6 +134,7 @@ jobs:
           health_integration_regression=true
           s0_s1_s10_regression=true
           s10_test_count=10
+          atomui_list_view=true
           reuses_existing_builders=true
           reuses_batch_c_timeline=true
           reuses_batch_d_one_click_acceptance=true
