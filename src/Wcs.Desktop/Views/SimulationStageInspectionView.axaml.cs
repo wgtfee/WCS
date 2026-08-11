@@ -14,6 +14,11 @@ public partial class SimulationStageInspectionView : UserControl
         {
             tabs.Items.Add(new AtomTabItem
             {
+                Header = "仿真验收中心",
+                Content = new SimulationAcceptanceCenterView()
+            });
+            tabs.Items.Add(new AtomTabItem
+            {
                 Header = "Traffic / External",
                 Content = new SimulationTrafficExternalOperationsView()
             });
