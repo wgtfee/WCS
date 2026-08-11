@@ -1,0 +1,132 @@
+name: WCS Visual Simulation Scenario Editor
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationVisualScenarioViewModel.cs'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml'
+      - '.github/workflows/simulation-visual-scenario-editor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual-scenario-editor:
+    name: build and verify governed visual scenario editor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build Desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore
+
+      - name: Verify visual editor product surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          vm = Path('src/Wcs.Desktop/ViewModels/SimulationVerificationVisualScenarioViewModel.cs').read_text(encoding='utf-8')
+          view = Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml').read_text(encoding='utf-8')
+
+          required_commands = (
+              'GenerateVisualPlcScenarioCommand',
+              'GenerateAndRegisterVisualPlcScenarioCommand',
+              'GenerateVisualTrafficScenarioCommand',
+              'GenerateAndRegisterVisualTrafficScenarioCommand',
+              'GenerateVisualExternalScenarioCommand',
+              'GenerateAndRegisterVisualExternalScenarioCommand',
+              'GenerateVisualHealthScenarioCommand',
+              'GenerateAndRegisterVisualHealthScenarioCommand',
+              'GenerateVisualRecoveryScenarioCommand',
+              'GenerateAndRegisterVisualRecoveryScenarioCommand',
+          )
+          missing = [command for command in required_commands if command not in view]
+          assert not missing, f'missing visual editor commands: {missing}'
+
+          required_dsl = (
+              'plc.connection.set', 'plc.connected',
+              'rgv.segment.define', 'rgv.vehicle.define', 'traffic.reserve', 'traffic.deadlock.detect', 'traffic.deadlock.exists',
+              'external.endpoint.define', 'external.fault.apply', 'external.request.invoke', 'external.request.state',
+              'health.asset.define', 'health.profile.linear', 'health.forecast.oracle', 'health.outcome.record',
+              'health.feature.valid', 'health.forecast.contract.valid', 'health.rul.nonincreasing', 'health.probability.nondecreasing',
+              'integration.mission.define', 'integration.mission.dispatch', 'integration.mission.advance', 'integration.mission.ack',
+              'integration.mission.consistent', 'integration.external.exactly-once',
+          )
+          absent = [marker for marker in required_dsl if marker not in vm]
+          assert not absent, f'visual editor lost governed DSL marker(s): {absent}'
+
+          required_ui = (
+              '可视化场景编辑',
+              'S2 · PLC 断线 / 自动恢复',
+              'S3/S4 · 双 RGV 路权死锁',
+              'S5 · MES / 外部接口超时恢复',
+              'S6 · 电机/设备 Health + RUL 退化',
+              'S7 · 全链任务恢复 / 幂等',
+          )
+          absent_ui = [marker for marker in required_ui if marker not in view]
+          assert not absent_ui, f'visual editor UI marker(s) missing: {absent_ui}'
+
+          assert 'xmlns:atom="https://atomui.net"' in view
+          assert '<atom:TabControl' in view
+          assert '<atom:Card' in view
+          assert '<atom:LineEdit' in view
+          assert '<atom:Button' in view
+          assert '<atom:DataGrid' in view
+          assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])', view), \
+              'visual editor regressed to native product controls'
+
+          forbidden = (
+              'CommandBus', 'TaskScheduler', 'TaskOrchestrator',
+              'DeviceManager', 'RouteReservationManager', 'TrafficCoordinator',
+              'IPlcConnection', 'S7Connection', 'PlcForceWrite',
+              '/api/hil/verification', 'HttpClient', 'PostAsync', 'PutAsync', 'PatchAsync', 'DeleteAsync'
+          )
+          found = [marker for marker in forbidden if marker in vm]
+          assert not found, f'visual scenario builder references forbidden control surface: {found}'
+
+          assert 'RegisterScenarioAsync' in vm, 'generated scenario must flow through existing S0 registration path'
+          assert 'ScenarioJson = JsonSerializer.Serialize' in vm, 'visual builder must emit strict JSON into governed ScenarioJson'
+          assert 'ScenarioSource = "Wcs.Desktop Visual Scenario Editor"' in vm
+          print('Visual scenario editor surface and safety boundary: PASS')
+          PY
+
+      - name: Write evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/visual-scenario-editor
+          cat > artifacts/visual-scenario-editor/evidence.txt <<EOF
+          head_sha=${GITHUB_SHA}
+          desktop_build=true
+          visual_recipe_count=5
+          governed_s0_registration=true
+          direct_production_control=false
+          direct_hil_control=false
+          atomui_surface=true
+          EOF
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-visual-simulation-scenario-editor-${{ github.run_number }}
+          path: artifacts/visual-scenario-editor/**
+          if-no-files-found: error
+          retention-days: 30
