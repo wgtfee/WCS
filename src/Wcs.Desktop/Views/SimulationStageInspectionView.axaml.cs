@@ -17,6 +17,11 @@ public partial class SimulationStageInspectionView : UserControl
                 Header = "Traffic / External",
                 Content = new SimulationTrafficExternalOperationsView()
             });
+            tabs.Items.Add(new AtomTabItem
+            {
+                Header = "多故障时间轴",
+                Content = new SimulationTimelineEditorView()
+            });
         }
     }
 }
