@@ -171,6 +171,14 @@ public sealed class SimulationVirtualRgvControllerTests
           "Kind": "rgv.vehicle.advance",
           "Target": "RGV1",
           "Payload": {}
+        },
+        {
+          "Id": "advance-later",
+          "AtMilliseconds": 900,
+          "Order": 0,
+          "Kind": "rgv.vehicle.advance",
+          "Target": "RGV1",
+          "Payload": {}
         }
       ],
       "Assertions": []
