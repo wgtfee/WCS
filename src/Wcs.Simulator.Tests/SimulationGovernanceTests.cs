@@ -53,8 +53,8 @@ public sealed class SimulationGovernanceTests
     }
 
     [Theory]
-    [InlineData(false, true, "simulator-disabled")]
-    [InlineData(true, false, "governance-disabled")]
+    [InlineData(false, true, "governance-disabled")]
+    [InlineData(true, false, "simulator-disabled")]
     public void BoundaryGuard_RequiresBothSwitches(bool governanceEnabled, bool simulatorEnabled, string expectedCode)
     {
         var options = EnabledOptions();
