@@ -1,0 +1,133 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
+             x:Class="Wcs.Desktop.Views.SimulationTrafficExternalOperationsView"
+             x:DataType="vm:SimulationVerificationViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="14" Margin="0,4,0,10">
+            <Border Classes="wcs-boundary-strip">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="wcs-section-title" Text="S4/S5 Traffic / External 仿真操作" />
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="只生成现有 VirtualTraffic / VirtualExternal Scenario DSL，再走 S0 Manifest + SHA-256 与 S1 Run；不直接调用生产 Traffic、MES、SQL、HTTP、Network 或真实 HIL。"
+                               TextWrapping="Wrap" />
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding TrafficExternalStatusText}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <atom:Card Header="S4 · Traffic 路权 / Rolling / Expire / Deadlock" StyleVariant="Outlined">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                        <StackPanel Spacing="4"><TextBlock Text="Vehicle A"/><atom:LineEdit Text="{Binding TrafficVehicleId}" Watermark="RGV1" /></StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Vehicle B"/><atom:LineEdit Text="{Binding TrafficVehicleBId}" Watermark="RGV2" /></StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="Segments（两个）"/><atom:LineEdit Text="{Binding TrafficSegmentIdsText}" Watermark="S1,S2" /></StackPanel>
+                        <StackPanel Grid.Column="3" Spacing="4"><TextBlock Text="Segment Length(mm)"/><atom:LineEdit Text="{Binding TrafficSegmentLengthMmText}" Watermark="1000" /></StackPanel>
+
+                        <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="Source Node"/><atom:LineEdit Text="{Binding TrafficSourceNodeId}" Watermark="N1" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="Middle Node"/><atom:LineEdit Text="{Binding TrafficMiddleNodeId}" Watermark="N2" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="Destination Node"/><atom:LineEdit Text="{Binding TrafficDestinationNodeId}" Watermark="N3" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="3" Spacing="4"><TextBlock Text="Vehicle Speed(mm/s)"/><atom:LineEdit Text="{Binding TrafficVehicleSpeedMmPerSecondText}" Watermark="1000" /></StackPanel>
+
+                        <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="Zone A"/><atom:LineEdit Text="{Binding TrafficZoneId}" Watermark="Z1" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="Zone B"/><atom:LineEdit Text="{Binding TrafficZoneBId}" Watermark="Z2" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="2" Spacing="4"><TextBlock Text="Zone Kind A"/><atom:LineEdit Text="{Binding TrafficZoneKind}" Watermark="SharedSegment" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="3" Spacing="4"><TextBlock Text="Zone Kind B"/><atom:LineEdit Text="{Binding TrafficZoneBKind}" Watermark="OpposingDirection" /></StackPanel>
+
+                        <StackPanel Grid.Row="3" Spacing="4"><TextBlock Text="Capacity"/><atom:LineEdit Text="{Binding TrafficCapacityText}" Watermark="1" /></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4"><TextBlock Text="Priority A / B"/><Grid ColumnDefinitions="*,*" ColumnSpacing="6"><atom:LineEdit Text="{Binding TrafficPriorityText}"/><atom:LineEdit Grid.Column="1" Text="{Binding TrafficPriorityBText}"/></Grid></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="2" Spacing="4"><TextBlock Text="Lease(ms) / LookAhead"/><Grid ColumnDefinitions="*,*" ColumnSpacing="6"><atom:LineEdit Text="{Binding TrafficLeaseMsText}"/><atom:LineEdit Grid.Column="1" Text="{Binding TrafficLookAheadText}"/></Grid></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="3" Spacing="4"><TextBlock Text="Deadlock Detect(ms)"/><atom:LineEdit Text="{Binding TrafficDeadlockDetectAtMsText}" Watermark="30" /></StackPanel>
+                    </Grid>
+
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding TrafficZoneKindsText}" TextWrapping="Wrap" />
+                    <WrapPanel Orientation="Horizontal">
+                        <atom:Button Margin="0,0,6,6" Content="SharedSegment" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="SharedSegment" />
+                        <atom:Button Margin="0,0,6,6" Content="OpposingDirection" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="OpposingDirection" />
+                        <atom:Button Margin="0,0,6,6" Content="Merge" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="Merge" />
+                        <atom:Button Margin="0,0,6,6" Content="Intersection" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="Intersection" />
+                        <atom:Button Margin="0,0,6,6" Content="Custom" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="Custom" />
+                    </WrapPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <atom:Button Content="生成路权生命周期 DSL" Command="{Binding GenerateTrafficOperationsScenarioCommand}" />
+                        <atom:Button Content="生成并注册路权场景" Command="{Binding GenerateAndRegisterTrafficOperationsScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                        <atom:Button Content="生成 Deadlock Detect + Resolve" Command="{Binding GenerateTrafficDeadlockScenarioCommand}" />
+                        <atom:Button Content="生成并注册 Deadlock" Command="{Binding GenerateAndRegisterTrafficDeadlockScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                    </StackPanel>
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="路权生命周期场景包含 zone.define、reserve/release、rolling.reserve/release、expire；Deadlock 场景复用确定性的双 RGV wait-for graph，并执行 detect + resolve。"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </atom:Card>
+
+            <atom:Card Header="S5 · External Endpoint / Fault / Request / Circuit" StyleVariant="Outlined">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                        <StackPanel Spacing="4"><TextBlock Text="Endpoint"/><atom:LineEdit Text="{Binding ExternalEndpointId}" Watermark="MES1" /></StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="System Kind"/><atom:LineEdit Text="{Binding ExternalSystemKind}" Watermark="Mes" /></StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="Fault Id"/><atom:LineEdit Text="{Binding ExternalFaultId}" Watermark="F-EXT-1" /></StackPanel>
+                        <StackPanel Grid.Column="3" Spacing="4"><TextBlock Text="Fault Kind"/><atom:LineEdit Text="{Binding ExternalFaultKind}" Watermark="Timeout" /></StackPanel>
+
+                        <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="Fault Start(ms)"/><atom:LineEdit Text="{Binding ExternalFaultStartMsText}" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="Fault End(ms)"/><atom:LineEdit Text="{Binding ExternalFaultEndMsText}" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="HTTP Status（仅 HttpStatus）"/><atom:LineEdit Text="{Binding ExternalHttpStatusCodeText}" Watermark="503" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="3" Spacing="4"><TextBlock Text="Delay(ms)"/><atom:LineEdit Text="{Binding ExternalDelayMsText}" Watermark="0" /></StackPanel>
+
+                        <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="Operation"/><atom:LineEdit Text="{Binding ExternalOperation}" Watermark="Order.Push" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="Error Code（可选）"/><atom:LineEdit Text="{Binding ExternalErrorCode}" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="2" Spacing="4"><TextBlock Text="Idempotency Key"/><atom:LineEdit Text="{Binding ExternalIdempotencyKey}" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="3" Spacing="4"><TextBlock Text="Payload SHA-256"/><atom:LineEdit Text="{Binding ExternalPayloadHash}" /></StackPanel>
+
+                        <StackPanel Grid.Row="3" Spacing="4"><TextBlock Text="Max Attempts"/><atom:LineEdit Text="{Binding ExternalMaxAttemptsText}" Watermark="2" /></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4"><TextBlock Text="Timeout(ms)"/><atom:LineEdit Text="{Binding ExternalTimeoutMsText}" Watermark="20" /></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="2" Spacing="4"><TextBlock Text="Retry Delay(ms)"/><atom:LineEdit Text="{Binding ExternalRetryDelayMsText}" Watermark="100" /></StackPanel>
+                    </Grid>
+
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding ExternalSystemKindsText}" TextWrapping="Wrap" />
+                    <WrapPanel Orientation="Horizontal">
+                        <atom:Button Margin="0,0,6,6" Content="Mes" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="Mes" />
+                        <atom:Button Margin="0,0,6,6" Content="SqlServer" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="SqlServer" />
+                        <atom:Button Margin="0,0,6,6" Content="Http" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="Http" />
+                        <atom:Button Margin="0,0,6,6" Content="Network" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="Network" />
+                        <atom:Button Margin="0,0,6,6" Content="Custom" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="Custom" />
+                    </WrapPanel>
+
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding ExternalFaultKindsText}" TextWrapping="Wrap" />
+                    <WrapPanel Orientation="Horizontal">
+                        <atom:Button Margin="0,0,6,6" Content="Timeout" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="Timeout" />
+                        <atom:Button Margin="0,0,6,6" Content="Unavailable" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="Unavailable" />
+                        <atom:Button Margin="0,0,6,6" Content="HttpStatus" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="HttpStatus" />
+                        <atom:Button Margin="0,0,6,6" Content="InvalidResponse" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="InvalidResponse" />
+                        <atom:Button Margin="0,0,6,6" Content="DuplicateResponse" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="DuplicateResponse" />
+                        <atom:Button Margin="0,0,6,6" Content="SqlDeadlock" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="SqlDeadlock" />
+                        <atom:Button Margin="0,0,6,6" Content="SqlCommandTimeout" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="SqlCommandTimeout" />
+                        <atom:Button Margin="0,0,6,6" Content="ConnectionReset" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="ConnectionReset" />
+                        <atom:Button Margin="0,0,6,6" Content="HighLatency" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="HighLatency" />
+                        <atom:Button Margin="0,0,6,6" Content="PacketLoss" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="PacketLoss" />
+                        <atom:Button Margin="0,0,6,6" Content="HalfOpen" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="HalfOpen" />
+                    </WrapPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <atom:Button Content="生成 External DSL" Command="{Binding GenerateExternalOperationsScenarioCommand}" />
+                        <atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterExternalOperationsScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                    </StackPanel>
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="场景包含 endpoint.define、fault.apply、request.invoke、fault.clear、circuit.reset；非 HttpStatus 故障不会携带 HttpStatusCode，避免违反 S5 Runtime 契约。"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </atom:Card>
+
+            <atom:Card Header="当前生成结果" StyleVariant="Outlined">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+                    <TextBlock Text="Scenario" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="1" Text="{Binding ScenarioId}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="1" Text="File" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioFile}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="2" Text="Summary" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CheckpointStateText}" TextWrapping="Wrap" />
+                </Grid>
+            </atom:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
