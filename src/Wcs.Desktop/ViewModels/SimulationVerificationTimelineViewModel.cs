@@ -682,7 +682,7 @@ public partial class SimulationVerificationViewModel
     }
 
     private static string TimelineTemplateDirectory() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
         "Wcs.Desktop", "SimulationTemplates");
 
     private static string SanitizeTemplateName(string? raw)
