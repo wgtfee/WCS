@@ -34,19 +34,34 @@
                 </StackPanel>
             </Border>
             <Border Grid.Column="1" Classes="wcs-kpi">
-                <StackPanel Spacing="2"><TextBlock Text="控制面" FontSize="10" Foreground="{DynamicResource TextSecondary}"/><TextBlock Text="{Binding ModeText}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Spacing="2">
+                    <TextBlock Text="控制面" FontSize="10" Foreground="{DynamicResource TextSecondary}" />
+                    <TextBlock Text="{Binding ModeText}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                </StackPanel>
             </Border>
             <Border Grid.Column="2" Classes="wcs-kpi">
-                <StackPanel Spacing="2"><TextBlock Text="已注册场景" FontSize="10" Foreground="{DynamicResource TextSecondary}"/><TextBlock Text="{Binding RegisteredScenarioCount}" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Spacing="2">
+                    <TextBlock Text="已注册场景" FontSize="10" Foreground="{DynamicResource TextSecondary}" />
+                    <TextBlock Text="{Binding RegisteredScenarioCount}" FontSize="20" FontWeight="SemiBold" />
+                </StackPanel>
             </Border>
             <Border Grid.Column="3" Classes="wcs-kpi">
-                <StackPanel Spacing="2"><TextBlock Text="RUN" FontSize="10" Foreground="{DynamicResource TextSecondary}"/><TextBlock Text="{Binding RunCount}" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Spacing="2">
+                    <TextBlock Text="RUN" FontSize="10" Foreground="{DynamicResource TextSecondary}" />
+                    <TextBlock Text="{Binding RunCount}" FontSize="20" FontWeight="SemiBold" />
+                </StackPanel>
             </Border>
             <Border Grid.Column="4" Classes="wcs-kpi">
-                <StackPanel Spacing="2"><TextBlock Text="失败 / 取消" FontSize="10" Foreground="{DynamicResource TextSecondary}"/><TextBlock Text="{Binding FailedRunCount}" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Spacing="2">
+                    <TextBlock Text="失败 / 取消" FontSize="10" Foreground="{DynamicResource TextSecondary}" />
+                    <TextBlock Text="{Binding FailedRunCount}" FontSize="20" FontWeight="SemiBold" />
+                </StackPanel>
             </Border>
             <Border Grid.Column="5" Classes="wcs-kpi">
-                <StackPanel Spacing="2"><TextBlock Text="真实 HIL" FontSize="10" Foreground="{DynamicResource TextSecondary}"/><TextBlock Text="{Binding RealHilText}" FontSize="12" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Spacing="2">
+                    <TextBlock Text="真实 HIL" FontSize="10" Foreground="{DynamicResource TextSecondary}" />
+                    <TextBlock Text="{Binding RealHilText}" FontSize="12" FontWeight="SemiBold" />
+                </StackPanel>
             </Border>
         </Grid>
 
@@ -90,7 +105,6 @@
                             </atom:DataGrid.Columns>
                         </atom:DataGrid>
                     </atom:Card>
-
                     <StackPanel Grid.Column="1" Spacing="12">
                         <atom:Card Header="选中阶段" StyleVariant="Outlined">
                             <StackPanel Spacing="8">
@@ -117,25 +131,37 @@
                         <atom:Card Header="Scenario Manifest 与严格 DSL" StyleVariant="Outlined">
                             <StackPanel Spacing="10">
                                 <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
-                                    <StackPanel Spacing="4"><TextBlock Text="ScenarioId" FontSize="12"/><atom:LineEdit Text="{Binding ScenarioId}" Watermark="desktop-smoke" /></StackPanel>
-                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Version" FontSize="12"/><atom:LineEdit Text="{Binding ScenarioVersion}" Watermark="1.0.0" /></StackPanel>
-                                    <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="Seed" FontSize="12"/><atom:LineEdit Text="{Binding ScenarioSeedText}" Watermark="非 0 Int64" /></StackPanel>
-                                    <StackPanel Grid.Column="3" Spacing="4"><TextBlock Text="Scenario File" FontSize="12"/><atom:LineEdit Text="{Binding ScenarioFile}" Watermark="scenario.json" /></StackPanel>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="ScenarioId" FontSize="12" />
+                                        <atom:LineEdit Text="{Binding ScenarioId}" Watermark="desktop-smoke" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <TextBlock Text="Version" FontSize="12" />
+                                        <atom:LineEdit Text="{Binding ScenarioVersion}" Watermark="1.0.0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4">
+                                        <TextBlock Text="Seed" FontSize="12" />
+                                        <atom:LineEdit Text="{Binding ScenarioSeedText}" Watermark="非 0 Int64" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="4">
+                                        <TextBlock Text="Scenario File" FontSize="12" />
+                                        <atom:LineEdit Text="{Binding ScenarioFile}" Watermark="scenario.json" />
+                                    </StackPanel>
                                 </Grid>
                                 <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                                    <StackPanel Spacing="4"><TextBlock Text="Source" FontSize="12"/><atom:LineEdit Text="{Binding ScenarioSource}" /></StackPanel>
-                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Approved By" FontSize="12"/><atom:LineEdit Text="{Binding ScenarioApprovedBy}" /></StackPanel>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Source" FontSize="12" />
+                                        <atom:LineEdit Text="{Binding ScenarioSource}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <TextBlock Text="Approved By" FontSize="12" />
+                                        <atom:LineEdit Text="{Binding ScenarioApprovedBy}" />
+                                    </StackPanel>
                                 </Grid>
                                 <StackPanel Spacing="4">
-                                    <TextBlock Text="Scenario JSON" FontSize="12" FontWeight="SemiBold" />
-                                    <TextBox Text="{Binding ScenarioJson}"
-                                             AcceptsReturn="True"
-                                             FontFamily="Consolas"
-                                             FontSize="11"
-                                             MinHeight="180"
-                                             MaxHeight="300"
-                                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                             ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                                    <TextBlock Text="严格 Scenario JSON" FontSize="12" FontWeight="SemiBold" />
+                                    <atom:LineEdit Text="{Binding ScenarioJson}"
+                                                   Watermark="粘贴 S1～S8 Scenario DSL JSON；测试数据页会解析实际 Payload / Expected" />
                                 </StackPanel>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                     <TextBlock Classes="wcs-toolbar-status" Text="{Binding ScenarioDataStatusText}" VerticalAlignment="Center" />
@@ -202,7 +228,6 @@
                                 </atom:DataGrid.Columns>
                             </atom:DataGrid>
                         </atom:Card>
-
                         <StackPanel Grid.Column="1" Spacing="12">
                             <atom:Card Header="Selected Run" StyleVariant="Outlined">
                                 <StackPanel Spacing="7">
@@ -220,7 +245,8 @@
                             <Border Classes="wcs-data-summary">
                                 <StackPanel Spacing="3">
                                     <TextBlock Text="数据可见性" FontSize="12" FontWeight="SemiBold" />
-                                    <TextBlock Classes="wcs-section-caption" Text="读取 Checkpoint 后，“测试数据”页会展开完整 StateJson；Expected / Actual 仍在 Evidence 页逐条展示。" />
+                                    <TextBlock Classes="wcs-section-caption"
+                                               Text="读取 Checkpoint 后，“测试数据”页会展开完整 StateJson；Expected / Actual 仍在 Evidence 页逐条展示。" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -251,7 +277,6 @@
                             </atom:DataGrid.Columns>
                         </atom:DataGrid>
                     </atom:Card>
-
                     <StackPanel Grid.Column="1" Spacing="12">
                         <atom:Card Header="Checkpoint" StyleVariant="Outlined">
                             <StackPanel Spacing="7">
@@ -269,7 +294,8 @@
                                 <TextBlock Classes="wcs-section-title" Text="Evidence Hash" Margin="0,5,0,0" />
                                 <TextBlock Text="{Binding SelectedRun.EvidenceHash}" FontSize="11" TextWrapping="Wrap" />
                                 <TextBlock Classes="wcs-section-caption"
-                                           Text="Completed / Failed / Cancelled 为终态；运行中 Checkpoint 与终态 Evidence 保持现有 S1 边界。" Margin="0,6,0,0" />
+                                           Text="Completed / Failed / Cancelled 为终态；运行中 Checkpoint 与终态 Evidence 保持现有 S1 边界。"
+                                           Margin="0,6,0,0" />
                             </StackPanel>
                         </atom:Card>
                     </StackPanel>
