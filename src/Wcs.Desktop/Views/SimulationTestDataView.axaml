@@ -95,8 +95,8 @@
                              TextWrapping="NoWrap"
                              FontFamily="Consolas"
                              FontSize="11"
-                             VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Auto" />
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto" />
                 </atom:Card>
             </Grid>
         </Grid>
