@@ -5,24 +5,104 @@
              x:Class="Wcs.Desktop.Views.DashboardView"
              x:DataType="vm:DashboardViewModel"
              Background="{DynamicResource BgPrimary}">
-    <ScrollViewer Padding="24">
-        <StackPanel Spacing="16">
-            <StackPanel Spacing="4">
-                <TextBlock Classes="wcs-page-title" Text="System Overview" />
-                <TextBlock Classes="wcs-page-subtitle" Text="设备、任务、报警、对象跟踪与资源锁的统一运行概览。" />
-            </StackPanel>
+    <ScrollViewer>
+        <StackPanel Margin="22" Spacing="14">
+            <Border Classes="wcs-page-hero">
+                <Grid ColumnDefinitions="4,*,Auto" ColumnSpacing="14">
+                    <Border Grid.Column="0" Classes="wcs-accent-rail" />
+                    <StackPanel Grid.Column="1" Spacing="3">
+                        <TextBlock Classes="wcs-page-eyebrow" Text="OPERATIONS · RUNTIME OVERVIEW" />
+                        <TextBlock Classes="wcs-page-title" Text="运行总览" />
+                        <TextBlock Classes="wcs-page-subtitle"
+                                   Text="聚合设备、任务、报警、对象追踪和资源锁的实时运行规模。这里只呈现控制面的实际汇总数据，不复制设备控制命令。" />
+                    </StackPanel>
+                    <Border Grid.Column="2" Classes="wcs-status-success" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource AccentGreen}" VerticalAlignment="Center" />
+                            <TextBlock Text="REALTIME" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
 
             <UniformGrid Columns="5" Rows="1">
-                <atom:Card Margin="0,0,6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Devices" Value="{Binding DeviceCount}" ContentFontSize="26" /></atom:Card>
-                <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Active Tasks" Value="{Binding ActiveTaskCount}" ContentFontSize="26" /></atom:Card>
-                <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Active Alarms" Value="{Binding ActiveAlarmCount}" ContentFontSize="26" /></atom:Card>
-                <atom:Card Margin="6,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Tracked Objects" Value="{Binding TrackedObjectCount}" ContentFontSize="26" /></atom:Card>
-                <atom:Card Margin="6,0,0,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Resource Locks" Value="{Binding ActiveLockCount}" ContentFontSize="26" /></atom:Card>
+                <Border Classes="wcs-kpi" Margin="0,0,5,0">
+                    <Grid ColumnDefinitions="4,*" ColumnSpacing="12">
+                        <Border Classes="wcs-accent-rail" />
+                        <StackPanel Grid.Column="1" Spacing="3">
+                            <TextBlock Classes="wcs-kpi-label" Text="设备总数" />
+                            <TextBlock Classes="wcs-kpi-value" Text="{Binding DeviceCount}" />
+                            <TextBlock Classes="wcs-section-caption" Text="Device Runtime" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border Classes="wcs-kpi" Margin="5,0">
+                    <StackPanel Spacing="3">
+                        <TextBlock Classes="wcs-kpi-label" Text="活动任务" />
+                        <TextBlock Classes="wcs-kpi-value" Text="{Binding ActiveTaskCount}" />
+                        <TextBlock Classes="wcs-section-caption" Text="Task Scheduler" />
+                    </StackPanel>
+                </Border>
+                <Border Classes="wcs-kpi" Margin="5,0">
+                    <StackPanel Spacing="3">
+                        <TextBlock Classes="wcs-kpi-label" Text="活动报警" />
+                        <TextBlock Classes="wcs-kpi-value" Text="{Binding ActiveAlarmCount}" />
+                        <TextBlock Classes="wcs-section-caption" Text="Alarm Center" />
+                    </StackPanel>
+                </Border>
+                <Border Classes="wcs-kpi" Margin="5,0">
+                    <StackPanel Spacing="3">
+                        <TextBlock Classes="wcs-kpi-label" Text="跟踪对象" />
+                        <TextBlock Classes="wcs-kpi-value" Text="{Binding TrackedObjectCount}" />
+                        <TextBlock Classes="wcs-section-caption" Text="Object Tracking" />
+                    </StackPanel>
+                </Border>
+                <Border Classes="wcs-kpi" Margin="5,0,0,0">
+                    <StackPanel Spacing="3">
+                        <TextBlock Classes="wcs-kpi-label" Text="资源锁" />
+                        <TextBlock Classes="wcs-kpi-value" Text="{Binding ActiveLockCount}" />
+                        <TextBlock Classes="wcs-section-caption" Text="Resource Lock" />
+                    </StackPanel>
+                </Border>
             </UniformGrid>
 
-            <atom:Card Header="Quick Actions" StyleVariant="Outlined">
-                <TextBlock Classes="wcs-page-subtitle" Text="运行入口由左侧导航统一承载，避免在总览页复制控制命令。" />
-            </atom:Card>
+            <Grid ColumnDefinitions="2*,*" ColumnSpacing="12">
+                <atom:Card Grid.Column="0" Header="运行态数据来源" StyleVariant="Outlined">
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
+                        <Border Classes="wcs-panel-muted">
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="设备 / 任务" FontWeight="SemiBold" />
+                                <TextBlock Classes="wcs-section-caption" Text="设备和任务状态由 Host 汇总，并通过实时消息触发总览刷新。" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Classes="wcs-panel-muted">
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="报警" FontWeight="SemiBold" />
+                                <TextBlock Classes="wcs-section-caption" Text="报警变化触发总览重新读取，不在 Dashboard 上执行确认或恢复。" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Classes="wcs-panel-muted">
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="对象 / 资源" FontWeight="SemiBold" />
+                                <TextBlock Classes="wcs-section-caption" Text="对象追踪和资源锁仅用于运行态可见性，详细数据进入对应业务页查看。" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </atom:Card>
+
+                <atom:Card Grid.Column="1" Header="控制边界" StyleVariant="Outlined">
+                    <StackPanel Spacing="10">
+                        <Border Classes="wcs-data-summary">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="总览页只读" FontWeight="SemiBold" />
+                                <TextBlock Classes="wcs-section-caption" Text="不在 Dashboard 复制任务、设备或调度写命令。" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Classes="wcs-section-caption"
+                                   Text="需要操作时从左侧进入设备状态、任务管理、报警中心或调度控制，避免同一控制动作散落在多个页面。" />
+                    </StackPanel>
+                </atom:Card>
+            </Grid>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
