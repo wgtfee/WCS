@@ -89,14 +89,12 @@
                 </atom:Card>
 
                 <atom:Card Grid.Row="1" Header="Raw StateJson" StyleVariant="Outlined">
-                    <TextBox Text="{Binding CheckpointStateJson}"
-                             IsReadOnly="True"
-                             AcceptsReturn="True"
-                             TextWrapping="NoWrap"
-                             FontFamily="Consolas"
-                             FontSize="11"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                        <TextBlock Text="{Binding CheckpointStateJson}"
+                                   FontFamily="Consolas"
+                                   FontSize="11"
+                                   TextWrapping="NoWrap" />
+                    </ScrollViewer>
                 </atom:Card>
             </Grid>
         </Grid>
