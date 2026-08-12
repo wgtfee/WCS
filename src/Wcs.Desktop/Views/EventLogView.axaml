@@ -5,34 +5,74 @@
              x:Class="Wcs.Desktop.Views.EventLogView"
              x:DataType="vm:EventLogViewModel"
              Background="{DynamicResource BgPrimary}">
-    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <StackPanel Spacing="4">
-                <TextBlock Classes="wcs-page-title" Text="Event Log" />
-                <TextBlock Classes="wcs-page-subtitle" Text="运行事件、分类与时间序列的统一只读追踪视图。" />
-            </StackPanel>
-            <CheckBox Grid.Column="1" IsChecked="{Binding AutoScroll}" Content="Auto-scroll" VerticalAlignment="Center" />
+    <Grid RowDefinitions="Auto,Auto,*" Margin="22" RowSpacing="14">
+        <Border Grid.Row="0" Classes="wcs-page-hero">
+            <Grid ColumnDefinitions="4,*,Auto" ColumnSpacing="14">
+                <Border Classes="wcs-accent-rail" />
+                <StackPanel Grid.Column="1" Spacing="3">
+                    <TextBlock Classes="wcs-page-eyebrow" Text="OPERATIONS · REALTIME EVENT STREAM" />
+                    <TextBlock Classes="wcs-page-title" Text="事件日志" />
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="只读观察连接、设备、任务、报警和对象移动的实时事件流。事件来自现有 Realtime Service，不在页面内生成模拟日志。" />
+                </StackPanel>
+                <Border Grid.Column="2" Classes="wcs-status-success" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse Width="7" Height="7" Fill="{DynamicResource AccentGreen}" VerticalAlignment="Center" />
+                        <TextBlock Text="EVENT STREAM" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="220,*,Auto" ColumnSpacing="10">
+            <Border Classes="wcs-kpi">
+                <StackPanel Spacing="3">
+                    <TextBlock Classes="wcs-kpi-label" Text="当前缓存事件" />
+                    <TextBlock Classes="wcs-kpi-value" Text="{Binding Entries.Count}" />
+                    <TextBlock Classes="wcs-section-caption" Text="最多保留最近 500 条" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Classes="wcs-data-summary">
+                <StackPanel Spacing="3">
+                    <TextBlock Text="实时事件来源" FontSize="11" FontWeight="SemiBold" />
+                    <TextBlock Classes="wcs-section-caption"
+                               Text="Connection · Device · Task · Alarm · ObjectMoved；新事件插入顶部，时间、级别、分类和消息均来自当前事件对象。" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Classes="wcs-toolbar" MinWidth="170">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <CheckBox IsChecked="{Binding AutoScroll}" Content="自动滚动" VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
         </Grid>
 
-        <UniformGrid Grid.Row="1" Columns="1" Rows="1">
-            <atom:Card StyleVariant="Outlined" IsHoverable="True">
-                <atom:Statistic Header="当前事件" Value="{Binding Entries.Count}" ContentFontSize="26" />
-            </atom:Card>
-        </UniformGrid>
-
-        <atom:Card Grid.Row="2" Header="事件流" StyleVariant="Outlined">
-            <atom:DataGrid ItemsSource="{Binding Entries}" AutoGenerateColumns="False"
-                           IsReadOnly="True"
-                           CanUserSortColumns="True"
-                           CanUserResizeColumns="True"
-                           PaginationVisibility="None">
-                <atom:DataGrid.Columns>
-                    <atom:DataGridTextColumn Header="时间" Binding="{Binding Timestamp}" Width="180" />
-                    <atom:DataGridTextColumn Header="级别" Binding="{Binding Level}" Width="100" />
-                    <atom:DataGridTextColumn Header="分类" Binding="{Binding Category}" Width="160" />
-                    <atom:DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="2*" />
-                </atom:DataGrid.Columns>
-            </atom:DataGrid>
-        </atom:Card>
+        <Border Grid.Row="2" Classes="wcs-table-shell">
+            <Grid RowDefinitions="Auto,*">
+                <Border Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="2">
+                            <TextBlock Classes="wcs-section-title" Text="实时事件流" />
+                            <TextBlock Classes="wcs-section-caption" Text="事件按最新优先排列；此页面只用于运行观察，不提供控制命令。" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="READ ONLY" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentBlue}" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <atom:DataGrid Grid.Row="1"
+                               ItemsSource="{Binding Entries}"
+                               AutoGenerateColumns="False"
+                               IsReadOnly="True"
+                               CanUserSortColumns="True"
+                               CanUserResizeColumns="True"
+                               PaginationVisibility="None">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="时间" Binding="{Binding Timestamp}" Width="190" />
+                        <atom:DataGridTextColumn Header="级别" Binding="{Binding Level}" Width="110" />
+                        <atom:DataGridTextColumn Header="分类" Binding="{Binding Category}" Width="150" />
+                        <atom:DataGridTextColumn Header="事件消息" Binding="{Binding Message}" Width="3*" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>
