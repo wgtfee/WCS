@@ -126,4 +126,46 @@
     <Setter Property="CornerRadius" Value="8" />
     <Setter Property="Padding" Value="12,9" />
   </Style>
+
+  <Style Selector="Border.wcs-page-hero">
+    <Setter Property="Padding" Value="18,16" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Background" Value="{DynamicResource BgCard}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="Border.wcs-toolbar">
+    <Setter Property="Padding" Value="10" />
+    <Setter Property="CornerRadius" Value="9" />
+    <Setter Property="Background" Value="{DynamicResource BgCardMuted}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="Border.wcs-table-shell">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Background" Value="{DynamicResource BgCard}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="Border.wcs-accent-rail">
+    <Setter Property="Width" Value="4" />
+    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="Background" Value="{DynamicResource AccentBlue}" />
+  </Style>
+
+  <Style Selector="TextBlock.wcs-kpi-label">
+    <Setter Property="FontSize" Value="10" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+  </Style>
+
+  <Style Selector="TextBlock.wcs-kpi-value">
+    <Setter Property="FontSize" Value="24" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  </Style>
 </Styles>
