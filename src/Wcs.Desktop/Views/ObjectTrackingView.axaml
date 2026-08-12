@@ -10,38 +10,85 @@
         <conv:StatusToColorConverter x:Key="StatusToColor" />
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <StackPanel Spacing="4">
-                <TextBlock Classes="wcs-page-title" Text="对象跟踪" />
-                <TextBlock Classes="wcs-page-subtitle" Text="跟踪对象当前位置、目标位置、状态与更新时间。" />
-            </StackPanel>
-            <atom:Button Grid.Column="1" Content="刷新" Command="{Binding RefreshCommand}" />
+    <Grid RowDefinitions="Auto,Auto,*" Margin="22" RowSpacing="14">
+        <Border Grid.Row="0" Classes="wcs-page-hero">
+            <Grid ColumnDefinitions="4,*,Auto" ColumnSpacing="14">
+                <Border Classes="wcs-accent-rail" />
+                <StackPanel Grid.Column="1" Spacing="3">
+                    <TextBlock Classes="wcs-page-eyebrow" Text="OPERATIONS · OBJECT TRACKING" />
+                    <TextBlock Classes="wcs-page-title" Text="对象追踪" />
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="查看在制对象当前位置、目标位置、运行状态和最近更新时间；实时移动消息会更新已有对象的位置数据。" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Classes="wcs-status-success">
+                        <TextBlock Text="REALTIME TRACKING" FontSize="10" FontWeight="SemiBold" />
+                    </Border>
+                    <atom:Button Content="刷新数据" Command="{Binding RefreshCommand}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="220,*,180" ColumnSpacing="10">
+            <Border Classes="wcs-kpi">
+                <StackPanel Spacing="3">
+                    <TextBlock Classes="wcs-kpi-label" Text="当前跟踪对象" />
+                    <TextBlock Classes="wcs-kpi-value" Text="{Binding Objects.Count}" />
+                    <TextBlock Classes="wcs-section-caption" Text="Host 返回的实际对象数" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Classes="wcs-toolbar">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <TextBlock Text="数据范围" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="wcs-section-caption"
+                               Text="ObjectId · CurrentPosition · TargetPosition · Status · UpdateTime" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+            <Border Grid.Column="2" Classes="wcs-panel-muted">
+                <StackPanel Spacing="3">
+                    <TextBlock Classes="wcs-kpi-label" Text="加载状态" />
+                    <TextBlock Text="{Binding IsLoading}" FontSize="12" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
         </Grid>
 
-        <atom:Card Grid.Row="1" StyleVariant="Outlined" IsHoverable="True">
-            <atom:Statistic Header="Tracked Objects" Value="{Binding Objects.Count}" ContentFontSize="26" />
-        </atom:Card>
-
-        <atom:Card Grid.Row="2" Header="对象列表" StyleVariant="Outlined">
-            <atom:DataGrid ItemsSource="{Binding Objects}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None" CanUserSortColumns="True" CanUserResizeColumns="True">
-                <atom:DataGrid.Columns>
-                    <atom:DataGridTextColumn Header="Object ID" Binding="{Binding ObjectId}" Width="2*" />
-                    <atom:DataGridTextColumn Header="Current Pos" Binding="{Binding CurrentPosition}" Width="*" />
-                    <atom:DataGridTextColumn Header="Target Pos" Binding="{Binding TargetPosition}" Width="*" />
-                    <atom:DataGridTemplateColumn Header="Status" SortMemberPath="Status" Width="120">
-                        <atom:DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Ellipse Width="10" Height="10" Fill="{Binding Status, Converter={StaticResource StatusToColor}}" />
-                                    <TextBlock Text="{Binding Status}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </atom:DataGridTemplateColumn.CellTemplate>
-                    </atom:DataGridTemplateColumn>
-                    <atom:DataGridTextColumn Header="Last Update" Binding="{Binding UpdateTime}" Width="180" />
-                </atom:DataGrid.Columns>
-            </atom:DataGrid>
-        </atom:Card>
+        <Border Grid.Row="2" Classes="wcs-table-shell">
+            <Grid RowDefinitions="Auto,*">
+                <Border Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="2">
+                            <TextBlock Classes="wcs-section-title" Text="对象位置明细" />
+                            <TextBlock Classes="wcs-section-caption" Text="当前位置可由实时 ObjectMoved 消息更新；目标位置和状态仍以业务数据源返回为准。" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="TRACKING STATE" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentBlue}" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <atom:DataGrid Grid.Row="1"
+                               ItemsSource="{Binding Objects}"
+                               AutoGenerateColumns="False"
+                               IsReadOnly="True"
+                               PaginationVisibility="None"
+                               CanUserSortColumns="True"
+                               CanUserResizeColumns="True">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="对象 ID" Binding="{Binding ObjectId}" Width="1.5*" />
+                        <atom:DataGridTextColumn Header="当前位置" Binding="{Binding CurrentPosition}" Width="*" />
+                        <atom:DataGridTextColumn Header="目标位置" Binding="{Binding TargetPosition}" Width="*" />
+                        <atom:DataGridTemplateColumn Header="状态" SortMemberPath="Status" Width="150">
+                            <atom:DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                                        <Ellipse Width="9" Height="9" Fill="{Binding Status, Converter={StaticResource StatusToColor}}" />
+                                        <TextBlock Text="{Binding Status}" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </atom:DataGridTemplateColumn.CellTemplate>
+                        </atom:DataGridTemplateColumn>
+                        <atom:DataGridTextColumn Header="最后更新" Binding="{Binding UpdateTime}" Width="210" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>
