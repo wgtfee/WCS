@@ -11,3 +11,7 @@ obj/
 *.obj
 *.vs
 artifacts/
+*.log
+*.runlogs
+
+*.claude
