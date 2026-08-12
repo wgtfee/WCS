@@ -10,66 +10,119 @@
         <conv:StatusToColorConverter x:Key="StatusToColor" />
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
-            <StackPanel Spacing="4">
-                <TextBlock Classes="wcs-page-title" Text="报警管理" />
-                <TextBlock Classes="wcs-page-subtitle" Text="统一查看报警级别、状态、发生/恢复时间与根因关联。" />
-            </StackPanel>
-            <ComboBox Grid.Column="1" ItemsSource="{Binding SearchFields}" SelectedItem="{Binding SearchField}" Width="100" VerticalAlignment="Center" />
-            <atom:LineEdit Grid.Column="2" Text="{Binding SearchText}" Watermark="搜索报警..." Width="220" VerticalAlignment="Center" />
-            <atom:Button Grid.Column="3" Content="刷新" Command="{Binding RefreshCommand}" />
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="22" RowSpacing="14">
+        <Border Grid.Row="0" Classes="wcs-page-hero">
+            <Grid ColumnDefinitions="4,*,Auto" ColumnSpacing="14">
+                <Border Classes="wcs-accent-rail" Background="{DynamicResource AccentRed}" />
+                <StackPanel Grid.Column="1" Spacing="3">
+                    <TextBlock Classes="wcs-page-eyebrow" Text="OPERATIONS · ALARM CENTER" Foreground="{DynamicResource AccentRed}" />
+                    <TextBlock Classes="wcs-page-title" Text="报警中心" />
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="集中查看报警码、级别、消息、状态、发生与恢复时间。确认和恢复继续走现有报警 API，本批不改变报警状态机语义。" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Classes="wcs-status-danger">
+                        <TextBlock Text="ALARM RUNTIME" FontSize="10" FontWeight="SemiBold" />
+                    </Border>
+                    <atom:Button Content="刷新数据" Command="{Binding RefreshCommand}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="220,*,180" ColumnSpacing="10">
+            <Border Classes="wcs-kpi">
+                <StackPanel Spacing="3">
+                    <TextBlock Classes="wcs-kpi-label" Text="当前可见报警" />
+                    <TextBlock Classes="wcs-kpi-value" Text="{Binding Alarms.Count}" />
+                    <TextBlock Classes="wcs-section-caption" Text="随筛选条件实时变化" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Classes="wcs-data-summary" Background="{DynamicResource AccentRedSoft}" BorderBrush="{DynamicResource AccentRed}">
+                <StackPanel Spacing="3">
+                    <TextBlock Text="报警数据字段" FontSize="11" FontWeight="SemiBold" />
+                    <TextBlock Classes="wcs-section-caption"
+                               Text="AlarmId · AlarmCode · Level · Message · Status · OccurTime · RecoverTime" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Classes="wcs-panel-muted">
+                <StackPanel Spacing="3">
+                    <TextBlock Classes="wcs-kpi-label" Text="加载状态" />
+                    <TextBlock Text="{Binding IsLoading}" FontSize="12" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
         </Grid>
 
-        <UniformGrid Grid.Row="1" Columns="1" Rows="1">
-            <atom:Card StyleVariant="Outlined" IsHoverable="True">
-                <atom:Statistic Header="当前报警" Value="{Binding Alarms.Count}" ContentFontSize="26" />
-            </atom:Card>
-        </UniformGrid>
+        <Border Grid.Row="2" Classes="wcs-toolbar">
+            <Grid ColumnDefinitions="Auto,130,280,*,Auto" ColumnSpacing="10">
+                <TextBlock Text="筛选" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding SearchFields}"
+                          SelectedItem="{Binding SearchField}"
+                          VerticalAlignment="Center" />
+                <atom:LineEdit Grid.Column="2" Text="{Binding SearchText}" Watermark="输入报警 ID、报警码、级别、消息或状态..." />
+                <TextBlock Grid.Column="3" Classes="wcs-section-caption"
+                           Text="筛选只作用于已加载报警记录；操作列保留确认与恢复。" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="4" Text="FILTERED VIEW" FontSize="10" FontWeight="SemiBold"
+                           Foreground="{DynamicResource AccentRed}" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
 
-        <atom:Card Grid.Row="2" Header="报警列表" StyleVariant="Outlined">
-            <atom:DataGrid ItemsSource="{Binding Alarms}" AutoGenerateColumns="False"
-                           IsReadOnly="True"
-                           CanUserSortColumns="True"
-                           CanUserFilterColumns="True"
-                           CanUserResizeColumns="True"
-                           PaginationVisibility="None">
-                <atom:DataGrid.Columns>
-                    <atom:DataGridTextColumn Header="报警 ID" Binding="{Binding AlarmId}" Width="180" />
-                    <atom:DataGridTextColumn Header="报警码" Binding="{Binding AlarmCode}" Width="150" />
-                    <atom:DataGridTextColumn Header="级别" Binding="{Binding Level}" Width="90" />
-                    <atom:DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="2*" />
-                    <atom:DataGridTemplateColumn Header="状态" SortMemberPath="Status" Width="110">
-                        <atom:DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <Border CornerRadius="3" Padding="6,2"
-                                        Background="{Binding Level, Converter={StaticResource StatusToColor}, ConverterParameter=bg}"
-                                        Opacity="0.8">
-                                    <TextBlock Text="{Binding Status}" Foreground="White" FontSize="12" />
-                                </Border>
-                            </DataTemplate>
-                        </atom:DataGridTemplateColumn.CellTemplate>
-                    </atom:DataGridTemplateColumn>
-                    <atom:DataGridTextColumn Header="发生时间" Binding="{Binding OccurTime}" Width="180" />
-                    <atom:DataGridTextColumn Header="恢复时间" Binding="{Binding RecoverTime}" Width="180" />
-                    <atom:DataGridTextColumn Header="根因报警" Binding="{Binding RootCauseAlarmId}" Width="150" />
-                    <atom:DataGridTextColumn Header="根因深度" Binding="{Binding RootCauseDepth}" Width="90" />
-                    <atom:DataGridTemplateColumn Header="操作" Width="150">
-                        <atom:DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <atom:Button Content="确认"
-                                                 Command="{Binding $parent[atom:DataGrid].DataContext.AckAlarmCommand}"
-                                                 CommandParameter="{Binding AlarmId}" />
-                                    <atom:Button Content="恢复"
-                                                 Command="{Binding $parent[atom:DataGrid].DataContext.RecoverAlarmCommand}"
-                                                 CommandParameter="{Binding AlarmCode}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </atom:DataGridTemplateColumn.CellTemplate>
-                    </atom:DataGridTemplateColumn>
-                </atom:DataGrid.Columns>
-            </atom:DataGrid>
-        </atom:Card>
+        <Border Grid.Row="3" Classes="wcs-table-shell">
+            <Grid RowDefinitions="Auto,*">
+                <Border Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="2">
+                            <TextBlock Classes="wcs-section-title" Text="报警运行明细" />
+                            <TextBlock Classes="wcs-section-caption"
+                                       Text="只展示当前 ViewModel 实际填充的字段；未加载的根因字段不再占用空白列。" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding SearchField}" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <atom:DataGrid Grid.Row="1"
+                               ItemsSource="{Binding Alarms}"
+                               AutoGenerateColumns="False"
+                               IsReadOnly="True"
+                               CanUserSortColumns="True"
+                               CanUserFilterColumns="True"
+                               CanUserResizeColumns="True"
+                               PaginationVisibility="None">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="报警 ID" Binding="{Binding AlarmId}" Width="180" />
+                        <atom:DataGridTextColumn Header="报警码" Binding="{Binding AlarmCode}" Width="150" />
+                        <atom:DataGridTextColumn Header="级别" Binding="{Binding Level}" Width="90" />
+                        <atom:DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="2*" />
+                        <atom:DataGridTemplateColumn Header="状态" SortMemberPath="Status" Width="125">
+                            <atom:DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center" Margin="4,0">
+                                        <Ellipse Width="9" Height="9" Fill="{Binding Level, Converter={StaticResource StatusToColor}}" />
+                                        <TextBlock Text="{Binding Status}" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </atom:DataGridTemplateColumn.CellTemplate>
+                        </atom:DataGridTemplateColumn>
+                        <atom:DataGridTextColumn Header="发生时间" Binding="{Binding OccurTime}" Width="180" />
+                        <atom:DataGridTextColumn Header="恢复时间" Binding="{Binding RecoverTime}" Width="180" />
+                        <atom:DataGridTemplateColumn Header="操作" Width="160">
+                            <atom:DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <atom:Button Content="确认"
+                                                     Command="{Binding $parent[atom:DataGrid].DataContext.AckAlarmCommand}"
+                                                     CommandParameter="{Binding AlarmId}" />
+                                        <atom:Button Content="恢复"
+                                                     Command="{Binding $parent[atom:DataGrid].DataContext.RecoverAlarmCommand}"
+                                                     CommandParameter="{Binding AlarmCode}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </atom:DataGridTemplateColumn.CellTemplate>
+                        </atom:DataGridTemplateColumn>
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>
