@@ -1,19 +1,42 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Light blue theme palette -->
-    <Color x:Key="BgPrimary">#EBF2F7</Color>
-    <Color x:Key="BgSecondary">#E0EAF3</Color>
-    <Color x:Key="BgSidebar">#D4E2F0</Color>
-    <Color x:Key="BgStatusBar">#E0EAF3</Color>
-    <Color x:Key="TabBg">#F0F6FB</Color>
-    <Color x:Key="TreeViewSelectedBg">#B8D4F0</Color>
-    <Color x:Key="BgCard">#F7FAFD</Color>
-    <Color x:Key="TextPrimary">#1A2B3C</Color>
-    <Color x:Key="TextSecondary">#5A6B7C</Color>
-    <Color x:Key="AccentBlue">#1976D2</Color>
-    <Color x:Key="AccentGreen">#388E3C</Color>
-    <Color x:Key="AccentRed">#D32F2F</Color>
-    <Color x:Key="AccentOrange">#F57C00</Color>
-    <Color x:Key="AccentYellow">#FBC02D</Color>
-    <Color x:Key="BorderColor">#C8D6E5</Color>
+    <!-- Industrial desktop palette: dark navigation + calm neutral work surface. -->
+    <Color x:Key="BgPrimary">#F4F7FB</Color>
+    <Color x:Key="BgSecondary">#EEF3F8</Color>
+    <Color x:Key="BgSidebar">#0B1526</Color>
+    <Color x:Key="BgSidebarElevated">#111F33</Color>
+    <Color x:Key="BgSidebarHover">#172A43</Color>
+    <Color x:Key="BgStatusBar">#0E1A2B</Color>
+    <Color x:Key="BgTopBar">#FFFFFF</Color>
+    <Color x:Key="BgCard">#FFFFFF</Color>
+    <Color x:Key="BgCardMuted">#F8FAFC</Color>
+    <Color x:Key="BgInput">#FFFFFF</Color>
+    <Color x:Key="TabBg">#EEF3F8</Color>
+    <Color x:Key="TabActiveBg">#FFFFFF</Color>
+    <Color x:Key="TreeViewSelectedBg">#1B365D</Color>
+
+    <Color x:Key="TextPrimary">#172033</Color>
+    <Color x:Key="TextSecondary">#667085</Color>
+    <Color x:Key="TextMuted">#98A2B3</Color>
+    <Color x:Key="TextOnDark">#F8FAFC</Color>
+    <Color x:Key="TextOnDarkSecondary">#A9B7C9</Color>
+
+    <Color x:Key="AccentBlue">#1677FF</Color>
+    <Color x:Key="AccentBlueSoft">#E8F2FF</Color>
+    <Color x:Key="AccentCyan">#0891B2</Color>
+    <Color x:Key="AccentGreen">#16A34A</Color>
+    <Color x:Key="AccentGreenSoft">#EAF8EF</Color>
+    <Color x:Key="AccentRed">#DC2626</Color>
+    <Color x:Key="AccentRedSoft">#FDECEC</Color>
+    <Color x:Key="AccentOrange">#EA580C</Color>
+    <Color x:Key="AccentOrangeSoft">#FFF3E8</Color>
+    <Color x:Key="AccentYellow">#CA8A04</Color>
+
+    <Color x:Key="BorderColor">#DCE4EE</Color>
+    <Color x:Key="BorderStrong">#C9D5E3</Color>
+    <Color x:Key="DividerColor">#E7EDF4</Color>
+    <Color x:Key="SurfaceHover">#F6F9FC</Color>
+    <Color x:Key="SurfaceSelected">#EAF2FF</Color>
+
+    <Color x:Key="ShadowColor">#160F172A</Color>
 </ResourceDictionary>
