@@ -9,49 +9,74 @@
     xmlns:atom="https://atomui.net"
     mc:Ignorable="d">
 
-    <Grid RowDefinitions="Auto,*">
-        <Border Grid.Row="0" Background="{DynamicResource BgSecondary}" Padding="4,0">
+    <Grid RowDefinitions="44,*" Background="{DynamicResource BgPrimary}">
+        <Border Grid.Row="0"
+                Background="{DynamicResource BgSecondary}"
+                BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource BorderColor}"
+                Padding="10,0,8,0">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                <ItemsControl ItemsSource="{Binding Tabs, ElementName=PART_Root}">
+                <ItemsControl ItemsSource="{Binding Tabs, ElementName=PART_Root}" VerticalAlignment="Stretch">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local:ClosableTabItem">
-                            <Border CornerRadius="6" Padding="12,6" Margin="2,4"
-                                    BorderThickness="1" BorderBrush="{DynamicResource BorderColor}"
-                                    Background="{DynamicResource TabBg}"
-                                    PointerPressed="OnTabPointerPressed">
-                                <Border.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="关闭" IsVisible="{Binding CanClose}" Click="OnCloseMenuItemClick"/>
-                                        <MenuItem Header="关闭左侧页面" Click="OnCloseLeftMenuItemClick"/>
-                                        <MenuItem Header="关闭右侧页面" Click="OnCloseRightMenuItemClick"/>
-                                        <Separator/>
-                                        <MenuItem Header="关闭全部页面" Click="OnCloseAllMenuItemClick"/>
-                                        <MenuItem Header="关闭其他页面" Click="OnCloseAllButThisMenuItemClick"/>
-                                    </ContextMenu>
-                                </Border.ContextMenu>
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Text="{Binding Header}"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               FontSize="13" VerticalAlignment="Center"/>
-                                    <atom:Button Grid.Column="1"
-                                                 Width="26" Height="24"
-                                                 Margin="6,0,-6,0"
-                                                 Content="✕"
-                                                 FontSize="11"
-                                                 IsVisible="{Binding CanClose}"
-                                                 Click="OnCloseButtonClick" />
-                                </Grid>
-                            </Border>
+                            <Grid Margin="2,5,2,0" MinWidth="112">
+                                <Border IsVisible="{Binding IsSelected, Converter={StaticResource InverseBool}}"
+                                        CornerRadius="7,7,0,0"
+                                        Background="Transparent"
+                                        BorderThickness="1,1,1,0"
+                                        BorderBrush="Transparent" />
+                                <Border IsVisible="{Binding IsSelected}"
+                                        CornerRadius="7,7,0,0"
+                                        Background="{DynamicResource TabActiveBg}"
+                                        BorderThickness="1,1,1,0"
+                                        BorderBrush="{DynamicResource BorderColor}" />
+
+                                <Border Padding="12,7,8,7"
+                                        Background="Transparent"
+                                        PointerPressed="OnTabPointerPressed">
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="关闭" IsVisible="{Binding CanClose}" Click="OnCloseMenuItemClick"/>
+                                            <MenuItem Header="关闭左侧页面" Click="OnCloseLeftMenuItemClick"/>
+                                            <MenuItem Header="关闭右侧页面" Click="OnCloseRightMenuItemClick"/>
+                                            <Separator/>
+                                            <MenuItem Header="关闭全部页面" Click="OnCloseAllMenuItemClick"/>
+                                            <MenuItem Header="关闭其他页面" Click="OnCloseAllButThisMenuItemClick"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding Header}"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"/>
+                                        <atom:Button Grid.Column="1"
+                                                     Width="24" Height="22"
+                                                     Content="×"
+                                                     FontSize="13"
+                                                     IsVisible="{Binding CanClose}"
+                                                     Click="OnCloseButtonClick" />
+                                    </Grid>
+                                </Border>
+
+                                <Border Height="2"
+                                        Background="{DynamicResource AccentBlue}"
+                                        VerticalAlignment="Bottom"
+                                        Margin="9,0"
+                                        IsVisible="{Binding IsSelected}" />
+                            </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
         </Border>
+
         <Border Grid.Row="1" Background="{DynamicResource BgPrimary}">
             <ContentPresenter Content="{Binding SelectedTab.Content, ElementName=PART_Root}" />
         </Border>

@@ -1,7 +1,13 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Style Selector="TextBlock.wcs-page-eyebrow">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentBlue}" />
+  </Style>
+
   <Style Selector="TextBlock.wcs-page-title">
-    <Setter Property="FontSize" Value="26" />
+    <Setter Property="FontSize" Value="25" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
   </Style>
@@ -13,9 +19,15 @@
   </Style>
 
   <Style Selector="TextBlock.wcs-section-title">
-    <Setter Property="FontSize" Value="16" />
+    <Setter Property="FontSize" Value="15" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  </Style>
+
+  <Style Selector="TextBlock.wcs-section-caption">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
 
   <Style Selector="TextBlock.wcs-toolbar-status">
@@ -25,11 +37,93 @@
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
 
-  <Style Selector="Border.wcs-boundary-strip">
-    <Setter Property="Padding" Value="12,10" />
-    <Setter Property="CornerRadius" Value="8" />
-    <Setter Property="Background" Value="{DynamicResource BgSecondary}" />
+  <Style Selector="TextBlock.wcs-sidebar-brand">
+    <Setter Property="FontSize" Value="18" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextOnDark}" />
+  </Style>
+
+  <Style Selector="TextBlock.wcs-sidebar-caption">
+    <Setter Property="FontSize" Value="10" />
+    <Setter Property="Foreground" Value="{DynamicResource TextOnDarkSecondary}" />
+  </Style>
+
+  <Style Selector="TextBlock.wcs-sidebar-menu-text">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource TextOnDark}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="TextBlock.wcs-sidebar-menu-icon">
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextOnDarkSecondary}" />
+    <Setter Property="Width" Value="24" />
+    <Setter Property="TextAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Border.wcs-panel">
+    <Setter Property="Padding" Value="16" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Background" Value="{DynamicResource BgCard}" />
     <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
     <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="Border.wcs-panel-muted">
+    <Setter Property="Padding" Value="14" />
+    <Setter Property="CornerRadius" Value="9" />
+    <Setter Property="Background" Value="{DynamicResource BgCardMuted}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="Border.wcs-kpi">
+    <Setter Property="Padding" Value="14,12" />
+    <Setter Property="CornerRadius" Value="9" />
+    <Setter Property="Background" Value="{DynamicResource BgCard}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="Border.wcs-boundary-strip">
+    <Setter Property="Padding" Value="13,11" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Background" Value="{DynamicResource BgCardMuted}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="Border.wcs-status-success">
+    <Setter Property="Background" Value="{DynamicResource AccentGreenSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentGreen}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="20" />
+    <Setter Property="Padding" Value="9,4" />
+  </Style>
+
+  <Style Selector="Border.wcs-status-warning">
+    <Setter Property="Background" Value="{DynamicResource AccentOrangeSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentOrange}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="20" />
+    <Setter Property="Padding" Value="9,4" />
+  </Style>
+
+  <Style Selector="Border.wcs-status-danger">
+    <Setter Property="Background" Value="{DynamicResource AccentRedSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentRed}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="20" />
+    <Setter Property="Padding" Value="9,4" />
+  </Style>
+
+  <Style Selector="Border.wcs-data-summary">
+    <Setter Property="Background" Value="{DynamicResource AccentBlueSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBlue}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="12,9" />
   </Style>
 </Styles>
