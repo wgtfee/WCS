@@ -126,15 +126,18 @@
                     </Popup>
 
                     <Border Grid.Row="3" Background="{DynamicResource BgSidebarElevated}" Padding="14,9">
-                        <StackPanel IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}">
-                            <TextBlock Text="CONTROL PLANE" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextOnDarkSecondary}" />
-                            <TextBlock Text="受治理运行 · 软件仿真隔离" FontSize="10" Foreground="{DynamicResource TextOnDarkSecondary}" Margin="0,2,0,0" />
-                        </StackPanel>
-                        <TextBlock IsVisible="{Binding IsSidebarCollapsed}"
-                                   Text="CP"
-                                   HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource TextOnDarkSecondary}"
-                                   FontSize="10" FontWeight="SemiBold" />
+                        <Grid>
+                            <StackPanel IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}">
+                                <TextBlock Text="CONTROL PLANE" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextOnDarkSecondary}" />
+                                <TextBlock Text="受治理运行 · 软件仿真隔离" FontSize="10" Foreground="{DynamicResource TextOnDarkSecondary}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <TextBlock IsVisible="{Binding IsSidebarCollapsed}"
+                                       Text="CP"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextOnDarkSecondary}"
+                                       FontSize="10" FontWeight="SemiBold" />
+                        </Grid>
                     </Border>
                 </Grid>
             </Border>
