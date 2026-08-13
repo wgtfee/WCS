@@ -6,6 +6,8 @@ on:
       - develop
     paths:
       - 'src/Wcs.Desktop/ViewModels/SimulationVerificationAcceptanceLibraryViewModel.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationBeginnerViewModel.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationDataViewModel.cs'
       - 'src/Wcs.Desktop/Views/SimulationAcceptanceCenterView.axaml'
       - 'src/Wcs.Desktop/Views/SimulationAcceptanceCenterView.axaml.cs'
       - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs'
@@ -74,15 +76,17 @@ jobs:
           import re
 
           vm=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationAcceptanceLibraryViewModel.cs').read_text(encoding='utf-8')
+          beginner=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationBeginnerViewModel.cs').read_text(encoding='utf-8')
+          data=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationDataViewModel.cs').read_text(encoding='utf-8')
           view=Path('src/Wcs.Desktop/Views/SimulationAcceptanceCenterView.axaml').read_text(encoding='utf-8')
           host=Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs').read_text(encoding='utf-8')
-          source=vm+view+host
+          source=vm+beginner+data+view+host
 
           templates=(
               'plc-fault','rgv-flow','traffic-lifecycle','traffic-deadlock',
               'external-fault','health-rul','integration-recovery','multi-fault'
           )
-          missing=[x for x in templates if x not in vm]
+          missing=[x for x in templates if x not in vm or x not in beginner]
           assert not missing, f'missing scenario templates: {missing}'
 
           reused_builders=(
@@ -100,13 +104,40 @@ jobs:
           assert 'Simulation Acceptance Center' in vm
           assert '仿真验收中心' in host and 'SimulationAcceptanceCenterView' in host
           assert 'xmlns:atom="https://atomui.net"' in view
-          for marker in ('<atom:Card', '<atom:LineEdit', '<atom:Button', '<atom:ListView'):
+          for marker in ('<atom:Card', '<atom:LineEdit', '<atom:Button', '<atom:ListView', '<atom:DataGrid'):
               assert marker in view, f'AtomUI marker missing: {marker}'
+
+          beginner_markers=(
+              '仿真测试向导',
+              '第一步 · 选择测试用例',
+              '第三步 · 填写测试参数',
+              '第四步 · 查看系统实际生成的测试数据',
+              '第五步 · 查看测试结果',
+              '生成测试数据',
+              '一键开始测试',
+              '高级场景编辑',
+              '查看执行详情'
+          )
+          missing=[x for x in beginner_markers if x not in view]
+          assert not missing, f'Chinese beginner workflow markers missing: {missing}'
+          assert 'BeginnerAcceptanceTemplates' in view
+          assert 'ScenarioDataRows' in view
+          assert 'DataSummary' in view
+          assert '实际输入 / 预期数据' in view
+          assert 'BeginnerAcceptanceResultText' in view
           assert 'GenerateAcceptanceLibraryScenarioCommand' in view
           assert 'GenerateAndRunAcceptanceLibraryScenarioCommand' in view
-          assert 'Production / 未授权环境继续 fail-closed' in view
+          assert '这里只操作软件仿真状态，不直接控制真实设备。' in view
+          assert '生产环境和未授权环境不会因为本页面改版而获得执行权限。' in view
           assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])|<ListBox([ >])', view), \
               'acceptance center regressed to native primary product controls'
+
+          assert 'SelectedAcceptanceTemplate = value is null' in beginner
+          assert 'AcceptanceLibraryPlcFaultKind = value.Value' in beginner
+          assert 'AcceptanceLibraryExternalFaultKind = value.Value' in beginner
+          assert 'AcceptanceLibraryExternalSystemKind = value.Value' in beginner
+          assert 'RebuildScenarioDataPreview' in data
+          assert 'SimulationScenarioChineseFormatter' in data
 
           forbidden=(
               'CommandBus','TaskScheduler','TaskOrchestrator','DeviceManager',
@@ -116,7 +147,7 @@ jobs:
           )
           found=[x for x in forbidden if x in source]
           assert not found, f'acceptance center references forbidden production/HIL/external runtime surface: {found}'
-          print('Simulation acceptance center product/governance/safety contract: PASS')
+          print('Simulation acceptance center Chinese beginner/product/governance/safety contract: PASS')
           PY
 
       - name: Write evidence
@@ -129,12 +160,15 @@ jobs:
           surface=simulation-acceptance-center
           scenario_templates=8
           desktop_release_build=true
+          chinese_beginner_workflow=true
+          real_scenario_data_preview=true
           plc_rgv_regression=true
           traffic_external_regression=true
           health_integration_regression=true
           s0_s1_s10_regression=true
           s10_test_count=10
           atomui_list_view=true
+          atomui_data_grid=true
           reuses_existing_builders=true
           reuses_batch_c_timeline=true
           reuses_batch_d_one_click_acceptance=true
