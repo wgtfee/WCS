@@ -15,7 +15,7 @@ public partial class SimulationVerificationViewModel
 
     [ObservableProperty] private string _visualScenarioSeedText = "20260811";
     [ObservableProperty] private string _visualScenarioStartUtcText = "2026-08-11T00:00:00+00:00";
-    [ObservableProperty] private string _visualEditorStatusText = "选择一个常见故障卡片，填写参数后生成 Scenario DSL；生成结果仍需通过 S0 Manifest / SHA-256 治理。";
+    [ObservableProperty] private string _visualEditorStatusText = "选择一个常见场景卡片，填写参数后生成受治理仿真场景；生成结果仍需通过场景注册和内容摘要校验。";
 
     [ObservableProperty] private string _visualPlcId = "PLC1";
     [ObservableProperty] private string _visualPlcDisconnectAtMsText = "1000";
@@ -105,7 +105,7 @@ public partial class SimulationVerificationViewModel
         if (!TryGetVisualCommon(out var seed, out var start))
             return false;
 
-        if (!TryRequired(VisualPlcId, "PLC Id", out var plcId) ||
+        if (!TryRequired(VisualPlcId, "控制器编号", out var plcId) ||
             !TryLong(VisualPlcDisconnectAtMsText, "断线时间", 0, long.MaxValue, out var disconnectAt) ||
             !TryLong(VisualPlcOutageDurationMsText, "断线持续时间", 2, long.MaxValue, out var outageDuration))
             return false;
@@ -123,7 +123,7 @@ public partial class SimulationVerificationViewModel
         }
         catch (OverflowException)
         {
-            return VisualError("PLC 时间参数溢出 Int64。请缩短断线时间或持续时间。");
+            return VisualError("控制器时间参数超出整数范围。请缩短断线时间或持续时间。");
         }
 
         var actions = new List<object>
@@ -147,7 +147,7 @@ public partial class SimulationVerificationViewModel
             duration,
             actions,
             assertions,
-            $"PLC {plcId} 在 {disconnectAt}ms 断线，持续 {outageDuration}ms 后恢复；包含离线/恢复断言。");
+            $"控制器 {plcId} 在 {disconnectAt} 毫秒断线，持续 {outageDuration} 毫秒后自动恢复，并检查离线与恢复状态。");
         return true;
     }
 
@@ -156,18 +156,18 @@ public partial class SimulationVerificationViewModel
         if (!TryGetVisualCommon(out var seed, out var start))
             return false;
 
-        if (!TryRequired(VisualTrafficVehicleA, "车辆 A", out var vehicleA) ||
-            !TryRequired(VisualTrafficVehicleB, "车辆 B", out var vehicleB) ||
-            !TryRequired(VisualTrafficSegmentA, "区段 A", out var segmentA) ||
-            !TryRequired(VisualTrafficSegmentB, "区段 B", out var segmentB) ||
-            !TryLong(VisualTrafficLeaseMsText, "路权租约", 100, long.MaxValue, out var leaseMs) ||
+        if (!TryRequired(VisualTrafficVehicleA, "轨道车一", out var vehicleA) ||
+            !TryRequired(VisualTrafficVehicleB, "轨道车二", out var vehicleB) ||
+            !TryRequired(VisualTrafficSegmentA, "区段一", out var segmentA) ||
+            !TryRequired(VisualTrafficSegmentB, "区段二", out var segmentB) ||
+            !TryLong(VisualTrafficLeaseMsText, "路权占用时长", 100, long.MaxValue, out var leaseMs) ||
             !TryLong(VisualTrafficDetectAtMsText, "死锁检测时间", 30, long.MaxValue - 20, out var detectAt))
             return false;
 
         if (string.Equals(vehicleA, vehicleB, StringComparison.OrdinalIgnoreCase))
-            return VisualError("双 RGV 死锁场景要求车辆 A 与车辆 B 不同。");
+            return VisualError("双轨道车死锁场景要求轨道车一与轨道车二不同。");
         if (string.Equals(segmentA, segmentB, StringComparison.OrdinalIgnoreCase))
-            return VisualError("双 RGV 死锁场景要求区段 A 与区段 B 不同。");
+            return VisualError("双轨道车死锁场景要求区段一与区段二不同。");
 
         var ownAt = detectAt - 20;
         var waitAt = detectAt - 10;
@@ -213,7 +213,7 @@ public partial class SimulationVerificationViewModel
             duration,
             actions,
             assertions,
-            $"{vehicleA}/{vehicleB} 分别持有 {segmentA}/{segmentB} 后交叉申请，{detectAt}ms 执行 deadlock detection。 ");
+            $"轨道车 {vehicleA}/{vehicleB} 分别持有区段 {segmentA}/{segmentB} 后交叉申请，并在 {detectAt} 毫秒执行死锁检测。");
         return true;
     }
 
@@ -222,11 +222,11 @@ public partial class SimulationVerificationViewModel
         if (!TryGetVisualCommon(out var seed, out var start))
             return false;
 
-        if (!TryRequired(VisualExternalEndpointId, "外部 Endpoint", out var endpointId) ||
-            !TryRequired(VisualExternalOperation, "Operation", out var operation) ||
-            !TryLong(VisualExternalFaultDurationMsText, "超时故障窗口", 1, long.MaxValue - 1000, out var faultDuration) ||
-            !TryLong(VisualExternalTimeoutMsText, "请求 Timeout", 1, int.MaxValue, out var timeoutMs) ||
-            !TryLong(VisualExternalRetryDelayMsText, "Retry Delay", 1, long.MaxValue - 1000, out var retryDelayMs))
+        if (!TryRequired(VisualExternalEndpointId, "外部接口编号", out var endpointId) ||
+            !TryRequired(VisualExternalOperation, "调用操作标识", out var operation) ||
+            !TryLong(VisualExternalFaultDurationMsText, "超时异常窗口", 1, long.MaxValue - 1000, out var faultDuration) ||
+            !TryLong(VisualExternalTimeoutMsText, "请求超时", 1, int.MaxValue, out var timeoutMs) ||
+            !TryLong(VisualExternalRetryDelayMsText, "重试延迟", 1, long.MaxValue - 1000, out var retryDelayMs))
             return false;
 
         var assertAt = checked(Math.Max(faultDuration + 10, retryDelayMs + 10));
@@ -257,7 +257,7 @@ public partial class SimulationVerificationViewModel
             duration,
             actions,
             assertions,
-            $"{endpointId}/{operation} 注入 Timeout，故障窗口 {faultDuration}ms，Retry Delay {retryDelayMs}ms，验证重试恢复与 Circuit Closed。 ");
+            $"外部接口 {endpointId}/{operation} 模拟超时异常，异常窗口 {faultDuration} 毫秒，重试延迟 {retryDelayMs} 毫秒，并验证重试恢复与熔断器恢复关闭状态。");
         return true;
     }
 
@@ -266,11 +266,11 @@ public partial class SimulationVerificationViewModel
         if (!TryGetVisualCommon(out var seed, out var start))
             return false;
 
-        if (!TryRequired(VisualHealthAssetId, "Health Asset", out var assetId) ||
-            !TryLong(VisualHealthDurationHoursText, "退化时长(h)", 2, 720, out var durationHours) ||
-            !TryDouble(VisualHealthTargetScoreText, "目标 Health Score", 0, 95, out var targetScore) ||
-            !TryDouble(VisualHealthTargetRiskText, "目标 Fusion Risk", 0.05, 1, out var targetRisk) ||
-            !TryDouble(VisualHealthRulMedianHoursText, "目标 RUL Median(h)", 1, 100000, out var rulMedianHours))
+        if (!TryRequired(VisualHealthAssetId, "健康设备编号", out var assetId) ||
+            !TryLong(VisualHealthDurationHoursText, "退化时长（小时）", 2, 720, out var durationHours) ||
+            !TryDouble(VisualHealthTargetScoreText, "目标健康评分", 0, 95, out var targetScore) ||
+            !TryDouble(VisualHealthTargetRiskText, "目标融合风险", 0.05, 1, out var targetRisk) ||
+            !TryDouble(VisualHealthRulMedianHoursText, "目标剩余寿命中位数（小时）", 1, 100000, out var rulMedianHours))
             return false;
 
         var durationMs = checked(durationHours * 3_600_000L);
@@ -315,7 +315,7 @@ public partial class SimulationVerificationViewModel
             durationMs,
             actions,
             assertions,
-            $"{assetId} 在虚拟 {durationHours}h 内线性退化到 Health={targetScore:0.##}, Risk={targetRisk:0.###}, RUL Median={rulMedianHours:0.##}h。 ");
+            $"设备 {assetId} 在虚拟 {durationHours} 小时内线性退化到健康评分 {targetScore:0.##}、融合风险 {targetRisk:0.###}、剩余寿命中位数 {rulMedianHours:0.##} 小时。");
         return true;
     }
 
@@ -324,21 +324,21 @@ public partial class SimulationVerificationViewModel
         if (!TryGetVisualCommon(out var seed, out var start))
             return false;
 
-        if (!TryRequired(VisualRecoveryMissionId, "MissionId", out var missionId) ||
-            !TryRequired(VisualRecoveryPlcBlockKey, "PLC Block", out var plcBlockKey) ||
-            !TryRequired(VisualRecoveryVehicleId, "VehicleId", out var vehicleId) ||
-            !TryRequired(VisualRecoveryLoadId, "LoadId", out var loadId) ||
-            !TryRequired(VisualRecoverySourceNodeId, "Source Node", out var sourceNodeId) ||
-            !TryRequired(VisualRecoveryMiddleNodeId, "Middle Node", out var middleNodeId) ||
-            !TryRequired(VisualRecoveryDestinationNodeId, "Destination Node", out var destinationNodeId) ||
-            !TryRequired(VisualRecoveryExternalEndpointId, "External Endpoint", out var endpointId) ||
-            !TryRequired(VisualRecoveryHealthAssetId, "Health Asset", out var healthAssetId))
+        if (!TryRequired(VisualRecoveryMissionId, "任务编号", out var missionId) ||
+            !TryRequired(VisualRecoveryPlcBlockKey, "控制器数据块", out var plcBlockKey) ||
+            !TryRequired(VisualRecoveryVehicleId, "轨道车编号", out var vehicleId) ||
+            !TryRequired(VisualRecoveryLoadId, "载荷编号", out var loadId) ||
+            !TryRequired(VisualRecoverySourceNodeId, "起点", out var sourceNodeId) ||
+            !TryRequired(VisualRecoveryMiddleNodeId, "中间节点", out var middleNodeId) ||
+            !TryRequired(VisualRecoveryDestinationNodeId, "终点", out var destinationNodeId) ||
+            !TryRequired(VisualRecoveryExternalEndpointId, "外部接口编号", out var endpointId) ||
+            !TryRequired(VisualRecoveryHealthAssetId, "健康设备编号", out var healthAssetId))
             return false;
 
         if (string.Equals(sourceNodeId, middleNodeId, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(middleNodeId, destinationNodeId, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(sourceNodeId, destinationNodeId, StringComparison.OrdinalIgnoreCase))
-            return VisualError("全链恢复场景要求 Source / Middle / Destination 三个节点互不相同。");
+            return VisualError("全链恢复场景要求起点、中间节点和终点三个节点互不相同。");
 
         const long duration = 2300;
         var actions = new List<object>
@@ -384,7 +384,7 @@ public partial class SimulationVerificationViewModel
             duration,
             actions,
             assertions,
-            $"Mission {missionId}：{sourceNodeId} → {middleNodeId} → {destinationNodeId}，重复 ACK 验证状态一致性与 external exactly-once。 ");
+            $"任务 {missionId}：{sourceNodeId} → {middleNodeId} → {destinationNodeId}，通过重复确认验证状态一致性和外部接口仅执行一次。");
         return true;
     }
 
@@ -393,9 +393,9 @@ public partial class SimulationVerificationViewModel
         seed = 0;
         start = default;
         if (!long.TryParse(VisualScenarioSeedText, NumberStyles.Integer, CultureInfo.InvariantCulture, out seed) || seed == 0)
-            return VisualError("可视化场景 Seed 必须是非 0 Int64。");
+            return VisualError("可视化场景随机种子必须是非零整数。");
         if (!DateTimeOffset.TryParse(VisualScenarioStartUtcText, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out start))
-            return VisualError("StartTimeUtc 格式无效。建议使用 2026-08-11T00:00:00+00:00。 ");
+            return VisualError("虚拟开始时间格式无效。建议使用 2026-08-11T00:00:00+00:00。");
         return true;
     }
 
@@ -460,7 +460,7 @@ public partial class SimulationVerificationViewModel
         Assertions.Clear();
         CheckpointHash = "-";
         CheckpointStateText = summary;
-        VisualEditorStatusText = $"已生成 {scenarioId}：Actions={actions.Count}, Assertions={assertions.Count}。可直接“生成并注册”，或到场景治理页检查 JSON。";
+        VisualEditorStatusText = $"已生成场景 {scenarioId}：执行动作={actions.Count}，预期检查={assertions.Count}。可直接“生成并注册”，或到场景治理页检查结构化场景数据。";
         StatusText = VisualEditorStatusText;
     }
 
