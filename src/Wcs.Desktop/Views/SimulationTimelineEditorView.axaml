@@ -8,16 +8,11 @@
         <Border Grid.Row="0" Classes="wcs-boundary-strip">
             <StackPanel Spacing="4">
                 <TextBlock Classes="wcs-section-title" Text="多故障时间轴场景编辑器" />
-                <TextBlock Classes="wcs-page-subtitle"
-                           Text="把不同面板生成的控制器、轨道车、交通、外部接口、健康与恢复场景追加到同一虚拟时间轴，也可以直接新增执行动作和预期检查。已知故障填写持续时间后会自动补充恢复动作。"
-                           TextWrapping="Wrap" />
-                <TextBlock Classes="wcs-page-subtitle"
-                           Text="最终仍生成严格的受治理场景数据，并继续经过场景注册、内容校验和隔离运行；本机模板只保存在当前电脑，不写入生产数据库。"
-                           TextWrapping="Wrap" />
+                <TextBlock Classes="wcs-page-subtitle" Text="把不同面板生成的控制器、轨道车、交通、外部接口、健康与恢复场景追加到同一虚拟时间轴，也可以直接新增执行动作和预期检查。已知故障填写持续时间后会自动补充恢复动作。" TextWrapping="Wrap" />
+                <TextBlock Classes="wcs-page-subtitle" Text="最终仍生成严格的受治理场景数据，并继续经过场景注册、内容校验和隔离运行；本机模板只保存在当前电脑，不写入生产数据库。" TextWrapping="Wrap" />
                 <TextBlock Classes="wcs-toolbar-status" Text="{Binding TimelineStatusText}" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
-
         <atom:Card Grid.Row="1" Header="场景基本信息与导入" StyleVariant="Outlined">
             <StackPanel Spacing="10">
                 <Grid ColumnDefinitions="2*,*,*,*,Auto" ColumnSpacing="8">
@@ -38,24 +33,19 @@
                 </StackPanel>
             </StackPanel>
         </atom:Card>
-
         <Grid Grid.Row="2" ColumnDefinitions="3*,2*" ColumnSpacing="12">
             <atom:Card Header="时间轴" StyleVariant="Outlined">
                 <Grid RowDefinitions="*,Auto" RowSpacing="8">
-                    <atom:DataGrid ItemsSource="{Binding TimelineItems}"
-                                   SelectedItem="{Binding SelectedTimelineItem}"
-                                   AutoGenerateColumns="False"
-                                   IsReadOnly="True"
-                                   PaginationVisibility="None">
+                    <atom:DataGrid ItemsSource="{Binding TimelineItems}" SelectedItem="{Binding SelectedTimelineItem}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
                         <atom:DataGrid.Columns>
                             <atom:DataGridTextColumn Header="#" Binding="{Binding Order}" Width="55" />
-                            <atom:DataGridTextColumn Header="类型" Binding="{Binding ItemType}" Width="90" />
+                            <atom:DataGridTextColumn Header="类型" Binding="{Binding ItemTypeText}" Width="90" />
                             <atom:DataGridTextColumn Header="发生时间（毫秒）" Binding="{Binding AtMillisecondsText}" Width="120" />
                             <atom:DataGridTextColumn Header="持续时间" Binding="{Binding DurationMillisecondsText}" Width="95" />
                             <atom:DataGridTextColumn Header="记录编号" Binding="{Binding Id}" Width="160" />
-                            <atom:DataGridTextColumn Header="动作类型" Binding="{Binding Kind}" Width="190" />
+                            <atom:DataGridTextColumn Header="系统动作 / 检查内容" Binding="{Binding OperationText}" Width="210" />
                             <atom:DataGridTextColumn Header="目标对象" Binding="{Binding Target}" Width="160" />
-                            <atom:DataGridTextColumn Header="输入 / 预期数据" Binding="{Binding BodyJson}" Width="*" />
+                            <atom:DataGridTextColumn Header="输入 / 预期数据" Binding="{Binding BodySummary}" Width="*" />
                         </atom:DataGrid.Columns>
                     </atom:DataGrid>
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
@@ -65,7 +55,6 @@
                     </StackPanel>
                 </Grid>
             </atom:Card>
-
             <StackPanel Grid.Column="1" Spacing="12">
                 <atom:Card Header="编辑选中记录" StyleVariant="Outlined">
                     <StackPanel Spacing="8">
@@ -80,16 +69,10 @@
                         </Grid>
                         <StackPanel Spacing="4"><TextBlock Text="动作类型（高级字段）"/><atom:LineEdit Text="{Binding SelectedTimelineItem.Kind}" Watermark="plc.fault.apply / external.fault.apply / ..." /></StackPanel>
                         <StackPanel Spacing="4"><TextBlock Text="目标对象"/><atom:LineEdit Text="{Binding SelectedTimelineItem.Target}" /></StackPanel>
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="输入 / 预期数据（结构化数据）" />
-                            <atom:LineEdit Text="{Binding SelectedTimelineItem.BodyJson}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="110" />
-                        </StackPanel>
-                        <TextBlock Classes="wcs-page-subtitle"
-                                   Text="持续时间自动语义：控制器故障和外部接口故障会自动补清除动作；控制器断线和轨道车离线会自动补恢复动作。其它动作的持续时间只参与场景总时长计算。"
-                                   TextWrapping="Wrap" />
+                        <StackPanel Spacing="4"><TextBlock Text="输入 / 预期数据（结构化数据）" /><atom:LineEdit Text="{Binding SelectedTimelineItem.BodyJson}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="110" /></StackPanel>
+                        <TextBlock Classes="wcs-page-subtitle" Text="持续时间自动语义：控制器故障和外部接口故障会自动补清除动作；控制器断线和轨道车离线会自动补恢复动作。其它动作的持续时间只参与场景总时长计算。" TextWrapping="Wrap" />
                     </StackPanel>
                 </atom:Card>
-
                 <atom:Card Header="本机模板" StyleVariant="Outlined">
                     <StackPanel Spacing="8">
                         <StackPanel Spacing="4"><TextBlock Text="模板名称"/><atom:LineEdit Text="{Binding TimelineTemplateName}" Watermark="我的场景" /></StackPanel>
@@ -104,7 +87,6 @@
                 </atom:Card>
             </StackPanel>
         </Grid>
-
         <atom:Card Grid.Row="3" Header="生成与治理" StyleVariant="Outlined">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                 <StackPanel Spacing="4">
