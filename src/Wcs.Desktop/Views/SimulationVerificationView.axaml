@@ -10,7 +10,7 @@
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="14">
             <StackPanel Spacing="3">
                 <TextBlock Classes="wcs-page-eyebrow" Text="软件仿真 · 第十阶段" />
-                <TextBlock Classes="wcs-page-title" Text="统一仿真与验证中心" />
+                <TextBlock Classes="wcs-page-title" Text="S10 统一仿真与验证中心" />
                 <TextBlock Classes="wcs-page-subtitle"
                            Text="受治理场景接口 · 严格场景定义 · 场景清单与内容校验 · 隔离运行 · 状态数据、预期结果与证据一体化验收。" />
                 <TextBlock Classes="wcs-toolbar-status" Text="{Binding SimulationPageStatusDisplayText}" />
