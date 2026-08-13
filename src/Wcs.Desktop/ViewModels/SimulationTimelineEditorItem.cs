@@ -15,6 +15,27 @@ public partial class SimulationTimelineEditorItem : ObservableObject
 
     public bool IsAssertion => string.Equals(ItemType, "Assertion", StringComparison.OrdinalIgnoreCase);
     public string BodyLabel => IsAssertion ? "Expected" : "Payload";
+    public string ItemTypeText => IsAssertion ? "预期检查" : "执行动作";
+    public string OperationText => SimulationScenarioChineseFormatter.Operation(Kind, IsAssertion ? "预期结果" : "动作");
+    public string BodySummary => SimulationScenarioChineseFormatter.DataSummary(BodyJson);
+
+    partial void OnItemTypeChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsAssertion));
+        OnPropertyChanged(nameof(BodyLabel));
+        OnPropertyChanged(nameof(ItemTypeText));
+        OnPropertyChanged(nameof(OperationText));
+    }
+
+    partial void OnKindChanged(string value)
+    {
+        OnPropertyChanged(nameof(OperationText));
+    }
+
+    partial void OnBodyJsonChanged(string value)
+    {
+        OnPropertyChanged(nameof(BodySummary));
+    }
 
     public SimulationTimelineEditorItem Clone() => new()
     {
