@@ -33,5 +33,7 @@ public partial class SimulationStageInspectionView : UserControl
                 Content = new SimulationAcceptanceView()
             });
         }
+
+        Loaded += (_, _) => SimulationChineseUiLocalizer.Apply(this);
     }
 }
