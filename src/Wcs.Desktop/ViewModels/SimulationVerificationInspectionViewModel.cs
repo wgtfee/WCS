@@ -11,7 +11,7 @@ public partial class SimulationVerificationViewModel
 
     public ObservableCollection<SimulationInspectionItemDto> InspectionItems { get; } = [];
 
-    [ObservableProperty] private string _inspectionTitle = "请选择 S2～S8 阶段和一个非终态 Run";
+    [ObservableProperty] private string _inspectionTitle = "请选择 S2～S8 阶段和一个未结束的运行记录";
     [ObservableProperty] private string _inspectionStatusText = "尚未读取分层状态";
 
     public SimulationVerificationViewModel(
@@ -52,7 +52,7 @@ public partial class SimulationVerificationViewModel
         var stageId = SelectedStage.Id.ToUpperInvariant();
         if (stageId is not ("S2" or "S3" or "S4" or "S5" or "S6" or "S7" or "S8"))
         {
-            StatusText = "分层检查仅支持 S2～S8。S0/S1 使用场景治理与 Run 控制；S9 真实 HIL 继续保持独立只读边界。";
+            StatusText = "分层检查仅支持 S2～S8。S0/S1 使用场景治理与运行控制；S9 真实硬件在环继续保持独立只读边界。";
             return;
         }
 
@@ -61,12 +61,12 @@ public partial class SimulationVerificationViewModel
         {
             if (SelectedRun is null)
             {
-                StatusText = $"{stageId} 检查需要先选择一个 Run。";
+                StatusText = $"{stageId} 检查需要先选择一个运行记录。";
                 return;
             }
             if (SelectedRun.IsTerminal)
             {
-                StatusText = $"{stageId} 的现有检查 API 基于 S1 Checkpoint，只允许非终态 Run。请在 Run 完成前读取；终态使用 Evidence Hash/Final State Hash。";
+                StatusText = $"{stageId} 的现有检查接口基于 S1 检查点，只允许读取未结束的运行记录。请在运行结束前读取；终态请使用验收证据摘要和最终状态摘要。";
                 return;
             }
             runId = SelectedRun.RunId;
@@ -74,7 +74,7 @@ public partial class SimulationVerificationViewModel
 
         IsBusy = true;
         InspectionTitle = $"{stageId} {SelectedStage.Name} · {viewText}";
-        InspectionStatusText = "正在读取只读 Simulation State...";
+        InspectionStatusText = "正在读取只读仿真状态...";
         try
         {
             var items = await _inspectionApi
@@ -85,7 +85,7 @@ public partial class SimulationVerificationViewModel
             foreach (var item in items)
                 InspectionItems.Add(item);
 
-            InspectionStatusText = $"已读取 {InspectionItems.Count} 个字段；数据来自现有 {SelectedStage.ApiPrefix} GET inspection。";
+            InspectionStatusText = $"已读取 {InspectionItems.Count} 个字段；数据来自现有 {SelectedStage.ApiPrefix} 只读检查接口。";
             StatusText = $"{InspectionTitle} 已刷新。";
         }
         catch (Exception exception)
