@@ -19,7 +19,7 @@ public partial class SimulationStageInspectionView : UserControl
             });
             tabs.Items.Add(new AtomTabItem
             {
-                Header = "Traffic / External",
+                Header = "交通管制与外部接口",
                 Content = new SimulationTrafficExternalOperationsView()
             });
             tabs.Items.Add(new AtomTabItem
@@ -33,5 +33,7 @@ public partial class SimulationStageInspectionView : UserControl
                 Content = new SimulationAcceptanceView()
             });
         }
+
+        Loaded += (_, _) => SimulationChineseUiLocalizer.Apply(this);
     }
 }

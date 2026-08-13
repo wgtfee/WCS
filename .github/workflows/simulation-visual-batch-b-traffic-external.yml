@@ -116,7 +116,7 @@ jobs:
               assert marker in view, f'AtomUI marker missing: {marker}'
           assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])', view), \
               'Batch B view regressed to native product controls'
-          assert 'Traffic / External' in host and 'SimulationTrafficExternalOperationsView' in host
+          assert '交通管制与外部接口' in host and 'SimulationTrafficExternalOperationsView' in host
 
           forbidden = (
               'CommandBus', 'TaskScheduler', 'TaskOrchestrator', 'DeviceManager',
