@@ -4,184 +4,232 @@
              xmlns:atom="https://atomui.net"
              x:Class="Wcs.Desktop.Views.SimulationAcceptanceCenterView"
              x:DataType="vm:SimulationVerificationViewModel">
-    <Grid RowDefinitions="Auto,*" RowSpacing="12">
-        <atom:Card Header="仿真验收中心 · 全功能场景库" StyleVariant="Outlined">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
-                <StackPanel Spacing="5">
-                    <TextBlock Text="面向测试人员的主入口：选模板 → 改参数 → 生成严格 Scenario DSL → S0 Manifest/SHA-256 → S1 隔离 Run → S10 PASS/FAIL。" TextWrapping="Wrap" />
-                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding AcceptanceLibraryStatusText}" TextWrapping="Wrap" />
-                    <TextBlock FontSize="11" Opacity="0.72" TextWrapping="Wrap">
-                        <Run Text="执行环境：" />
-                        <Run Text="{Binding Environment}" FontWeight="SemiBold" />
-                        <Run Text=" · " />
-                        <Run Text="{Binding SimulationText}" />
-                    </TextBlock>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <atom:Button Content="⚙ 生成场景" Command="{Binding GenerateAcceptanceLibraryScenarioCommand}" />
-                    <atom:Button Content="▶ 生成并一键验收"
-                                 Command="{Binding GenerateAndRunAcceptanceLibraryScenarioCommand}"
-                                 IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
-                                 ToolTip.Tip="Scenario 始终可本地生成；执行阶段仍由现有 Simulation 治理边界校验，Production / 未授权环境 fail-closed。" />
-                    <atom:Button Content="🧩 进入高级编辑" Click="OnOpenAdvancedEditorClick" />
-                    <atom:Button Content="📋 查看完整执行详情" Click="OnOpenAcceptanceDetailsClick" />
-                </StackPanel>
-            </Grid>
-        </atom:Card>
-
-        <Grid Grid.Row="1" ColumnDefinitions="330,*" ColumnSpacing="14">
-            <atom:Card Header="验收场景模板" StyleVariant="Outlined">
-                <Grid RowDefinitions="*,Auto" RowSpacing="10">
-                    <atom:ListView ItemsSource="{Binding AcceptanceTemplates}"
-                                   SelectedItem="{Binding SelectedAcceptanceTemplate}">
-                        <atom:ListView.ItemTemplate>
-                            <DataTemplate x:DataType="vm:SimulationAcceptanceTemplateItem">
-                                <StackPanel Margin="8" Spacing="3">
-                                    <TextBlock Text="{Binding Category}" FontSize="11" Opacity="0.65" />
-                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </atom:ListView.ItemTemplate>
-                    </atom:ListView>
-                    <TextBlock Grid.Row="1"
-                               Text="场景库不直接控制真实设备；Production / 未授权环境继续 fail-closed。"
-                               TextWrapping="Wrap"
-                               FontSize="12"
-                               Opacity="0.7" />
+    <ScrollViewer>
+        <StackPanel Spacing="14" Margin="0,0,4,12">
+            <atom:Card Header="仿真测试向导" StyleVariant="Outlined">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                    <StackPanel Spacing="6">
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="选测试用例 → 填测试参数 → 生成测试数据 → 一键开始测试 → 查看通过或失败" TextWrapping="Wrap" />
+                        <TextBlock Text="普通测试只需要完成这五步。复杂时间轴、原始结构数据、哈希和治理信息统一放到高级页面。" TextWrapping="Wrap" Opacity="0.75" />
+                        <TextBlock Classes="wcs-toolbar-status" Text="{Binding BeginnerAcceptanceResultDescription}" TextWrapping="Wrap" />
+                        <TextBlock FontSize="11" Opacity="0.72" TextWrapping="Wrap">
+                            <Run Text="当前执行能力：" />
+                            <Run Text="{Binding SimulationText}" FontWeight="SemiBold" />
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <atom:Button Content="生成测试数据" Command="{Binding GenerateAcceptanceLibraryScenarioCommand}" />
+                        <atom:Button Content="一键开始测试"
+                                     Command="{Binding GenerateAndRunAcceptanceLibraryScenarioCommand}"
+                                     IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
+                                     ToolTip.Tip="先生成测试数据，再由现有安全边界决定是否允许执行；未授权环境仍会拒绝执行。" />
+                        <atom:Button Content="高级场景编辑" Click="OnOpenAdvancedEditorClick" />
+                        <atom:Button Content="查看执行详情" Click="OnOpenAcceptanceDetailsClick" />
+                    </StackPanel>
                 </Grid>
             </atom:Card>
 
-            <ScrollViewer Grid.Column="1">
-                <StackPanel Spacing="12" Margin="0,0,4,10">
-                    <atom:Card Header="当前模板" StyleVariant="Outlined">
-                        <StackPanel Spacing="5">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="{Binding SelectedAcceptanceTemplate.Category}" FontWeight="SemiBold" />
-                                <TextBlock Text="·" Opacity="0.5" />
-                                <TextBlock Text="{Binding SelectedAcceptanceTemplate.Name}" FontWeight="SemiBold" />
-                            </StackPanel>
-                            <TextBlock Text="{Binding SelectedAcceptanceTemplate.Description}" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding SelectedAcceptanceTemplate.ParameterHint}" TextWrapping="Wrap" Opacity="0.75" />
+            <Grid ColumnDefinitions="340,*" ColumnSpacing="14">
+                <atom:Card Header="第一步 · 选择测试用例" StyleVariant="Outlined">
+                    <Grid RowDefinitions="*,Auto" RowSpacing="10">
+                        <atom:ListView ItemsSource="{Binding BeginnerAcceptanceTemplates}"
+                                       SelectedItem="{Binding SelectedBeginnerAcceptanceTemplate}">
+                            <atom:ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SimulationBeginnerAcceptanceTemplateItem">
+                                    <StackPanel Margin="8" Spacing="4">
+                                        <TextBlock Text="{Binding Category}" FontSize="11" Opacity="0.65" />
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </atom:ListView.ItemTemplate>
+                        </atom:ListView>
+                        <Border Grid.Row="1" Classes="wcs-boundary-strip">
+                            <TextBlock Text="这里只操作软件仿真状态，不直接控制真实设备。" TextWrapping="Wrap" FontSize="12" />
+                        </Border>
+                    </Grid>
+                </atom:Card>
+
+                <StackPanel Grid.Column="1" Spacing="12">
+                    <atom:Card Header="第二步 · 确认当前测试" StyleVariant="Outlined">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{Binding SelectedBeginnerAcceptanceTemplate.Name}" FontSize="17" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding SelectedBeginnerAcceptanceTemplate.Description}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding SelectedBeginnerAcceptanceTemplate.ParameterHint}" TextWrapping="Wrap" Opacity="0.72" />
                         </StackPanel>
                     </atom:Card>
 
-                    <atom:Card Header="公共验收参数" StyleVariant="Outlined">
-                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="Scenario Version" />
-                                <atom:LineEdit Text="{Binding AcceptanceLibraryScenarioVersion}" Watermark="1.0.0" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Spacing="4">
-                                <TextBlock Text="Seed" />
-                                <atom:LineEdit Text="{Binding AcceptanceLibrarySeedText}" Watermark="20260811" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" Spacing="4">
-                                <TextBlock Text="StartTimeUtc" />
-                                <atom:LineEdit Text="{Binding AcceptanceLibraryStartUtcText}" Watermark="2026-08-11T00:00:00+00:00" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="3" Spacing="4">
-                                <TextBlock Text="Speed Factor" />
-                                <atom:LineEdit Text="{Binding AcceptanceLibrarySpeedFactorText}" Watermark="1" />
-                            </StackPanel>
-                        </Grid>
-                    </atom:Card>
-
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <atom:Card Header="第三步 · 填写测试参数" StyleVariant="Outlined">
                         <StackPanel Spacing="12">
-                            <atom:Card Header="PLC / Fault" StyleVariant="Outlined">
-                                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                            <atom:Card Header="控制器参数" StyleVariant="Outlined" IsVisible="{Binding BeginnerShowPlcParameters}">
+                                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
                                     <StackPanel Spacing="4">
-                                        <TextBlock Text="PLC" />
-                                        <atom:LineEdit Text="{Binding AcceptanceLibraryPlcId}" Watermark="PLC1" />
+                                        <TextBlock Text="控制器编号" />
+                                        <atom:LineEdit Text="{Binding AcceptanceLibraryPlcId}" Watermark="例如：PLC1" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Spacing="4">
-                                        <TextBlock Text="PLC Fault Kind" />
-                                        <ComboBox ItemsSource="{Binding AcceptanceLibraryPlcFaultKinds}"
-                                                  SelectedItem="{Binding AcceptanceLibraryPlcFaultKind}" />
+                                        <TextBlock Text="故障类型" />
+                                        <ComboBox ItemsSource="{Binding BeginnerPlcFaultOptions}"
+                                                  SelectedItem="{Binding SelectedBeginnerPlcFaultOption}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:SimulationBeginnerOptionItem">
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" Spacing="4">
-                                        <TextBlock Text="Fault Duration(ms)" />
+                                        <TextBlock Text="故障持续时间（毫秒）" />
                                         <atom:LineEdit Text="{Binding AcceptanceLibraryFaultDurationMsText}" Watermark="50" />
                                     </StackPanel>
                                 </Grid>
                             </atom:Card>
 
-                            <atom:Card Header="RGV / Route" StyleVariant="Outlined">
-                                <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
-                                    <StackPanel Spacing="4"><TextBlock Text="Vehicle A"/><atom:LineEdit Text="{Binding AcceptanceLibraryVehicleId}" /></StackPanel>
-                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Vehicle B"/><atom:LineEdit Text="{Binding AcceptanceLibraryVehicleBId}" /></StackPanel>
-                                    <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="Load"/><atom:LineEdit Text="{Binding AcceptanceLibraryLoadId}" /></StackPanel>
+                            <atom:Card Header="轨道车与路线参数" StyleVariant="Outlined" IsVisible="{Binding BeginnerShowRgvParameters}">
+                                <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="9">
+                                    <StackPanel Spacing="4"><TextBlock Text="轨道车一"/><atom:LineEdit Text="{Binding AcceptanceLibraryVehicleId}" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="轨道车二"/><atom:LineEdit Text="{Binding AcceptanceLibraryVehicleBId}" /></StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="载荷编号"/><atom:LineEdit Text="{Binding AcceptanceLibraryLoadId}" /></StackPanel>
 
-                                    <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="Source"/><atom:LineEdit Text="{Binding AcceptanceLibrarySourceNodeId}" /></StackPanel>
-                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="Middle"/><atom:LineEdit Text="{Binding AcceptanceLibraryMiddleNodeId}" /></StackPanel>
-                                    <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="Destination"/><atom:LineEdit Text="{Binding AcceptanceLibraryDestinationNodeId}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="起点"/><atom:LineEdit Text="{Binding AcceptanceLibrarySourceNodeId}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="中间节点"/><atom:LineEdit Text="{Binding AcceptanceLibraryMiddleNodeId}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="终点"/><atom:LineEdit Text="{Binding AcceptanceLibraryDestinationNodeId}" /></StackPanel>
 
-                                    <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="Segment A"/><atom:LineEdit Text="{Binding AcceptanceLibrarySegmentA}" /></StackPanel>
-                                    <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="Segment B"/><atom:LineEdit Text="{Binding AcceptanceLibrarySegmentB}" /></StackPanel>
-                                    <StackPanel Grid.Row="2" Grid.Column="2" Spacing="4"><TextBlock Text="Length(mm)"/><atom:LineEdit Text="{Binding AcceptanceLibrarySegmentLengthMmText}" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="区段一"/><atom:LineEdit Text="{Binding AcceptanceLibrarySegmentA}" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="区段二"/><atom:LineEdit Text="{Binding AcceptanceLibrarySegmentB}" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="2" Spacing="4"><TextBlock Text="区段长度（毫米）"/><atom:LineEdit Text="{Binding AcceptanceLibrarySegmentLengthMmText}" /></StackPanel>
 
-                                    <StackPanel Grid.Row="3" Spacing="4"><TextBlock Text="Speed(mm/s)"/><atom:LineEdit Text="{Binding AcceptanceLibraryVehicleSpeedMmPerSecondText}" /></StackPanel>
-                                    <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4"><TextBlock Text="Battery %"/><atom:LineEdit Text="{Binding AcceptanceLibraryBatteryPercentText}" /></StackPanel>
-                                    <StackPanel Grid.Row="3" Grid.Column="2" Spacing="4"><TextBlock Text="Lease(ms)"/><atom:LineEdit Text="{Binding AcceptanceLibraryLeaseMsText}" /></StackPanel>
-                                </Grid>
-                            </atom:Card>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="1" Spacing="12">
-                            <atom:Card Header="Traffic" StyleVariant="Outlined">
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                                    <StackPanel Spacing="4"><TextBlock Text="Zone A"/><atom:LineEdit Text="{Binding AcceptanceLibraryZoneA}" /></StackPanel>
-                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Zone B"/><atom:LineEdit Text="{Binding AcceptanceLibraryZoneB}" /></StackPanel>
+                                    <StackPanel Grid.Row="3" Spacing="4"><TextBlock Text="运行速度（毫米/秒）"/><atom:LineEdit Text="{Binding AcceptanceLibraryVehicleSpeedMmPerSecondText}" /></StackPanel>
+                                    <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4"><TextBlock Text="电量（百分比）"/><atom:LineEdit Text="{Binding AcceptanceLibraryBatteryPercentText}" /></StackPanel>
+                                    <StackPanel Grid.Row="3" Grid.Column="2" Spacing="4"><TextBlock Text="路权占用时长（毫秒）"/><atom:LineEdit Text="{Binding AcceptanceLibraryLeaseMsText}" /></StackPanel>
                                 </Grid>
                             </atom:Card>
 
-                            <atom:Card Header="External" StyleVariant="Outlined">
-                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
-                                    <StackPanel Spacing="4"><TextBlock Text="Endpoint"/><atom:LineEdit Text="{Binding AcceptanceLibraryExternalEndpointId}" /></StackPanel>
+                            <atom:Card Header="交通管制参数" StyleVariant="Outlined" IsVisible="{Binding BeginnerShowTrafficParameters}">
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                    <StackPanel Spacing="4"><TextBlock Text="交通区域一"/><atom:LineEdit Text="{Binding AcceptanceLibraryZoneA}" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="交通区域二"/><atom:LineEdit Text="{Binding AcceptanceLibraryZoneB}" /></StackPanel>
+                                </Grid>
+                            </atom:Card>
+
+                            <atom:Card Header="外部接口参数" StyleVariant="Outlined" IsVisible="{Binding BeginnerShowExternalParameters}">
+                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="9">
+                                    <StackPanel Spacing="4"><TextBlock Text="接口编号"/><atom:LineEdit Text="{Binding AcceptanceLibraryExternalEndpointId}" /></StackPanel>
                                     <StackPanel Grid.Column="1" Spacing="4">
-                                        <TextBlock Text="System Kind" />
-                                        <ComboBox ItemsSource="{Binding AcceptanceLibraryExternalSystemKinds}"
-                                                  SelectedItem="{Binding AcceptanceLibraryExternalSystemKind}" />
+                                        <TextBlock Text="外部系统类型" />
+                                        <ComboBox ItemsSource="{Binding BeginnerExternalSystemOptions}"
+                                                  SelectedItem="{Binding SelectedBeginnerExternalSystemOption}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:SimulationBeginnerOptionItem">
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                     </StackPanel>
                                     <StackPanel Grid.Row="1" Spacing="4">
-                                        <TextBlock Text="Fault Kind" />
-                                        <ComboBox ItemsSource="{Binding AcceptanceLibraryExternalFaultKinds}"
-                                                  SelectedItem="{Binding AcceptanceLibraryExternalFaultKind}" />
+                                        <TextBlock Text="故障类型" />
+                                        <ComboBox ItemsSource="{Binding BeginnerExternalFaultOptions}"
+                                                  SelectedItem="{Binding SelectedBeginnerExternalFaultOption}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:SimulationBeginnerOptionItem">
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                     </StackPanel>
-                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="Operation"/><atom:LineEdit Text="{Binding AcceptanceLibraryExternalOperation}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="调用操作标识"/><atom:LineEdit Text="{Binding AcceptanceLibraryExternalOperation}" /></StackPanel>
                                 </Grid>
                             </atom:Card>
 
-                            <atom:Card Header="Health / RUL" StyleVariant="Outlined">
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                                    <StackPanel Spacing="4"><TextBlock Text="Asset"/><atom:LineEdit Text="{Binding AcceptanceLibraryHealthAssetId}" /></StackPanel>
-                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Virtual Duration(h)"/><atom:LineEdit Text="{Binding AcceptanceLibraryHealthDurationHoursText}" /></StackPanel>
+                            <atom:Card Header="设备健康参数" StyleVariant="Outlined" IsVisible="{Binding BeginnerShowHealthParameters}">
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                    <StackPanel Spacing="4"><TextBlock Text="设备编号"/><atom:LineEdit Text="{Binding AcceptanceLibraryHealthAssetId}" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="虚拟运行时长（小时）"/><atom:LineEdit Text="{Binding AcceptanceLibraryHealthDurationHoursText}" /></StackPanel>
                                 </Grid>
                             </atom:Card>
 
-                            <atom:Card Header="治理输出" StyleVariant="Outlined">
-                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="5">
-                                    <TextBlock Text="Scenario" FontWeight="SemiBold"/><TextBlock Grid.Column="1" Text="{Binding ScenarioId}" TextWrapping="Wrap"/>
-                                    <TextBlock Grid.Row="1" Text="Version" FontWeight="SemiBold"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioVersion}"/>
-                                    <TextBlock Grid.Row="2" Text="File" FontWeight="SemiBold"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ScenarioFile}" TextWrapping="Wrap"/>
-                                    <TextBlock Grid.Row="3" Text="Summary" FontWeight="SemiBold"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CheckpointStateText}" TextWrapping="Wrap"/>
+                            <atom:Card Header="高级参数 · 一般无需修改" StyleVariant="Outlined">
+                                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="场景版本" />
+                                        <atom:LineEdit Text="{Binding AcceptanceLibraryScenarioVersion}" Watermark="1.0.0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <TextBlock Text="随机种子" />
+                                        <atom:LineEdit Text="{Binding AcceptanceLibrarySeedText}" Watermark="20260811" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4">
+                                        <TextBlock Text="虚拟开始时间" />
+                                        <atom:LineEdit Text="{Binding AcceptanceLibraryStartUtcText}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="4">
+                                        <TextBlock Text="执行速度倍率" />
+                                        <atom:LineEdit Text="{Binding AcceptanceLibrarySpeedFactorText}" Watermark="1" />
+                                    </StackPanel>
                                 </Grid>
                             </atom:Card>
-                        </StackPanel>
-                    </Grid>
-
-                    <atom:Card Header="使用说明" StyleVariant="Outlined">
-                        <StackPanel Spacing="5">
-                            <TextBlock Text="测试人员：在场景库选择模板并修改参数，直接点击“生成并一键验收”。" TextWrapping="Wrap" />
-                            <TextBlock Text="当前环境不允许执行时，按钮仍可生成 Scenario；受治理执行会明确拒绝并保持 Production / 未授权环境 fail-closed。" TextWrapping="Wrap" Opacity="0.75" />
-                            <TextBlock Text="高级测试人员：点击“进入高级编辑”，跳到现有多故障时间轴继续追加、排序和编辑。" TextWrapping="Wrap" Opacity="0.75" />
-                            <TextBlock Text="查看 Hash、失败断言、Checkpoint 和历史 Run：点击“查看完整执行详情”，跳到现有一键验收详情页。" TextWrapping="Wrap" Opacity="0.75" />
-                            <TextBlock Text="调试人员：使用设备操作面板与 Traffic / External 专项页面做底层行为诊断。" TextWrapping="Wrap" Opacity="0.75" />
                         </StackPanel>
                     </atom:Card>
                 </StackPanel>
-            </ScrollViewer>
-        </Grid>
-    </Grid>
+            </Grid>
+
+            <atom:Card Header="第四步 · 查看系统实际生成的测试数据" StyleVariant="Outlined">
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                        <Border Classes="wcs-kpi">
+                            <StackPanel Spacing="2"><TextBlock Text="场景编号" FontSize="11" Opacity="0.65"/><TextBlock Text="{Binding ScenarioId}" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Classes="wcs-kpi">
+                            <StackPanel Spacing="2"><TextBlock Text="执行动作" FontSize="11" Opacity="0.65"/><TextBlock Text="{Binding ScenarioActionCount}" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Classes="wcs-kpi">
+                            <StackPanel Spacing="2"><TextBlock Text="预期结果" FontSize="11" Opacity="0.65"/><TextBlock Text="{Binding ScenarioAssertionCount}" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+                        </Border>
+                        <Border Grid.Column="3" Classes="wcs-kpi">
+                            <StackPanel Spacing="2"><TextBlock Text="测试总时长（毫秒）" FontSize="11" Opacity="0.65"/><TextBlock Text="{Binding ScenarioDurationMilliseconds}" FontSize="20" FontWeight="SemiBold"/></StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding ScenarioDataStatusText}" TextWrapping="Wrap" />
+                    <atom:DataGrid ItemsSource="{Binding ScenarioDataRows}"
+                                   AutoGenerateColumns="False"
+                                   IsReadOnly="True"
+                                   PaginationVisibility="None"
+                                   MaxHeight="380">
+                        <atom:DataGrid.Columns>
+                            <atom:DataGridTextColumn Header="类型" Binding="{Binding Phase}" Width="90" />
+                            <atom:DataGridTextColumn Header="发生时间" Binding="{Binding TimeText}" Width="110" />
+                            <atom:DataGridTextColumn Header="系统动作 / 检查内容" Binding="{Binding OperationText}" Width="190" />
+                            <atom:DataGridTextColumn Header="目标对象" Binding="{Binding Target}" Width="170" />
+                            <atom:DataGridTextColumn Header="实际输入 / 预期数据" Binding="{Binding DataSummary}" Width="*" />
+                        </atom:DataGrid.Columns>
+                    </atom:DataGrid>
+                    <TextBlock Text="如果表格为空，请先点击“生成测试数据”。这里显示的内容来自当前真实场景数据，不是演示数据。" TextWrapping="Wrap" FontSize="12" Opacity="0.7" />
+                </StackPanel>
+            </atom:Card>
+
+            <atom:Card Header="第五步 · 查看测试结果" StyleVariant="Outlined">
+                <Grid ColumnDefinitions="220,*,Auto" ColumnSpacing="16">
+                    <Border Classes="wcs-status-success" Padding="16">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="测试结果" FontSize="11" Opacity="0.7" />
+                            <TextBlock Text="{Binding BeginnerAcceptanceResultText}" FontSize="28" FontWeight="Bold" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding BeginnerAcceptanceResultDescription}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding AcceptanceStatusText}" TextWrapping="Wrap" Opacity="0.72" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <atom:Button Content="重新测试" Command="{Binding GenerateAndRunAcceptanceLibraryScenarioCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        <atom:Button Content="查看执行详情" Click="OnOpenAcceptanceDetailsClick" />
+                    </StackPanel>
+                </Grid>
+            </atom:Card>
+
+            <Border Classes="wcs-boundary-strip">
+                <TextBlock Text="安全说明：生成测试数据只发生在本地界面；真正执行仍由现有仿真安全边界校验。生产环境和未授权环境不会因为本页面改版而获得执行权限。" TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>
