@@ -212,7 +212,24 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     private static Type? ResolveViewModelType(string route)
     {
         var pascalRoute = string.Concat(route.Split('_', '-', '.').Select(s => s.Length > 0 ? char.ToUpper(s[0]) + s[1..] : string.Empty));
-        return Type.GetType($"Wcs.Desktop.ViewModels.{pascalRoute}ViewModel");
+        var typeName = $"Wcs.Desktop.ViewModels.{pascalRoute}ViewModel";
+        // First try Type.GetType (works when assembly-qualified or in calling assembly)
+        var type = Type.GetType(typeName);
+        if (type != null)
+            return type;
+
+        // Fallback: search loaded assemblies for the type
+        type = AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(a =>
+            {
+                try { return a.GetTypes(); } catch { return Array.Empty<Type>(); }
+            })
+            .FirstOrDefault(t => string.Equals(t.FullName, typeName, StringComparison.Ordinal));
+
+        if (type == null)
+            Console.WriteLine($"[MainWindowViewModel] ResolveViewModelType: type not found for route '{route}' (expected '{typeName}')");
+
+        return type;
     }
 
     public async Task OpenPageFromMenu(MenuItemDto? menu)
