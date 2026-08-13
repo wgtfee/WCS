@@ -180,18 +180,25 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         return tree;
     }
 
+    private void SelectTab(ClosableTabItem tab)
+    {
+        foreach (var item in Tabs)
+            item.IsSelected = ReferenceEquals(item, tab);
+        SelectedTabItem = tab;
+    }
+
     public void OpenTab(string title, object content)
     {
         var existing = Tabs.FirstOrDefault(x => x.Header == title);
         if (existing != null)
         {
-            SelectedTabItem = existing;
+            SelectTab(existing);
             return;
         }
 
         var tab = new ClosableTabItem { Header = title, Content = content, CanClose = true };
         Tabs.Add(tab);
-        SelectedTabItem = tab;
+        SelectTab(tab);
     }
 
     public void CloseTab(ClosableTabItem? tab)
@@ -201,11 +208,11 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         var idx = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
         if (Tabs.Count > 0)
-            SelectedTabItem = idx > 0 ? Tabs[idx - 1] : Tabs[0];
+            SelectTab(idx > 0 ? Tabs[idx - 1] : Tabs[0]);
         else
         {
             Tabs.Add(_homeTab);
-            SelectedTabItem = _homeTab;
+            SelectTab(_homeTab);
         }
     }
 
@@ -213,12 +220,10 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     {
         var pascalRoute = string.Concat(route.Split('_', '-', '.').Select(s => s.Length > 0 ? char.ToUpper(s[0]) + s[1..] : string.Empty));
         var typeName = $"Wcs.Desktop.ViewModels.{pascalRoute}ViewModel";
-        // First try Type.GetType (works when assembly-qualified or in calling assembly)
         var type = Type.GetType(typeName);
         if (type != null)
             return type;
 
-        // Fallback: search loaded assemblies for the type
         type = AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(a =>
             {
@@ -236,12 +241,37 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
     {
         if (menu == null || string.IsNullOrWhiteSpace(menu.Url))
             return;
+
         var type = ResolveViewModelType(menu.Url.TrimStart('/'));
         if (type == null)
             return;
-        var content = _serviceProvider.GetRequiredService(type);
-        if (content is IAsyncInitializable init)
-            await init.InitializeAsync();
+
+        object content;
+        try
+        {
+            content = _serviceProvider.GetRequiredService(type);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MainWindowViewModel] Failed to resolve page '{menu.Url}': {ex}");
+            return;
+        }
+
+        // Navigation must be immediate and must not depend on API/data initialization succeeding.
         OpenTab(menu.Name, content);
+
+        if (content is IAsyncInitializable init)
+        {
+            try
+            {
+                await init.InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                // Keep the tab visible even when page data initialization fails. This makes
+                // navigation deterministic and lets the page surface its empty/error state.
+                Console.WriteLine($"[MainWindowViewModel] Page initialization failed for '{menu.Url}': {ex}");
+            }
+        }
     }
 }
