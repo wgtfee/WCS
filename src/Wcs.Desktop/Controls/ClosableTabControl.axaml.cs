@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 
@@ -45,7 +46,8 @@ public partial class ClosableTabControl : UserControl
             AvaloniaProperty.Register<
                 ClosableTabControl,
                 ClosableTabItem?>(
-                nameof(SelectedTab));
+                nameof(SelectedTab),
+                defaultBindingMode: BindingMode.TwoWay);
 
     private void SelectTab(ClosableTabItem? tab)
     {
@@ -133,8 +135,6 @@ public partial class ClosableTabControl : UserControl
         if (Tabs == null || Tabs.Count == 0) return;
         SelectTab(Tabs[0]);
     }
-
-    // ── 事件处理 ──
 
     private static ClosableTabItem? GetTabFromSender(object? sender)
         => sender is Control c && c.DataContext is ClosableTabItem tab ? tab : null;
