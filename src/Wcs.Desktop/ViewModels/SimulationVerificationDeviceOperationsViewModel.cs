@@ -12,7 +12,7 @@ public partial class SimulationVerificationViewModel
         "Stuck", "BitFlip", "Jitter", "OutOfRange"
     ];
 
-    [ObservableProperty] private string _devicePanelStatusText = "S2/S3 设备操作只生成受治理 Scenario DSL；不会直接写生产 PLC 或真实 RGV。";
+    [ObservableProperty] private string _devicePanelStatusText = "S2/S3 设备操作只生成受治理仿真场景；不会直接写入生产控制器或真实轨道车。";
 
     [ObservableProperty] private string _devicePlcBlockKey = "PLC1.DB100";
     [ObservableProperty] private string _devicePlcBlockSizeText = "16";
@@ -44,7 +44,7 @@ public partial class SimulationVerificationViewModel
     [ObservableProperty] private string _deviceRgvLoadId = "LOAD1";
     [ObservableProperty] private string _deviceRgvOfflineDurationMsText = "500";
 
-    public string PlcFaultKindsText => string.Join(" / ", SupportedPlcFaultKinds);
+    public string PlcFaultKindsText => string.Join(" / ", SupportedPlcFaultKinds.Select(TranslatePlcFaultKind));
 
     [RelayCommand]
     private void GenerateDevicePlcScenario() => TryLoadDevicePlcScenario();
@@ -70,34 +70,34 @@ public partial class SimulationVerificationViewModel
     {
         if (!TryGetVisualCommon(out var seed, out var start))
             return false;
-        if (!TryRequired(DevicePlcBlockKey, "PLC Block Key", out var blockKey) ||
-            !TryRequired(DevicePlcFaultId, "Fault Id", out var faultId) ||
-            !TryRequired(DevicePlcFaultKind, "Fault Kind", out var faultKind))
+        if (!TryRequired(DevicePlcBlockKey, "控制器数据块标识", out var blockKey) ||
+            !TryRequired(DevicePlcFaultId, "异常编号", out var faultId) ||
+            !TryRequired(DevicePlcFaultKind, "异常类型", out var faultKind))
             return false;
 
         var dotDb = blockKey.IndexOf(".DB", StringComparison.OrdinalIgnoreCase);
         if (dotDb <= 0)
-            return DeviceError("PLC Block Key 必须使用 PLC_NAME.DB<number> 格式，例如 PLC1.DB100。");
+            return DeviceError("控制器数据块标识必须使用 PLC_NAME.DB<number> 格式，例如 PLC1.DB100。");
         var plcName = blockKey[..dotDb];
 
         if (!SupportedPlcFaultKinds.Contains(faultKind, StringComparer.OrdinalIgnoreCase))
-            return DeviceError($"PLC Fault Kind 只支持：{PlcFaultKindsText}。");
+            return DeviceError($"控制器异常类型只支持：{PlcFaultKindsText}。");
         faultKind = SupportedPlcFaultKinds.First(x => string.Equals(x, faultKind, StringComparison.OrdinalIgnoreCase));
 
-        if (!TryLong(DevicePlcBlockSizeText, "Block Size", 1, 1_048_576, out var blockSize) ||
-            !TryLong(DevicePlcWriteOffsetText, "Write Offset", 0, int.MaxValue, out var writeOffset) ||
-            !TryLong(DevicePlcReadOffsetText, "Read Offset", 0, int.MaxValue, out var readOffset) ||
-            !TryLong(DevicePlcReadCountText, "Read Count", 1, 1536, out var readCount) ||
-            !TryLong(DevicePlcFaultStartMsText, "Fault Start", 0, long.MaxValue - 1000, out var faultStart) ||
-            !TryLong(DevicePlcFaultEndMsText, "Fault End", faultStart, long.MaxValue - 1000, out var faultEnd) ||
-            !TryLong(DevicePlcFaultOffsetText, "Fault Offset", 0, int.MaxValue, out var faultOffset) ||
-            !TryLong(DevicePlcFaultLengthText, "Fault Length", 1, 1536, out var faultLength) ||
-            !TryLong(DevicePlcFaultBitIndexText, "BitIndex", 0, 7, out var bitIndex) ||
-            !TryLong(DevicePlcJitterMinimumText, "Jitter Minimum", -255, 255, out var jitterMin) ||
-            !TryLong(DevicePlcJitterMaximumText, "Jitter Maximum", -255, 255, out var jitterMax))
+        if (!TryLong(DevicePlcBlockSizeText, "数据块大小", 1, 1_048_576, out var blockSize) ||
+            !TryLong(DevicePlcWriteOffsetText, "写入偏移", 0, int.MaxValue, out var writeOffset) ||
+            !TryLong(DevicePlcReadOffsetText, "读取偏移", 0, int.MaxValue, out var readOffset) ||
+            !TryLong(DevicePlcReadCountText, "读取长度", 1, 1536, out var readCount) ||
+            !TryLong(DevicePlcFaultStartMsText, "异常开始时间", 0, long.MaxValue - 1000, out var faultStart) ||
+            !TryLong(DevicePlcFaultEndMsText, "异常结束时间", faultStart, long.MaxValue - 1000, out var faultEnd) ||
+            !TryLong(DevicePlcFaultOffsetText, "异常偏移", 0, int.MaxValue, out var faultOffset) ||
+            !TryLong(DevicePlcFaultLengthText, "异常长度", 1, 1536, out var faultLength) ||
+            !TryLong(DevicePlcFaultBitIndexText, "位序号", 0, 7, out var bitIndex) ||
+            !TryLong(DevicePlcJitterMinimumText, "抖动最小值", -255, 255, out var jitterMin) ||
+            !TryLong(DevicePlcJitterMaximumText, "抖动最大值", -255, 255, out var jitterMax))
             return false;
         if (jitterMin > jitterMax)
-            return DeviceError("Jitter Minimum 不能大于 Jitter Maximum。");
+            return DeviceError("抖动最小值不能大于抖动最大值。");
 
         byte[] initialBytes;
         byte[] writeBytes;
@@ -111,21 +111,21 @@ public partial class SimulationVerificationViewModel
         }
         catch (FormatException)
         {
-            return DeviceError("PLC Initial / Write / Replacement 必须是有效 Base64。");
+            return DeviceError("控制器初始数据、写入数据和替换数据必须是有效的 Base64。");
         }
         if (initialBytes.Length > blockSize)
-            return DeviceError("InitialBase64 解码后的字节数不能超过 Block Size。");
+            return DeviceError("初始数据解码后的字节数不能超过数据块大小。");
         if (writeBytes.Length is < 1 or > 1536)
-            return DeviceError("WriteBase64 解码后必须是 1～1536 字节。");
+            return DeviceError("写入数据解码后必须是 1～1536 字节。");
         if (writeOffset + writeBytes.Length > blockSize || readOffset + readCount > blockSize)
-            return DeviceError("PLC Read/Write 范围不能超过 Block Size。");
+            return DeviceError("控制器读取或写入范围不能超过数据块大小。");
 
         var requiresBlock = faultKind is "Stuck" or "BitFlip" or "Jitter" or "OutOfRange";
         var faultTarget = requiresBlock ? blockKey : plcName;
         if (requiresBlock && faultOffset + faultLength > blockSize)
-            return DeviceError("PLC Fault Offset + Length 不能超过 Block Size。");
+            return DeviceError("异常偏移与异常长度之和不能超过数据块大小。");
         if (replacementBytes is { Length: > 0 } && replacementBytes.Length != faultLength)
-            return DeviceError("ReplacementBase64 解码字节数必须等于 Fault Length。");
+            return DeviceError("替换数据解码后的字节数必须等于异常长度。");
 
         var defineAt = 0L;
         var writeAt = 10L;
@@ -167,11 +167,12 @@ public partial class SimulationVerificationViewModel
             Assertion("fault-cleared", finalReadAt, 1, "plc.fault.active", faultId, false)
         };
 
+        var faultKindText = TranslatePlcFaultKind(faultKind);
         ApplyVisualScenario(
             $"visual-device-plc-{Slug(plcName)}-{Slug(faultKind)}",
             seed, start, duration, actions, assertions,
-            $"S2 设备面板：{blockKey} define/write/read，并注入 {faultKind} ({faultTarget}) 后 clear；Read/Write/Fault 全部通过现有 S2 DSL。 ");
-        DevicePanelStatusText = $"已生成 PLC 设备场景：{blockKey} / {faultKind}。Fault target={faultTarget}。";
+            $"S2 设备面板：{blockKey} 完成定义、写入和读取，模拟“{faultKindText}”异常后自动清除；全部通过现有 S2 受治理场景执行。 ");
+        DevicePanelStatusText = $"已生成控制器设备场景：{blockKey}；异常类型={faultKindText}；异常目标={faultTarget}。";
         return true;
     }
 
@@ -179,22 +180,22 @@ public partial class SimulationVerificationViewModel
     {
         if (!TryGetVisualCommon(out var seed, out var start))
             return false;
-        if (!TryRequired(DeviceRgvVehicleId, "VehicleId", out var vehicleId) ||
-            !TryRequired(DeviceRgvSourceNodeId, "Source Node", out var sourceNode) ||
-            !TryRequired(DeviceRgvMiddleNodeId, "Middle Node", out var middleNode) ||
-            !TryRequired(DeviceRgvDestinationNodeId, "Destination Node", out var destinationNode) ||
-            !TryRequired(DeviceRgvSegmentA, "Segment A", out var segmentA) ||
-            !TryRequired(DeviceRgvSegmentB, "Segment B", out var segmentB))
+        if (!TryRequired(DeviceRgvVehicleId, "轨道车编号", out var vehicleId) ||
+            !TryRequired(DeviceRgvSourceNodeId, "起点", out var sourceNode) ||
+            !TryRequired(DeviceRgvMiddleNodeId, "中间节点", out var middleNode) ||
+            !TryRequired(DeviceRgvDestinationNodeId, "终点", out var destinationNode) ||
+            !TryRequired(DeviceRgvSegmentA, "区段一", out var segmentA) ||
+            !TryRequired(DeviceRgvSegmentB, "区段二", out var segmentB))
             return false;
         if (new[] { sourceNode, middleNode, destinationNode }.Distinct(StringComparer.OrdinalIgnoreCase).Count() != 3)
-            return DeviceError("RGV Source / Middle / Destination 必须互不相同。");
+            return DeviceError("轨道车起点、中间节点和终点必须互不相同。");
         if (string.Equals(segmentA, segmentB, StringComparison.OrdinalIgnoreCase))
-            return DeviceError("RGV Segment A / B 必须不同。");
+            return DeviceError("轨道车区段一和区段二必须不同。");
 
-        if (!TryLong(DeviceRgvSegmentLengthMmText, "Segment Length", 1, int.MaxValue, out var lengthMm) ||
-            !TryLong(DeviceRgvSpeedMmPerSecondText, "Vehicle Speed", 1, int.MaxValue, out var speed) ||
-            !TryLong(DeviceRgvBatteryPercentText, "Battery", 0, 100, out var battery) ||
-            !TryLong(DeviceRgvOfflineDurationMsText, "Offline Duration", 1, 86_400_000, out var offlineDuration))
+        if (!TryLong(DeviceRgvSegmentLengthMmText, "区段长度", 1, int.MaxValue, out var lengthMm) ||
+            !TryLong(DeviceRgvSpeedMmPerSecondText, "运行速度", 1, int.MaxValue, out var speed) ||
+            !TryLong(DeviceRgvBatteryPercentText, "电量", 0, 100, out var battery) ||
+            !TryLong(DeviceRgvOfflineDurationMsText, "离线持续时间", 1, 86_400_000, out var offlineDuration))
             return false;
 
         var travelMs = checked((lengthMm * 1000L + speed - 1L) / speed);
@@ -241,10 +242,23 @@ public partial class SimulationVerificationViewModel
         ApplyVisualScenario(
             $"visual-device-rgv-{Slug(vehicleId)}",
             seed, start, duration, actions, assertions,
-            $"S3 设备面板：{vehicleId} {sourceNode}→{middleNode}→{destinationNode}，route/advance、offline/online、load/unload 均使用现有 S3 DSL。 ");
-        DevicePanelStatusText = $"已生成 RGV 设备场景：{vehicleId}，Speed={speed}mm/s，Battery={battery}%，Offline={offlineDuration}ms。";
+            $"S3 设备面板：轨道车 {vehicleId} 从 {sourceNode} 经 {middleNode} 到 {destinationNode}，完成路线分配、分段前进、离线恢复以及装载/卸载，全部使用现有 S3 受治理场景。 ");
+        DevicePanelStatusText = $"已生成轨道车设备场景：{vehicleId}；速度={speed} 毫米/秒；电量={battery}%；离线时长={offlineDuration} 毫秒。";
         return true;
     }
+
+    private static string TranslatePlcFaultKind(string value) => value switch
+    {
+        "Disconnect" => "断线",
+        "Timeout" => "超时",
+        "ReadFailure" => "读取失败",
+        "WriteFailure" => "写入失败",
+        "Stuck" => "数据卡住",
+        "BitFlip" => "位翻转",
+        "Jitter" => "数据抖动",
+        "OutOfRange" => "数据越界",
+        _ => value
+    };
 
     private bool DeviceError(string message)
     {
