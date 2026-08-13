@@ -10,10 +10,19 @@
                 <StackPanel Spacing="5">
                     <TextBlock Text="面向测试人员的主入口：选模板 → 改参数 → 生成严格 Scenario DSL → S0 Manifest/SHA-256 → S1 隔离 Run → S10 PASS/FAIL。" TextWrapping="Wrap" />
                     <TextBlock Classes="wcs-toolbar-status" Text="{Binding AcceptanceLibraryStatusText}" TextWrapping="Wrap" />
+                    <TextBlock FontSize="11" Opacity="0.72" TextWrapping="Wrap">
+                        <Run Text="执行环境：" />
+                        <Run Text="{Binding Environment}" FontWeight="SemiBold" />
+                        <Run Text=" · " />
+                        <Run Text="{Binding SimulationText}" />
+                    </TextBlock>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <atom:Button Content="⚙ 生成场景" Command="{Binding GenerateAcceptanceLibraryScenarioCommand}" />
-                    <atom:Button Content="▶ 生成并一键验收" Command="{Binding GenerateAndRunAcceptanceLibraryScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                    <atom:Button Content="▶ 生成并一键验收"
+                                 Command="{Binding GenerateAndRunAcceptanceLibraryScenarioCommand}"
+                                 IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
+                                 ToolTip.Tip="Scenario 始终可本地生成；执行阶段仍由现有 Simulation 治理边界校验，Production / 未授权环境 fail-closed。" />
                     <atom:Button Content="🧩 进入高级编辑" Click="OnOpenAdvancedEditorClick" />
                     <atom:Button Content="📋 查看完整执行详情" Click="OnOpenAcceptanceDetailsClick" />
                 </StackPanel>
@@ -165,6 +174,7 @@
                     <atom:Card Header="使用说明" StyleVariant="Outlined">
                         <StackPanel Spacing="5">
                             <TextBlock Text="测试人员：在场景库选择模板并修改参数，直接点击“生成并一键验收”。" TextWrapping="Wrap" />
+                            <TextBlock Text="当前环境不允许执行时，按钮仍可生成 Scenario；受治理执行会明确拒绝并保持 Production / 未授权环境 fail-closed。" TextWrapping="Wrap" Opacity="0.75" />
                             <TextBlock Text="高级测试人员：点击“进入高级编辑”，跳到现有多故障时间轴继续追加、排序和编辑。" TextWrapping="Wrap" Opacity="0.75" />
                             <TextBlock Text="查看 Hash、失败断言、Checkpoint 和历史 Run：点击“查看完整执行详情”，跳到现有一键验收详情页。" TextWrapping="Wrap" Opacity="0.75" />
                             <TextBlock Text="调试人员：使用设备操作面板与 Traffic / External 专项页面做底层行为诊断。" TextWrapping="Wrap" Opacity="0.75" />
