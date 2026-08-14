@@ -158,7 +158,7 @@ try
             builder.Services.AddSingleton<OpcUaPollingService>(sp =>
             {
                 var serializer = sp.GetRequiredService<OpcUaTagSerializer>();
-                var logger = sp.GetRequiredService<ILogger<ModbusPollingService>>();
+                var logger = sp.GetRequiredService<ILogger<OpcUaPollingService>>();
                 var snapshot = sp.GetService<SignalSnapshotCenter>();
                 var detector = sp.GetService<EventDetector>();
                 var service = new OpcUaPollingService(serializer, logger, snapshot, detector);
