@@ -38,6 +38,7 @@ try
     builder.Services.AddSerilog(Log.Logger, dispose: true);
     builder.Services.AddWcsApplication();
     builder.Services.AddWcsInfrastructure(builder.Configuration);
+    Wcs.Host.Mcp.WcsMcpHosting.AddWcsMcp(builder);
     builder.Services.Configure<WcsOptions>(builder.Configuration.GetSection("WcsOptions"));
 
     var transportObservability = builder.Configuration
@@ -157,7 +158,7 @@ try
             builder.Services.AddSingleton<OpcUaPollingService>(sp =>
             {
                 var serializer = sp.GetRequiredService<OpcUaTagSerializer>();
-                var logger = sp.GetRequiredService<ILogger<OpcUaPollingService>>();
+                var logger = sp.GetRequiredService<ILogger<ModbusPollingService>>();
                 var snapshot = sp.GetService<SignalSnapshotCenter>();
                 var detector = sp.GetService<EventDetector>();
                 var service = new OpcUaPollingService(serializer, logger, snapshot, detector);
@@ -265,6 +266,7 @@ try
 
     app.MapHub<WcsHub>("/wcs");
     app.MapControllers();
+    Wcs.Host.Mcp.WcsMcpHosting.MapWcsMcp(app);
     app.MapHealthChecks("/health/ready", new() { Predicate = r => r.Name == "readiness" });
     app.MapHealthChecks("/health/live", new() { Predicate = r => r.Name == "liveness" });
     app.MapHealthChecks("/health");
