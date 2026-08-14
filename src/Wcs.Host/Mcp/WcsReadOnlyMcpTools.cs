@@ -25,7 +25,7 @@ public sealed class WcsReadOnlyMcpTools
     }
 
     [McpServerTool(Name = "wcs_get_active_tasks", UseStructuredContent = true)]
-    [Description("Read currently active WCS tasks from the in-memory runtime. Read-only. The result omits internal task parameter dictionaries.")]
+    [Description("Read currently active WCS tasks from the in-memory runtime. Read-only. Internal task parameter dictionaries are intentionally omitted.")]
     public WcsActiveTasksResult GetActiveTasks(
         [FromServices] IStateCenter stateCenter,
         [Description("Maximum number of tasks to return. Required range: 1 to 100.")] int limit)
@@ -57,8 +57,8 @@ public sealed class WcsReadOnlyMcpTools
         var devices = stateCenter.GetSnapshot<DeviceState>();
         return new WcsSystemOverview(
             DeviceCount: devices.Count,
-            ConnectedDeviceCount: devices.Count(x => x.IsConnected),
-            FaultedDeviceCount: devices.Count(x => x.IsFaulted),
+            NonOfflineDeviceCount: devices.Count(x => x.Status != DeviceStatusEnum.Offline),
+            ErrorDeviceCount: devices.Count(x => x.Status == DeviceStatusEnum.Error),
             ActiveTaskCount: stateCenter.GetAllActiveTasks().Count,
             ActiveAlarmCount: stateCenter.GetActiveAlarms().Count,
             TrackedObjectCount: stateCenter.GetTrackedObjects().Count,
@@ -67,79 +67,65 @@ public sealed class WcsReadOnlyMcpTools
 
     private static WcsDeviceStateView Map(DeviceState state) => new(
         state.DeviceId,
-        state.DeviceType,
-        state.RunState.ToString(),
-        state.IsConnected,
-        state.IsFaulted,
-        state.LastError,
-        state.LastHeartbeatTime,
+        state.Status.ToString(),
+        state.CurrentPosition,
         state.LastUpdateTime);
 
     private static WcsTaskView Map(TaskRuntime task) => new(
         task.TaskId,
-        task.TaskType,
-        task.State.ToString(),
+        task.Status.ToString(),
         task.Priority,
-        task.Source,
-        task.Destination,
-        task.DeviceId,
-        task.CurrentStep,
-        task.CreateTime,
+        task.RouteId,
+        task.CreatedTime,
         task.StartTime,
-        task.Error);
+        task.EndTime);
 
     private static WcsAlarmView Map(AlarmState alarm) => new(
         alarm.AlarmId,
-        alarm.DeviceId,
         alarm.AlarmCode,
+        alarm.Status.ToString(),
         alarm.Level.ToString(),
         alarm.Message,
-        alarm.Source,
-        alarm.RaisedAt);
+        alarm.OccurTime,
+        alarm.RootCauseAlarmId,
+        alarm.RootCauseDepth);
 }
 
 public sealed record WcsDeviceStateResult(bool Found, WcsDeviceStateView? Device);
 
 public sealed record WcsDeviceStateView(
     string DeviceId,
-    string DeviceType,
-    string RunState,
-    bool IsConnected,
-    bool IsFaulted,
-    string? LastError,
-    DateTime? LastHeartbeatTime,
+    string Status,
+    string? CurrentPosition,
     DateTime LastUpdateTime);
 
 public sealed record WcsActiveTasksResult(int TotalCount, IReadOnlyList<WcsTaskView> Tasks);
 
 public sealed record WcsTaskView(
     string TaskId,
-    string TaskType,
-    string State,
+    string Status,
     int Priority,
-    string? Source,
-    string? Destination,
-    string? DeviceId,
-    int CurrentStep,
-    DateTime CreateTime,
+    string RouteId,
+    DateTime CreatedTime,
     DateTime? StartTime,
-    string? Error);
+    DateTime? EndTime);
 
 public sealed record WcsActiveAlarmsResult(int TotalCount, IReadOnlyList<WcsAlarmView> Alarms);
 
 public sealed record WcsAlarmView(
     string AlarmId,
-    string? DeviceId,
     string AlarmCode,
+    string Status,
     string Level,
     string Message,
-    string? Source,
-    DateTime RaisedAt);
+    DateTime OccurTime,
+    string? RootCauseAlarmId,
+    int RootCauseDepth);
 
 public sealed record WcsSystemOverview(
     int DeviceCount,
-    int ConnectedDeviceCount,
-    int FaultedDeviceCount,
+    int NonOfflineDeviceCount,
+    int ErrorDeviceCount,
     int ActiveTaskCount,
     int ActiveAlarmCount,
     int TrackedObjectCount,
