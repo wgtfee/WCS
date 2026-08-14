@@ -31,9 +31,9 @@ public sealed class WcsReadOnlyMcpTools
         [Description("Maximum number of tasks to return. Required range: 1 to 100.")] int limit)
     {
         var capped = Math.Clamp(limit, 1, 100);
-        var tasks = stateCenter.GetAllActiveTasks();
+        var tasks = stateCenter.GetAllActiveTasks().ToArray();
         return new WcsActiveTasksResult(
-            tasks.Count,
+            tasks.Length,
             tasks.Take(capped).Select(Map).ToArray());
     }
 
@@ -44,9 +44,9 @@ public sealed class WcsReadOnlyMcpTools
         [Description("Maximum number of alarms to return. Required range: 1 to 100.")] int limit)
     {
         var capped = Math.Clamp(limit, 1, 100);
-        var alarms = stateCenter.GetActiveAlarms();
+        var alarms = stateCenter.GetActiveAlarms().ToArray();
         return new WcsActiveAlarmsResult(
-            alarms.Count,
+            alarms.Length,
             alarms.Take(capped).Select(Map).ToArray());
     }
 
@@ -54,14 +54,14 @@ public sealed class WcsReadOnlyMcpTools
     [Description("Read a compact WCS runtime overview from StateCenter. Read-only. Returns counts only and does not expose PLC blocks or arbitrary runtime property dictionaries.")]
     public WcsSystemOverview GetSystemOverview([FromServices] IStateCenter stateCenter)
     {
-        var devices = stateCenter.GetSnapshot<DeviceState>();
+        var devices = stateCenter.GetSnapshot<DeviceState>().Values.ToArray();
         return new WcsSystemOverview(
-            DeviceCount: devices.Count,
+            DeviceCount: devices.Length,
             NonOfflineDeviceCount: devices.Count(x => x.Status != DeviceStatusEnum.Offline),
             ErrorDeviceCount: devices.Count(x => x.Status == DeviceStatusEnum.Error),
-            ActiveTaskCount: stateCenter.GetAllActiveTasks().Count,
-            ActiveAlarmCount: stateCenter.GetActiveAlarms().Count,
-            TrackedObjectCount: stateCenter.GetTrackedObjects().Count,
+            ActiveTaskCount: stateCenter.GetAllActiveTasks().Count(),
+            ActiveAlarmCount: stateCenter.GetActiveAlarms().Count(),
+            TrackedObjectCount: stateCenter.GetSnapshot<ObjectState>().Count,
             GeneratedAtUtc: DateTimeOffset.UtcNow);
     }
 
