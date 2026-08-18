@@ -1,0 +1,38 @@
+name: Cleanup obsolete branches
+
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor == 'wgtfee'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete obsolete remote branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for branch in \
+            "codex/simulation-ui-cn-phase6-visual-status" \
+            "ui/operations-product-pages"
+          do
+            code=$(curl -sS -o /tmp/delete-ref-response.txt -w "%{http_code}" \
+              -X DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${REPO}/git/refs/heads/${branch}")
+            if [ "$code" != "204" ]; then
+              echo "Failed deleting ${branch}, HTTP ${code}"
+              cat /tmp/delete-ref-response.txt
+              exit 1
+            fi
+            echo "Deleted ${branch}"
+          done
