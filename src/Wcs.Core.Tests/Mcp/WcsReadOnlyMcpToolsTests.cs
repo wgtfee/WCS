@@ -1,4 +1,4 @@
-using Wcs.Core.StateCenter.Implementation;
+using RuntimeStateCenter = Wcs.Core.StateCenter.Implementation.StateCenter;
 using Wcs.Core.StateCenter.Models;
 using Wcs.Host.Mcp;
 
@@ -9,7 +9,7 @@ public sealed class WcsReadOnlyMcpToolsTests
     [Fact]
     public void GetDeviceState_ReturnsMinimalCurrentState()
     {
-        var stateCenter = new StateCenter();
+        var stateCenter = new RuntimeStateCenter();
         stateCenter.UpdateDeviceState("D01", new DeviceState
         {
             DeviceId = "D01",
@@ -31,7 +31,7 @@ public sealed class WcsReadOnlyMcpToolsTests
     [Fact]
     public void GetActiveTasks_RespectsLimitAndOmitsParameters()
     {
-        var stateCenter = new StateCenter();
+        var stateCenter = new RuntimeStateCenter();
         stateCenter.UpdateTaskRuntime("T01", new TaskRuntime
         {
             TaskId = "T01",
@@ -60,7 +60,7 @@ public sealed class WcsReadOnlyMcpToolsTests
     [Fact]
     public void GetActiveAlarms_ReturnsReadOnlyAlarmView()
     {
-        var stateCenter = new StateCenter();
+        var stateCenter = new RuntimeStateCenter();
         stateCenter.UpdateAlarmState("A01", new AlarmState
         {
             AlarmId = "A01",
@@ -82,7 +82,7 @@ public sealed class WcsReadOnlyMcpToolsTests
     [Fact]
     public void GetSystemOverview_UsesStateCenterOnly()
     {
-        var stateCenter = new StateCenter();
+        var stateCenter = new RuntimeStateCenter();
         stateCenter.UpdateDeviceState("D01", new DeviceState
         {
             DeviceId = "D01",
