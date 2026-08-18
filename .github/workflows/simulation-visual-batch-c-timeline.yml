@@ -1,0 +1,174 @@
+name: WCS Visual Simulation Batch C Timeline
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'src/Wcs.Desktop/ViewModels/SimulationTimelineEditorItem.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationTimelineViewModel.cs'
+      - 'src/Wcs.Desktop/Views/SimulationTimelineEditorView.axaml'
+      - 'src/Wcs.Desktop/Views/SimulationTimelineEditorView.axaml.cs'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs'
+      - '.github/workflows/simulation-visual-batch-c-timeline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  batch-c:
+    name: build and verify governed multi-fault timeline editor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Desktop Release
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/simulation-visual-batch-c
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj 2>&1 | tee artifacts/simulation-visual-batch-c/desktop-restore.log
+          restore_status=${PIPESTATUS[0]}
+          if [ "$restore_status" -ne 0 ]; then
+            exit "$restore_status"
+          fi
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore 2>&1 | tee artifacts/simulation-visual-batch-c/desktop-build.log
+          build_status=${PIPESTATUS[0]}
+          exit "$build_status"
+
+      - name: Build Simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+
+      - name: Run S1 and S10 governed scenario regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-visual-batch-c
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            -c Release --no-build \
+            --filter 'FullyQualifiedName~SimulationScenarioEngineTests|FullyQualifiedName~SimulationScenarioControllerTests|FullyQualifiedName~SimulationUnifiedConsoleTests' \
+            --logger 'trx;LogFileName=batch-c.trx' \
+            --results-directory artifacts/simulation-visual-batch-c
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root=ET.parse('artifacts/simulation-visual-batch-c/batch-c.trx').getroot()
+          results=root.findall('.//{*}UnitTestResult')
+          failed=[x.attrib.get('testName') for x in results if x.attrib.get('outcome') != 'Passed']
+          assert results, 'Batch C did not execute any S1/S10 tests'
+          assert not failed, f'failed Batch C S1/S10 tests: {failed}'
+          unified=[x for x in results if 'SimulationUnifiedConsoleTests' in x.attrib.get('testName','')]
+          assert len(unified) == 10, f'expected 10 S10 tests, got {len(unified)}'
+          print(f'Batch C S1/S10 tests: {len(results)}/{len(results)} success; S10=10/10')
+          PY
+
+      - name: Verify timeline product contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          vm=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationTimelineViewModel.cs').read_text(encoding='utf-8')
+          model=Path('src/Wcs.Desktop/ViewModels/SimulationTimelineEditorItem.cs').read_text(encoding='utf-8')
+          view=Path('src/Wcs.Desktop/Views/SimulationTimelineEditorView.axaml').read_text(encoding='utf-8')
+          host=Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs').read_text(encoding='utf-8')
+          source=vm+model+view+host
+
+          required=(
+              'TimelineItems', 'SelectedTimelineItem',
+              'AddTimelineActionCommand', 'AddTimelineAssertionCommand',
+              'DeleteSelectedTimelineItemCommand', 'MoveSelectedTimelineItemUpCommand', 'MoveSelectedTimelineItemDownCommand',
+              'ReplaceTimelineFromCurrentScenarioCommand', 'AppendCurrentScenarioToTimelineCommand',
+              'AutoGenerateTimelineAssertionsCommand', 'GenerateTimelineScenarioCommand', 'GenerateAndRegisterTimelineScenarioCommand',
+              'BumpTimelineScenarioVersionCommand',
+              'SaveTimelineTemplateCommand', 'LoadTimelineTemplateCommand', 'DeleteTimelineTemplateCommand', 'RefreshTimelineTemplatesCommand',
+              'DurationMillisecondsText', 'AtMillisecondsText', 'BodyJson',
+              'ApplyDurationToKnownAction', 'AppendKnownRecoveryAction',
+              'LocalApplicationData', 'SimulationTemplates',
+              'RegisterScenarioAsync', 'Manifest/SHA-256'
+          )
+          missing=[x for x in required if x not in source]
+          assert not missing, f'missing Batch C capability markers: {missing}'
+
+          recovery=(
+              'plc.connection.set', 'rgv.vehicle.online.set', 'plc.fault.apply', 'plc.fault.clear',
+              'external.fault.apply', 'external.fault.clear'
+          )
+          assert all(x in vm for x in recovery), 'known Duration recovery markers incomplete'
+          assertions=(
+              'plc.connected', 'plc.block.equals', 'external.fault.active', 'external.circuit.state',
+              'traffic.deadlock.exists', 'rgv.vehicle.load.equals'
+          )
+          assert all(x in vm for x in assertions), 'automatic assertion catalog incomplete'
+
+          generator_start = vm.index('private bool TryGenerateTimelineScenario()')
+          generator_end = vm.index('private bool TryParseTimelineItem(', generator_start)
+          generator = vm[generator_start:generator_end]
+          assert 'ScenarioVersion = "1.0.0"' not in generator, 'Timeline generator must not reset user version to 1.0.0'
+          assert '["Version"] = version' in generator, 'Timeline generator must preserve selected Scenario Version'
+          assert 'Directory.CreateDirectory(TimelineTemplateDirectory())' in vm
+          assert 'Environment.SpecialFolder.LocalApplicationData' in vm
+          assert 'Path.Combine(TimelineTemplateDirectory(), normalizedName + ".json")' in vm
+          assert 'SanitizeTemplateName' in vm, 'template name must be sanitized before local file access'
+
+          assert 'xmlns:atom="https://atomui.net"' in view
+          for marker in ('<atom:Card', '<atom:LineEdit', '<atom:Button', '<atom:DataGrid'):
+              assert marker in view, f'AtomUI marker missing: {marker}'
+          assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])', view), \
+              'Batch C regressed to native product controls'
+          assert '多故障时间轴' in host and 'SimulationTimelineEditorView' in host
+
+          forbidden=(
+              'CommandBus', 'TaskScheduler', 'TaskOrchestrator', 'DeviceManager',
+              'TrafficCoordinator', 'RouteReservationManager', 'IPlcConnection', 'S7Connection', 'PlcForceWrite',
+              '/api/hil/verification', 'HttpClient', 'SqlConnection', 'SqlSugarClient',
+              'PostAsync', 'PutAsync', 'PatchAsync', 'DeleteAsync'
+          )
+          found=[x for x in forbidden if x in source]
+          assert not found, f'Batch C references forbidden production/HIL/external control surface: {found}'
+          print('Batch C governed multi-fault timeline editor: PASS')
+          PY
+
+      - name: Write evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > artifacts/simulation-visual-batch-c/evidence.txt <<EOF
+          head_sha=${GITHUB_SHA}
+          batch=C
+          desktop_build=true
+          s1_s10_regression=true
+          s10_test_count=10
+          multi_fault_timeline=true
+          append_replace=true
+          add_delete_reorder=true
+          duration_recovery=true
+          automatic_assertions=true
+          local_templates=true
+          scenario_versioning=true
+          governed_s0_registration=true
+          direct_production_control=false
+          direct_hil_control=false
+          EOF
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-visual-batch-c-${{ github.run_number }}
+          path: artifacts/simulation-visual-batch-c/**
+          if-no-files-found: error
+          retention-days: 30

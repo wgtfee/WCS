@@ -1,0 +1,55 @@
+name: WCS Desktop AtomUI Common Transport
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Desktop/Views/TransportSchedulingView.axaml'
+      - 'src/Wcs.Desktop/Views/TransportTrafficView.axaml'
+      - '.github/workflows/desktop-atomui-common-transport.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  atomui-common-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build Desktop Release
+        run: dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release
+      - name: Verify AtomUI common transport pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          pages=(
+            src/Wcs.Desktop/Views/TransportSchedulingView.axaml
+            src/Wcs.Desktop/Views/TransportTrafficView.axaml
+          )
+          for page in "${pages[@]}"; do
+            grep -q 'xmlns:atom="https://atomui.net"' "$page"
+            grep -q '<atom:Card' "$page"
+            grep -q '<atom:Statistic' "$page"
+            grep -q '<atom:Button' "$page"
+            grep -q '<atom:TabControl' "$page"
+            grep -q '<atom:DataGrid' "$page"
+            ! grep -nE '<Button([ >])|<DataGrid([ >])|<DataGridTextColumn([ >])|<DataGridCheckBoxColumn([ >])|<TabControl([ >])|<TabItem([ >])' "$page"
+          done
+      - name: Verify presentation-only scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}" --depth=1
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)"
+          echo "$changed"
+          if echo "$changed" | grep -E '^src/(Wcs.Core|Wcs.Infrastructure|Wcs.Host)/'; then
+            echo 'Control/backend scope changed in UI-only migration.' >&2
+            exit 1
+          fi

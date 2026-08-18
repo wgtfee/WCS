@@ -1,0 +1,44 @@
+name: WCS Asset Health Root Cause Compile
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Core/AnomalyDetection/RootCause/**'
+      - 'src/Wcs.Core.Tests/AssetHealthRootCause*'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/RootCause/**'
+      - 'src/Wcs.Host/Controllers/AnomalyRootCause*'
+      - '.github/workflows/anomaly-root-cause-*.yml'
+
+jobs:
+  compile:
+    name: compile root cause core and host with retained logs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: |
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj 2>&1 | tee root-cause-restore.log
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee -a root-cause-restore.log
+      - name: Build Core tests
+        run: dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore 2>&1 | tee root-cause-core-build.log
+      - name: Run root cause tests
+        run: dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~AssetHealthRootCause" --logger "trx;LogFileName=root-cause-tests.trx" --results-directory TestResults 2>&1 | tee root-cause-tests.log
+      - name: Build Host
+        run: dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee root-cause-host-build.log
+      - name: Upload compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-asset-health-root-cause-compile-${{ github.run_number }}
+          path: |
+            root-cause-*.log
+            TestResults/**
+          if-no-files-found: warn
+          retention-days: 14

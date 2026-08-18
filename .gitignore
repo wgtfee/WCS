@@ -10,3 +10,8 @@ obj/
 *.so
 *.obj
 *.vs
+artifacts/
+*.log
+*.runlogs
+
+*.claude

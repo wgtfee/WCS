@@ -1,0 +1,82 @@
+name: WCS Visual Simulation Batch A Device Panels
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationDeviceOperationsViewModel.cs'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml'
+      - '.github/workflows/simulation-visual-batch-a-device-panels.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  batch-a:
+    name: build and verify PLC RGV device panels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build Desktop Release
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore
+      - name: Run S2 S3 simulator tests
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --filter 'FullyQualifiedName~SimulationVirtualPlcTests|FullyQualifiedName~SimulationVirtualRgvTests' --logger 'trx;LogFileName=batch-a-s2-s3.trx' --results-directory artifacts/batch-a
+      - name: Verify device panel contract and safety boundary
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          vm=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationDeviceOperationsViewModel.cs').read_text(encoding='utf-8')
+          view=Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml').read_text(encoding='utf-8')
+          required=(
+            'plc.block.define','plc.block.write','plc.block.read','plc.fault.apply','plc.fault.clear',
+            'Disconnect','Timeout','ReadFailure','WriteFailure','Stuck','BitFlip','Jitter','OutOfRange',
+            'rgv.segment.define','rgv.vehicle.define','rgv.route.assign','rgv.vehicle.advance','rgv.vehicle.online.set','rgv.vehicle.load','rgv.vehicle.unload',
+            'GenerateDevicePlcScenarioCommand','GenerateAndRegisterDevicePlcScenarioCommand',
+            'GenerateDeviceRgvScenarioCommand','GenerateAndRegisterDeviceRgvScenarioCommand'
+          )
+          missing=[x for x in required if x not in vm+view]
+          assert not missing, f'missing Batch A markers: {missing}'
+          assert '设备操作面板' in view and 'S2 · PLC DB / Fault Injection' in view and 'S3 · RGV Route / Motion / Online / Load' in view
+          assert 'xmlns:atom="https://atomui.net"' in view
+          assert '<atom:Card' in view and '<atom:LineEdit' in view and '<atom:Button' in view and '<atom:TabControl' in view
+          forbidden=('CommandBus','TaskScheduler','TaskOrchestrator','DeviceManager','TrafficCoordinator','RouteReservationManager','S7Connection','IPlcConnection','/api/hil/verification','HttpClient','PostAsync','PutAsync','PatchAsync','DeleteAsync')
+          found=[x for x in forbidden if x in vm]
+          assert not found, f'forbidden production/HIL control reference(s): {found}'
+          assert 'RegisterScenarioAsync' in vm
+          print('Batch A PLC/RGV device panel contract: PASS')
+          PY
+      - name: Write evidence
+        if: always()
+        run: |
+          mkdir -p artifacts/batch-a
+          cat > artifacts/batch-a/evidence.txt <<EOF
+          head_sha=${GITHUB_SHA}
+          batch=A
+          desktop_build=true
+          simulator_s2_s3_tests=true
+          governed_registration=true
+          direct_production_control=false
+          direct_hil_control=false
+          atomui=true
+          EOF
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-visual-batch-a-${{ github.run_number }}
+          path: artifacts/batch-a/**
+          if-no-files-found: error
+          retention-days: 30

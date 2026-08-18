@@ -1,0 +1,71 @@
+name: WCS Simulation External Determinism
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualExternal/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualExternalTests.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-external-determinism.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-determinism:
+    name: verify virtual-time retries circuits idempotency checkpoint and replay determinism
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-s5-determinism
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee artifacts/simulation-s5-determinism/restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s5-determinism/build.log
+
+      - name: Run retry circuit checkpoint and replay tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualExternalTests' \
+            --logger 'trx;LogFileName=simulation-s5-determinism.trx' \
+            2>&1 | tee artifacts/simulation-s5-determinism/test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+7|Passed:[[:space:]]+7.*Total:[[:space:]]+7' artifacts/simulation-s5-determinism/test.log
+
+      - name: Verify deterministic policy and production isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -n 'SimulationStateStore' src/Wcs.Simulator/VirtualExternal/VirtualExternalRuntime.cs
+          grep -R -n 'CircuitOpenUntilOffsetMilliseconds' src/Wcs.Simulator/VirtualExternal/VirtualExternalRuntime.cs
+          grep -R -n 'IdempotencyKey' src/Wcs.Simulator/VirtualExternal/VirtualExternalRuntime.cs
+          grep -R -n 'RetryDelayMilliseconds' src/Wcs.Simulator/VirtualExternal/VirtualExternalRuntime.cs
+          grep -R -n 'external.request.invoke' src/Wcs.Simulator/VirtualExternal/VirtualExternalScenarioHandlers.cs
+          ! grep -R -nE 'DateTime\.Now|DateTime\.UtcNow|Task\.Delay|Thread\.Sleep|Random\.Shared|HttpClient|SqlConnection|Microsoft\.Data\.SqlClient|System\.Data\.SqlClient|Socket|TcpClient|UdpClient|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager' src/Wcs.Simulator/VirtualExternal
+
+      - name: Upload S5 determinism evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-external-determinism-${{ github.run_number }}
+          path: artifacts/simulation-s5-determinism/**
+          if-no-files-found: error
+          retention-days: 14

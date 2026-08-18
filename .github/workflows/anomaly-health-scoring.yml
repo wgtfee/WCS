@@ -1,0 +1,81 @@
+name: WCS Anomaly Health Scoring
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/anomaly-health-scoring.yml'
+      - '.github/workflows/anomaly-health-scoring-sql.yml'
+      - 'src/Wcs.Core/AnomalyDetection/HealthScoring/**'
+      - 'src/Wcs.Core.Tests/AssetHealth*.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/HealthScoring/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Fusion/AnomalyFusionDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/PlcMlDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Host/Controllers/AnomalyHealth*.cs'
+      - 'src/Wcs.Host/appsettings*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  health-scoring:
+    name: score mapping, bounded history, paging, trend, and host build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Core tests
+        shell: bash
+        run: |
+          mkdir -p artifacts/TestResults
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-restore
+
+      - name: Run health scoring tests
+        shell: bash
+        run: |
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~AssetHealthScoringServiceTests|FullyQualifiedName~AssetHealthScoreHistoryStoreTests|FullyQualifiedName~AssetHealthHistoryPagingTests' \
+            --logger 'trx;LogFileName=anomaly-health-scoring.trx' \
+            --results-directory artifacts/TestResults
+
+      - name: Build Host
+        shell: bash
+        run: |
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj \
+            --configuration Release \
+            --no-restore
+
+      - name: Upload health scoring evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-anomaly-health-scoring-${{ github.run_number }}
+          path: artifacts/TestResults
+          if-no-files-found: warn
+          retention-days: 14

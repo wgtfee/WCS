@@ -1,0 +1,78 @@
+name: WCS Asset Health Governance Compile
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/anomaly-health-governance-compile.yml'
+      - 'src/Wcs.Core/AnomalyDetection/HealthGovernance/**'
+      - 'src/Wcs.Core.Tests/AssetHealthGovernanceServiceTests.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/HealthGovernance/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Fusion/AnomalyFusionDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Host/Controllers/AnomalyHealthGovernance*.cs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  compile:
+    name: compile core tests and host with retained logs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj 2>&1 | tee artifacts/core-restore.log
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee artifacts/host-restore.log
+
+      - name: Build Core tests
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-restore \
+            --verbosity normal 2>&1 | tee artifacts/core-build.log
+
+      - name: Build Host
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/Wcs.Host/Wcs.Host.csproj \
+            --configuration Release \
+            --no-restore \
+            --verbosity normal 2>&1 | tee artifacts/host-build.log
+
+      - name: Upload compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-asset-health-governance-compile-${{ github.run_number }}
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 14

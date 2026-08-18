@@ -1,0 +1,323 @@
+name: WCS PLC Anomaly ML Governance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/anomaly-ml-governance.yml"
+      - "src/Wcs.Core/AnomalyDetection/MachineLearning/**"
+      - "src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/**"
+      - "src/Wcs.Host/Controllers/PlcMl*.cs"
+      - "src/Wcs.Host/appsettings.MlLoadTest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-plc-anomaly-ml-governance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shadow-review-approve-canary:
+    name: dataset, approval, shadow review, drift, and canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_Governance!2026"
+        ports:
+          - 1433:1433
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: "MlLoadTest"
+      DOTNET_ENVIRONMENT: "MlLoadTest"
+      ASPNETCORE_URLS: "http://127.0.0.1:5092"
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_AnomalyGovernance;User Id=sa;Password=Wcs_Governance!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0"
+      Storage__Telemetry__Provider: "Disabled"
+      AnomalyDetection__MachineLearning__ModelDirectory: "${{ github.workspace }}/artifacts/governance-models"
+      AnomalyDetection__MachineLearning__TrainingDirectory: "${{ github.workspace }}/artifacts/governance-training"
+      AnomalyDetection__MachineLearning__Profiles__0__DeploymentMode: "Shadow"
+      AnomalyDetection__MachineLearning__Profiles__0__RequireModelApproval: "true"
+      AnomalyDetection__MachineLearning__Profiles__0__CollectTrainingData: "true"
+      AnomalyDetection__MachineLearning__Profiles__0__DriftWindowSize: "500"
+      AnomalyDetection__MachineLearning__Profiles__0__MinimumDriftSamples: "100"
+      AnomalyDetection__MachineLearning__Profiles__0__DriftSnapshotIntervalSeconds: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build Host
+        run: |
+          mkdir -p artifacts
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_AnomalyGovernance]"
+          '
+
+      - name: Start Shadow Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/governance-shadow-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/governance-host.pid"
+          popd
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/governance-initial-status.json
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/governance-host.pid)" 2>/dev/null; then
+              cat artifacts/governance-shadow-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/governance-shadow-host.log
+          exit 1
+
+      - name: Freeze dataset and train pending model
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"training","devices":200,"windows":20,"deviceOffset":0,"startOffsetSeconds":0,"concurrency":32}' \
+            --max-time 900 | tee artifacts/governance-training-load.json
+          [[ "$(jq -r '.trainingWindowDelta' artifacts/governance-training-load.json)" == "4000" ]]
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/governance/datasets/ML-CV-CURRENT" \
+            --header 'content-type: application/json' \
+            --data '{"createdBy":"governance-ci","description":"approved normal baseline"}' \
+            | tee artifacts/governance-dataset.json
+          dataset="$(jq -r '.version' artifacts/governance-dataset.json)"
+          [[ "$(jq -r '.windowCount' artifacts/governance-dataset.json)" == "4000" ]]
+          [[ -n "$dataset" && "$dataset" != "null" ]]
+          echo "$dataset" > artifacts/governance-dataset-version.txt
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/train/ML-CV-CURRENT?datasetVersion=$dataset&requestedBy=governance-ci" \
+            --max-time 900 | tee artifacts/governance-training-result.json
+          [[ "$(jq -r '.datasetVersion' artifacts/governance-training-result.json)" == "$dataset" ]]
+          [[ "$(jq -r '.approvalStatus' artifacts/governance-training-result.json)" == "0" ]]
+          [[ "$(jq -r '.activated' artifacts/governance-training-result.json)" == "false" ]]
+          version="$(jq -r '.modelVersion' artifacts/governance-training-result.json)"
+          echo "$version" > artifacts/governance-model-version.txt
+
+          model_path="artifacts/governance-models/ML-CV-CURRENT/model-$version.json"
+          test -s "$model_path"
+          jq -e '.calibrationMeanScore > 0 and .calibrationP95Score > 0' "$model_path" >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/governance-pending-status.json
+          [[ "$(jq -r '.[0].activeModelVersion' artifacts/governance-pending-status.json)" == "null" ]]
+
+      - name: Approve and activate model
+        shell: bash
+        run: |
+          version="$(cat artifacts/governance-model-version.txt)"
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/governance/models/ML-CV-CURRENT/$version/approve" \
+            --header 'content-type: application/json' \
+            --data '{"actor":"independent-reviewer","comment":"CI governance approval","activate":true}' \
+            | tee artifacts/governance-approval.json
+          [[ "$(jq -r '.approvalStatus' artifacts/governance-approval.json)" == "1" ]]
+          [[ "$(jq -r '.decidedBy' artifacts/governance-approval.json)" == "independent-reviewer" ]]
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/governance-approved-status.json
+          [[ "$(jq -r '.[0].activeModelVersion' artifacts/governance-approved-status.json)" == "$version" ]]
+          [[ "$(jq -r '.[0].deploymentMode' artifacts/governance-approved-status.json)" == "1" ]]
+
+      - name: Run Shadow candidates and human review
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"anomaly","devices":100,"windows":3,"deviceOffset":40000,"startOffsetSeconds":5000,"concurrency":16}' \
+            --max-time 600 | tee artifacts/governance-shadow-anomaly.json
+          [[ "$(jq -r '.raisedDelta' artifacts/governance-shadow-anomaly.json)" == "100" ]]
+          [[ "$(jq -r '.status.shadowRaised' artifacts/governance-shadow-anomaly.json)" == "100" ]]
+          [[ "$(jq -r '.status.activeRaised' artifacts/governance-shadow-anomaly.json)" == "0" ]]
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"recovery","devices":100,"windows":3,"deviceOffset":40000,"startOffsetSeconds":5003,"concurrency":16}' \
+            --max-time 600 | tee artifacts/governance-shadow-recovery.json
+          [[ "$(jq -r '.recoveredDelta' artifacts/governance-shadow-recovery.json)" == "100" ]]
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/governance/candidates?profileId=ML-CV-CURRENT&maximumCount=200" \
+            | tee artifacts/governance-candidates.json
+          [[ "$(jq 'length' artifacts/governance-candidates.json)" == "100" ]]
+          [[ "$(jq '[.[] | select(.routedToActiveLifecycle == true)] | length' artifacts/governance-candidates.json)" == "0" ]]
+          [[ "$(jq '[.[] | select(.isActive == true)] | length' artifacts/governance-candidates.json)" == "0" ]]
+
+          mapfile -t ids < <(jq -r '.[].candidateId' artifacts/governance-candidates.json)
+          for index in "${!ids[@]}"; do
+            if (( index < 60 )); then decision=1; else decision=2; fi
+            curl --fail --silent --show-error \
+              --request POST "$ASPNETCORE_URLS/api/anomaly/ml/governance/candidates/${ids[$index]}/review" \
+              --header 'content-type: application/json' \
+              --data "{\"decision\":$decision,\"reviewedBy\":\"operator-a\",\"comment\":\"governance CI\"}" \
+              >/dev/null
+          done
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/governance/evaluation/ML-CV-CURRENT" \
+            | tee artifacts/governance-evaluation.json
+          [[ "$(jq -r '.totalCandidates' artifacts/governance-evaluation.json)" == "100" ]]
+          [[ "$(jq -r '.reviewedCandidates' artifacts/governance-evaluation.json)" == "100" ]]
+          [[ "$(jq -r '.truePositives' artifacts/governance-evaluation.json)" == "60" ]]
+          [[ "$(jq -r '.falsePositives' artifacts/governance-evaluation.json)" == "40" ]]
+          jq -e '.precision > 0.599 and .precision < 0.601' artifacts/governance-evaluation.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/governance/drift/ML-CV-CURRENT" \
+            | tee artifacts/governance-drift.json
+          jq -e '.sampleCount >= 100 and .modelVersion != null and .baselineMeanScore > 0 and .baselineP95Score > 0' \
+            artifacts/governance-drift.json >/dev/null
+
+      - name: Verify Shadow SQL isolation
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          query_sql() {
+            docker exec "$sql_container" bash -lc "
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x \"\$sqlcmd\" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              \"\$sqlcmd\" -S localhost -U sa -P \"\$MSSQL_SA_PASSWORD\" -C -d WCS_AnomalyGovernance -h -1 -W -Q \"$1\"
+            " | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1
+          }
+          candidates="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate')"
+          reviewed="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcMlCandidate WHERE ReviewDecision <> 0')"
+          formal="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 5')"
+          approved="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcMlModelGovernance WHERE ApprovalStatus = 1')"
+          drift="$(query_sql 'SELECT COUNT_BIG(*) FROM Wcs_PlcMlDriftSnapshot')"
+          printf 'candidates=%s\nreviewed=%s\nformal=%s\napproved=%s\ndrift=%s\n' \
+            "$candidates" "$reviewed" "$formal" "$approved" "$drift" | tee artifacts/governance-shadow-sql.txt
+          [[ "$candidates" == "100" ]]
+          [[ "$reviewed" == "100" ]]
+          [[ "$formal" == "0" ]]
+          [[ "$approved" == "1" ]]
+          (( drift >= 1 ))
+
+      - name: Restart in 25 percent Canary
+        shell: bash
+        run: |
+          pid="$(cat artifacts/governance-host.pid)"
+          kill "$pid" 2>/dev/null || true
+          for attempt in {1..30}; do
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          kill -9 "$pid" 2>/dev/null || true
+
+          pushd src/Wcs.Host/bin/Release/net8.0
+          env AnomalyDetection__MachineLearning__Profiles__0__CollectTrainingData=false \
+              AnomalyDetection__MachineLearning__Profiles__0__DeploymentMode=Canary \
+              AnomalyDetection__MachineLearning__Profiles__0__CanaryPercentage=25 \
+              nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/governance-canary-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/governance-host.pid"
+          popd
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/governance-canary-status.json
+              [[ "$(jq -r '.[0].deploymentMode' artifacts/governance-canary-status.json)" == "2" ]]
+              [[ "$(jq -r '.[0].canaryPercentage' artifacts/governance-canary-status.json)" == "25" ]]
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/governance-host.pid)" 2>/dev/null; then
+              cat artifacts/governance-canary-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Verify deterministic Canary split
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"anomaly","devices":100,"windows":3,"deviceOffset":50000,"startOffsetSeconds":7000,"concurrency":16}' \
+            --max-time 600 | tee artifacts/governance-canary-anomaly.json
+          [[ "$(jq -r '.raisedDelta' artifacts/governance-canary-anomaly.json)" == "100" ]]
+          active="$(jq -r '.status.activeRaised' artifacts/governance-canary-anomaly.json)"
+          shadow="$(jq -r '.status.shadowRaised' artifacts/governance-canary-anomaly.json)"
+          (( active >= 10 && active <= 40 ))
+          (( active + shadow == 100 ))
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"recovery","devices":100,"windows":3,"deviceOffset":50000,"startOffsetSeconds":7003,"concurrency":16}' \
+            --max-time 600 | tee artifacts/governance-canary-recovery.json
+          [[ "$(jq -r '.recoveredDelta' artifacts/governance-canary-recovery.json)" == "100" ]]
+
+          sql_container="${{ job.services.sqlserver.id }}"
+          formal="$(docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_AnomalyGovernance -h -1 -W \
+              -Q "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE '\''MLCV05%'\''"
+          ' | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1)"
+          [[ "$formal" == "$active" ]]
+          printf 'active=%s\nshadow=%s\nformal=%s\n' "$active" "$shadow" "$formal" \
+            | tee artifacts/governance-canary-result.txt
+
+      - name: Validate logs
+        if: always()
+        shell: bash
+        run: |
+          test -s artifacts/governance-shadow-host.log
+          for log in artifacts/governance-shadow-host.log artifacts/governance-canary-host.log; do
+            [[ -f "$log" ]] || continue
+            if grep -Eqi 'OutOfMemory|Unhandled exception|duplicate key|Stack overflow|failed to load.*model|PLC anomaly persistence failed after retries' "$log"; then
+              grep -Eni -C 5 'OutOfMemory|Unhandled exception|duplicate key|Stack overflow|failed to load.*model|PLC anomaly persistence failed after retries' "$log"
+              exit 1
+            fi
+          done
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/governance-host.pid ]]; then
+            kill "$(cat artifacts/governance-host.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload governance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-anomaly-ml-governance-${{ github.run_number }}
+          path: artifacts
+          if-no-files-found: error

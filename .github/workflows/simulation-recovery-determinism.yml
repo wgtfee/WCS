@@ -1,0 +1,73 @@
+name: WCS Simulation Recovery Determinism
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/VirtualIntegration/**'
+      - 'src/Wcs.Simulator.Tests/SimulationVirtualIntegrationTests.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-recovery-determinism.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-determinism:
+    name: verify checkpoint restore replay and exactly-once deterministic recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-s7-determinism
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee artifacts/simulation-s7-determinism/restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s7-determinism/build.log
+
+      - name: Run exact S7 runtime recovery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            --configuration Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualIntegrationTests' \
+            --logger 'trx;LogFileName=simulation-s7-determinism.trx' \
+            2>&1 | tee artifacts/simulation-s7-determinism/test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+10|Passed:[[:space:]]+10.*Total:[[:space:]]+10' artifacts/simulation-s7-determinism/test.log
+
+      - name: Verify checkpoint and replay policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -n 'CreateCheckpoint' src/Wcs.Simulator.Tests/SimulationVirtualIntegrationTests.cs
+          grep -n 'CreateSession' src/Wcs.Simulator.Tests/SimulationVirtualIntegrationTests.cs
+          grep -n 'ReplayTwiceAsync' src/Wcs.Simulator.Tests/SimulationVirtualIntegrationTests.cs
+          grep -n 'ToCanonicalJson' src/Wcs.Simulator.Tests/SimulationVirtualIntegrationTests.cs
+          grep -n 'ComputeHash' src/Wcs.Simulator.Tests/SimulationVirtualIntegrationTests.cs
+          grep -R -n 'IdempotencyKey' src/Wcs.Simulator/VirtualExternal/VirtualExternalRuntime.cs
+          grep -R -n 'CensoredNoFailure' src/Wcs.Simulator/VirtualIntegration/VirtualIntegrationRuntime.cs
+          ! grep -R -nE 'DateTime\.Now|DateTime\.UtcNow|Task\.Delay|Thread\.Sleep|Random\.Shared|HttpClient|SqlSugar|SqlConnection|Socket|TcpClient|UdpClient|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager' src/Wcs.Simulator/VirtualIntegration
+
+      - name: Upload S7 recovery determinism evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-recovery-determinism-${{ github.run_number }}
+          path: artifacts/simulation-s7-determinism/**
+          if-no-files-found: error
+          retention-days: 14

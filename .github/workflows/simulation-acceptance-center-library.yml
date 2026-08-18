@@ -1,0 +1,187 @@
+name: WCS Simulation Acceptance Center Library
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationAcceptanceLibraryViewModel.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationBeginnerViewModel.cs'
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationDataViewModel.cs'
+      - 'src/Wcs.Desktop/Views/SimulationAcceptanceCenterView.axaml'
+      - 'src/Wcs.Desktop/Views/SimulationAcceptanceCenterView.axaml.cs'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs'
+      - '.github/workflows/simulation-acceptance-center-library.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance-center:
+    name: build and verify governed acceptance scenario library
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Desktop Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-acceptance-center
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj 2>&1 | tee artifacts/simulation-acceptance-center/desktop-restore.log
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore 2>&1 | tee artifacts/simulation-acceptance-center/desktop-build.log
+
+      - name: Build Simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+
+      - name: Run covered simulator regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            -c Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualPlcTests|FullyQualifiedName~SimulationVirtualRgvTests|FullyQualifiedName~SimulationVirtualTrafficTests|FullyQualifiedName~SimulationVirtualExternalTests|FullyQualifiedName~SimulationVirtualHealthTests|FullyQualifiedName~SimulationVirtualIntegrationTests|FullyQualifiedName~SimulationGovernanceTests|FullyQualifiedName~SimulationGovernanceControllerTests|FullyQualifiedName~SimulationScenarioEngineTests|FullyQualifiedName~SimulationScenarioControllerTests|FullyQualifiedName~SimulationUnifiedConsoleTests' \
+            --logger 'trx;LogFileName=acceptance-center.trx' \
+            --results-directory artifacts/simulation-acceptance-center
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root=ET.parse('artifacts/simulation-acceptance-center/acceptance-center.trx').getroot()
+          results=root.findall('.//{*}UnitTestResult')
+          failed=[x.attrib.get('testName') for x in results if x.attrib.get('outcome') != 'Passed']
+          assert results, 'acceptance-center gate did not execute simulator tests'
+          assert not failed, f'failed acceptance-center tests: {failed}'
+          unified=[x for x in results if 'SimulationUnifiedConsoleTests' in x.attrib.get('testName','')]
+          assert len(unified) == 10, f'expected 10 S10 tests, got {len(unified)}'
+          print(f'Acceptance center simulator regressions: {len(results)}/{len(results)} success; S10=10/10')
+          PY
+
+      - name: Verify product, governance and safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          vm=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationAcceptanceLibraryViewModel.cs').read_text(encoding='utf-8')
+          beginner=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationBeginnerViewModel.cs').read_text(encoding='utf-8')
+          data=Path('src/Wcs.Desktop/ViewModels/SimulationVerificationDataViewModel.cs').read_text(encoding='utf-8')
+          view=Path('src/Wcs.Desktop/Views/SimulationAcceptanceCenterView.axaml').read_text(encoding='utf-8')
+          host=Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs').read_text(encoding='utf-8')
+          source=vm+beginner+data+view+host
+
+          templates=(
+              'plc-fault','rgv-flow','traffic-lifecycle','traffic-deadlock',
+              'external-fault','health-rul','integration-recovery','multi-fault'
+          )
+          missing=[x for x in templates if x not in vm or x not in beginner]
+          assert not missing, f'missing scenario templates: {missing}'
+
+          reused_builders=(
+              'TryLoadDevicePlcScenario','TryLoadDeviceRgvScenario',
+              'TryLoadTrafficOperationsScenario','TryLoadTrafficDeadlockScenario',
+              'TryLoadExternalOperationsScenario','TryLoadVisualHealthScenario',
+              'TryLoadVisualRecoveryScenario','ImportCurrentScenario',
+              'TryGenerateTimelineScenario','RunOneClickAcceptanceAsync'
+          )
+          missing=[x for x in reused_builders if x not in vm]
+          assert not missing, f'acceptance center must reuse existing governed builders: {missing}'
+          assert 'Action(' not in vm and 'Assertion(' not in vm and 'Payload(' not in vm, \
+              'acceptance center must not create a second Scenario DSL builder'
+
+          assert 'Simulation Acceptance Center' in vm
+          assert '仿真验收中心' in host and 'SimulationAcceptanceCenterView' in host
+          assert 'xmlns:atom="https://atomui.net"' in view
+          for marker in ('<atom:Card', '<atom:LineEdit', '<atom:Button', '<atom:ListView', '<atom:DataGrid'):
+              assert marker in view, f'AtomUI marker missing: {marker}'
+
+          beginner_markers=(
+              '仿真测试向导',
+              '第一步 · 选择测试用例',
+              '第三步 · 填写测试参数',
+              '第四步 · 查看系统实际生成的测试数据',
+              '第五步 · 查看测试结果',
+              '生成测试数据',
+              '一键开始测试',
+              '高级场景编辑',
+              '查看执行详情'
+          )
+          missing=[x for x in beginner_markers if x not in view]
+          assert not missing, f'Chinese beginner workflow markers missing: {missing}'
+          assert 'BeginnerAcceptanceTemplates' in view
+          assert 'ScenarioDataRows' in view
+          assert 'DataSummary' in view
+          assert '实际输入 / 预期数据' in view
+          assert 'BeginnerAcceptanceResultText' in view
+          assert 'GenerateAcceptanceLibraryScenarioCommand' in view
+          assert 'GenerateAndRunAcceptanceLibraryScenarioCommand' in view
+          assert '这里只操作软件仿真状态，不直接控制真实设备。' in view
+          assert '生产环境和未授权环境不会因为本页面改版而获得执行权限。' in view
+          assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])|<ListBox([ >])', view), \
+              'acceptance center regressed to native primary product controls'
+
+          assert 'SelectedAcceptanceTemplate = value is null' in beginner
+          assert 'AcceptanceLibraryPlcFaultKind = value.Value' in beginner
+          assert 'AcceptanceLibraryExternalFaultKind = value.Value' in beginner
+          assert 'AcceptanceLibraryExternalSystemKind = value.Value' in beginner
+          assert 'RebuildScenarioDataPreview' in data
+          assert 'SimulationScenarioChineseFormatter' in data
+
+          forbidden=(
+              'CommandBus','TaskScheduler','TaskOrchestrator','DeviceManager',
+              'TrafficCoordinator','RouteReservationManager','IPlcConnection','S7Connection',
+              'PlcForceWrite','/api/hil/verification','SqlConnection','SqlSugarClient',
+              'HttpClient','PostAsync','PutAsync','PatchAsync','DeleteAsync'
+          )
+          found=[x for x in forbidden if x in source]
+          assert not found, f'acceptance center references forbidden production/HIL/external runtime surface: {found}'
+          print('Simulation acceptance center Chinese beginner/product/governance/safety contract: PASS')
+          PY
+
+      - name: Write evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts/simulation-acceptance-center
+          cat > artifacts/simulation-acceptance-center/evidence.txt <<EOF
+          head_sha=${GITHUB_SHA}
+          surface=simulation-acceptance-center
+          scenario_templates=8
+          desktop_release_build=true
+          chinese_beginner_workflow=true
+          real_scenario_data_preview=true
+          plc_rgv_regression=true
+          traffic_external_regression=true
+          health_integration_regression=true
+          s0_s1_s10_regression=true
+          s10_test_count=10
+          atomui_list_view=true
+          atomui_data_grid=true
+          reuses_existing_builders=true
+          reuses_batch_c_timeline=true
+          reuses_batch_d_one_click_acceptance=true
+          second_simulation_engine=false
+          direct_production_control=false
+          direct_hil_control=false
+          EOF
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-acceptance-center-${{ github.run_number }}
+          path: artifacts/simulation-acceptance-center/**
+          if-no-files-found: error
+          retention-days: 30

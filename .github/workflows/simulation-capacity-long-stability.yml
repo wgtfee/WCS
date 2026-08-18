@@ -1,0 +1,97 @@
+name: WCS Simulation Capacity Long Stability
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Simulator/CapacityReadiness/**'
+      - 'src/Wcs.Simulator.Tests/SimulationCapacityReadinessTests.cs'
+      - 'src/Wcs.Host/Controllers/SimulationCapacityReadinessController.cs'
+      - 'src/Wcs.Host/Simulation/SimulationHostRuntime.cs'
+      - 'src/Wcs.Host/appsettings.Simulation*.json'
+      - '.github/workflows/simulation-capacity-long-stability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capacity-long-stability:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/simulation-s8-') }}
+    name: verify bounded virtual 8h and 24h capacity stability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-s8-capacity
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj 2>&1 | tee artifacts/simulation-s8-capacity/restore.log
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s8-capacity/build-tests.log
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee artifacts/simulation-s8-capacity/restore-host.log
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee artifacts/simulation-s8-capacity/build-host.log
+
+      - name: Run 12 S8 capacity tests with resource evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/time -v -o artifacts/simulation-s8-capacity/resource.txt \
+            dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+              --configuration Release --no-build \
+              --filter 'FullyQualifiedName~SimulationCapacityReadinessTests' \
+              --logger 'trx;LogFileName=simulation-s8-capacity.trx' \
+              2>&1 | tee artifacts/simulation-s8-capacity/test.log
+          grep -Eq 'Passed!.*Total:[[:space:]]+12|Passed:[[:space:]]+12.*Total:[[:space:]]+12' artifacts/simulation-s8-capacity/test.log
+          grep -E 'Elapsed|Maximum resident set size|Voluntary context switches|Involuntary context switches' artifacts/simulation-s8-capacity/resource.txt \
+            | tee artifacts/simulation-s8-capacity/resource-summary.txt
+
+      - name: Verify S8 capacity isolation and bounded contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir='src/Wcs.Simulator/CapacityReadiness'
+          grep -R -n 'SimulationStateStore' "$source_dir"
+          grep -R -n 'VirtualIntegrationRuntime' "$source_dir"
+          grep -R -n 'EightHourVirtualDurationMilliseconds' "$source_dir"
+          grep -R -n 'TwentyFourHourVirtualDurationMilliseconds' "$source_dir"
+          grep -R -n 'MaximumRssGrowthBytes' "$source_dir"
+          if grep -R -nE 'HttpClient|SqlSugar|SqlConnection|Microsoft\.Data\.SqlClient|System\.Data\.SqlClient|Socket|TcpClient|UdpClient|IPlcClient|IPlcConnection|S7CommPlusDriver|S7Client|S7RealClient|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|IAssetFailureForecastService|InferenceSession' "$source_dir"; then
+            echo 'S8 capacity runtime entered a production I/O/control/model path.' >&2
+            exit 1
+          fi
+          if grep -R -nE 'DateTime\.Now|DateTime\.UtcNow|Task\.Delay|Thread\.Sleep|Random\.Shared' "$source_dir"; then
+            echo 'S8 deterministic capacity runtime must not use wall-clock waits or nondeterministic random.' >&2
+            exit 1
+          fi
+
+      - name: Verify bounded S8 configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'SimulationCapacityReadiness' src/Wcs.Host/appsettings.Simulation.json
+          grep -q 'SimulationCapacityReadiness' src/Wcs.Host/appsettings.SimulationLoadTest.json
+          grep -q '28800000' src/Wcs.Host/appsettings.Simulation.json
+          grep -q '86400000' src/Wcs.Host/appsettings.SimulationLoadTest.json
+          grep -q 'controlWritesAllowed = false' src/Wcs.Host/Controllers/SimulationCapacityReadinessController.cs
+
+      - name: Upload S8 capacity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-capacity-long-stability-${{ github.run_number }}
+          path: artifacts/simulation-s8-capacity/**
+          if-no-files-found: error
+          retention-days: 14

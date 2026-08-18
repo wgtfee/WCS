@@ -1,0 +1,235 @@
+name: WCS Transport Cycle Analysis
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/transport-cycle-analysis.yml"
+      - "src/Wcs.Core/TransportScheduling/TransportCycleAnalysis*.cs"
+      - "src/Wcs.Core/TransportScheduling/ObservedTransportExecutionEngine.cs"
+      - "src/Wcs.Core/TransportScheduling/TransportSchedulingRegistrationExtensions.cs"
+      - "src/Wcs.Infrastructure/DependencyInjection.cs"
+      - "src/Wcs.Host/Controllers/TransportCycleAnalysis*.cs"
+      - "src/Wcs.Host/appsettings.json"
+      - "src/Wcs.Core.Tests/TransportCycleAnalysisTests.cs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-transport-cycle-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cycle-model-e2e:
+    name: phase trajectory, robust baseline, and anomaly E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_CycleTest!2026"
+        ports:
+          - 1433:1433
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: LoadTest
+      DOTNET_ENVIRONMENT: LoadTest
+      ASPNETCORE_URLS: http://127.0.0.1:5094
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_CycleAnalysis;User Id=sa;Password=Wcs_CycleTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0"
+      Storage__Telemetry__Provider: Disabled
+      AnomalyDetection__Enabled: "false"
+      AnomalyDetection__MachineLearning__Enabled: "false"
+      TransportCycleAnalysis__Enabled: "true"
+      TransportCycleAnalysis__MinimumBaselineCycles: "20"
+      TransportCycleAnalysis__MaximumBaselineCyclesPerContext: "5000"
+      TransportCycleAnalysis__MaximumTrackedExecutions: "20000"
+      TransportCycleAnalysis__MaximumCompletedCycles: "10000"
+      TransportCycleAnalysis__MaximumAnomalies: "10000"
+      TransportCycleAnalysis__MadMultiplier: "6"
+      TransportCycleAnalysis__MinimumMadMilliseconds: "10"
+      TransportCycleAnalysis__MinimumTotalDurationMilliseconds: "0"
+      TransportCycleAnalysis__MinimumPhaseDurationMilliseconds: "0"
+      TransportObservability__Enabled: "false"
+      TransportResilience__Enabled: "false"
+      TransportResilience__AutomaticBackupEnabled: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build and test cycle model
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~TransportCycleAnalysisTests' \
+            --logger 'trx;LogFileName=transport-cycle-analysis-tests.trx' \
+            --results-directory artifacts/TestResults
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_CycleAnalysis]"
+          '
+
+      - name: Start Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/transport-cycle-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/transport-cycle-host.pid"
+          popd >/dev/null
+
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/transport/cycle-analysis/status" \
+                | tee artifacts/transport-cycle-initial-status.json
+              jq -e '.enabled == true and .completedCycles == 0 and .trackedExecutions == 0' \
+                artifacts/transport-cycle-initial-status.json >/dev/null
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/transport-cycle-host.pid)" 2>/dev/null; then
+              cat artifacts/transport-cycle-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/transport-cycle-host.log
+          exit 1
+
+      - name: Run deterministic cycle scenario
+        shell: bash
+        run: |
+          pid="$(cat artifacts/transport-cycle-host.pid)"
+          rss_before_kb="$(ps -o rss= -p "$pid" | tr -d ' ')"
+          echo "$rss_before_kb" > artifacts/transport-cycle-rss-before-kb.txt
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/transport/cycle-analysis/load/scenario" \
+            --header 'content-type: application/json' \
+            --data '{"requestPrefix":"CYCLE-E2E","baselineCycles":100,"slowCycles":20,"invalidCycles":10,"faultedCycles":10,"alternateContextCycles":10}' \
+            --max-time 900 | tee artifacts/transport-cycle-scenario.json
+
+          jq -e '
+            .pipeline == "ExecutionSnapshot->CycleTracker->PhaseDurations->RouteLoadContext->MedianMAD->ReadOnlyAPI" and
+            .cycleDelta == 150 and
+            .successfulDelta == 130 and
+            .interruptedDelta == 20 and
+            .invalidSequenceDelta == 10 and
+            .durationAnomalyDelta == 40 and
+            .observedTransitionDelta == 700 and
+            .baselineContextDelta == 2 and
+            .retainedCycleDelta == 150 and
+            .retainedAnomalyDelta == 50 and
+            .slowTotalAnomalies == 20 and
+            .slowPhaseAnomalies == 20 and
+            .alternateContextAnomalies == 0 and
+            .invalidSequenceAnomalies == 10 and
+            .validSuccessfulCycles == 130 and
+            .invalidCompletedCycles == 10 and
+            .faultedAuditCycles == 10 and
+            .status.trackedExecutions == 0 and
+            .status.droppedExecutions == 0
+          ' artifacts/transport-cycle-scenario.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/transport/cycle-analysis/status" \
+            | tee artifacts/transport-cycle-final-status.json
+          jq -e '
+            .enabled == true and
+            .trackedExecutions == 0 and
+            .completedCycles == 150 and
+            .baselineContexts == 2 and
+            .successfulCycles == 130 and
+            .interruptedCycles == 20 and
+            .invalidSequenceAnomalies == 10 and
+            .durationAnomalies == 40 and
+            .droppedExecutions == 0
+          ' artifacts/transport-cycle-final-status.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/transport/cycle-analysis/cycles?maxCount=500" \
+            | tee artifacts/transport-cycle-cycles.json >/dev/null
+          [[ "$(jq 'length' artifacts/transport-cycle-cycles.json)" == "150" ]]
+          [[ "$(jq '[.[] | select(.isSuccessful == true)] | length' artifacts/transport-cycle-cycles.json)" == "130" ]]
+          [[ "$(jq '[.[] | select((.requestId | contains("-INVALID-")) and .isSequenceValid == false)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
+          [[ "$(jq '[.[] | select((.requestId | contains("-FAULT-")) and .isSuccessful == false)] | length' artifacts/transport-cycle-cycles.json)" == "10" ]]
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/transport/cycle-analysis/anomalies?maxCount=500" \
+            | tee artifacts/transport-cycle-anomalies.json >/dev/null
+          [[ "$(jq 'length' artifacts/transport-cycle-anomalies.json)" == "50" ]]
+          [[ "$(jq '[.[] | select(.requestId | contains("-INVALID-"))] | length' artifacts/transport-cycle-anomalies.json)" == "10" ]]
+          [[ "$(jq '[.[] | select((.requestId | contains("-SLOW-")) and .phase != null)] | length' artifacts/transport-cycle-anomalies.json)" == "20" ]]
+          [[ "$(jq '[.[] | select((.requestId | contains("-SLOW-")) and .phase == null)] | length' artifacts/transport-cycle-anomalies.json)" == "20" ]]
+          [[ "$(jq '[.[] | select(.requestId | contains("-ALT-"))] | length' artifacts/transport-cycle-anomalies.json)" == "0" ]]
+
+          sleep 2
+          rss_after_kb="$(ps -o rss= -p "$pid" | tr -d ' ')"
+          echo "$rss_after_kb" > artifacts/transport-cycle-rss-after-kb.txt
+          growth_mb="$(( (rss_after_kb - rss_before_kb) / 1024 ))"
+          printf 'rss_before_kb=%s\nrss_after_kb=%s\ngrowth_mb=%s\n' \
+            "$rss_before_kb" "$rss_after_kb" "$growth_mb" \
+            | tee artifacts/transport-cycle-memory.txt
+          (( growth_mb < 256 ))
+
+      - name: Validate Host log
+        if: always()
+        shell: bash
+        run: |
+          [[ -f artifacts/transport-cycle-host.log ]] || exit 0
+          if grep -Eqi 'Unhandled exception|fail:|Stack overflow|OutOfMemoryException|fatal' \
+            artifacts/transport-cycle-host.log; then
+            grep -Ein 'Unhandled exception|fail:|Stack overflow|OutOfMemoryException|fatal' \
+              artifacts/transport-cycle-host.log || true
+            exit 1
+          fi
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/transport-cycle-host.pid ]]; then
+            pid="$(cat artifacts/transport-cycle-host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..30}; do
+              if ! kill -0 "$pid" 2>/dev/null; then exit 0; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload cycle-analysis evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-transport-cycle-analysis-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 30

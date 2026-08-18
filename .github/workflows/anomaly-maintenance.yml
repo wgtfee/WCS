@@ -1,0 +1,390 @@
+name: WCS Asset Health Maintenance
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - '.github/workflows/anomaly-maintenance*.yml'
+      - 'src/Wcs.Core/AnomalyDetection/Maintenance/**'
+      - 'src/Wcs.Core.Tests/AssetHealthMaintenance*'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Maintenance/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/PlcMlDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Host/Controllers/AnomalyMaintenance*.cs'
+      - 'src/Wcs.Host/appsettings*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  ASPNETCORE_ENVIRONMENT: LoadTest
+  DOTNET_ENVIRONMENT: LoadTest
+  ASPNETCORE_URLS: http://127.0.0.1:5140
+  ConnectionStrings__WcsDb: 'Server=127.0.0.1,1433;Database=WCS_Maintenance;User Id=sa;Password=Wcs_Maintenance!2026;Encrypt=False;TrustServerCertificate=True;'
+  Simulator__Enabled: 'false'
+  Storage__Telemetry__Provider: Disabled
+  AnomalyDetection__Enabled: 'false'
+  AnomalyDetection__MachineLearning__Enabled: 'false'
+  AnomalyDetection__MachineLearning__ManagementApiEnabled: 'false'
+  TransportCycleAnalysis__Enabled: 'false'
+  AnomalyFusion__Enabled: 'false'
+  AnomalyHealthScoring__Enabled: 'false'
+  AssetHealthGovernance__Enabled: 'false'
+  AssetHealthRootCause__Enabled: 'false'
+  AssetHealthMaintenance__Enabled: 'true'
+  AssetHealthMaintenance__EvaluationIntervalSeconds: '3600'
+  AssetHealthMaintenance__MaximumRules: '100'
+  AssetHealthMaintenance__MaximumItemsPerRecommendation: '20'
+  AssetHealthMaintenance__MaximumRecommendationsQueryCount: '1000'
+  AssetHealthMaintenance__MinimumRootCauseConfidence: '0.25'
+  AssetHealthMaintenance__RecommendationRetentionHours: '24'
+  AssetHealthMaintenance__MaintenanceIntervalSeconds: '3600'
+  AssetHealthMaintenance__MaintenanceBatchSize: '100'
+  AssetHealthMaintenance__RuleSet__Version: maintenance-e2e-v1
+  AssetHealthMaintenance__RuleSet__Source: github-actions
+  AssetHealthMaintenance__RuleSet__ApprovedBy: ci-maintenance-engineer
+  AssetHealthMaintenance__RuleSet__ApprovedAtUtc: '2026-07-28T00:00:00Z'
+  AssetHealthMaintenance__RuleSet__Rules__0__RuleId: RULE-MOTOR-E2E
+  AssetHealthMaintenance__RuleSet__Rules__0__RootCauseNodeId: N-MOTOR
+  AssetHealthMaintenance__RuleSet__Rules__0__RootCauseKind: Component
+  AssetHealthMaintenance__RuleSet__Rules__0__MinimumEventGrade: Degraded
+  AssetHealthMaintenance__RuleSet__Rules__0__Title: Inspect motor electrical and mechanical condition
+  AssetHealthMaintenance__RuleSet__Rules__0__Priority: '2'
+  AssetHealthMaintenance__RuleSet__Rules__0__EstimatedMinutes: '45'
+  AssetHealthMaintenance__RuleSet__Rules__0__InspectionItems__0: Check motor current terminals
+  AssetHealthMaintenance__RuleSet__Rules__0__InspectionItems__1: Inspect coupling alignment
+  AssetHealthMaintenance__RuleSet__Rules__0__Components__0: Motor
+  AssetHealthMaintenance__RuleSet__Rules__0__Components__1: Coupling
+  AssetHealthMaintenance__RuleSet__Rules__0__Tools__0: Clamp meter
+  AssetHealthMaintenance__RuleSet__Rules__0__SpareParts__0: Motor bearing
+  AssetHealthMaintenance__RuleSet__Rules__0__SafetyNotes__0: Lock out and tag out before inspection
+
+jobs:
+  maintenance:
+    name: recommendation, feedback, labels, sql, and restart recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: 'Wcs_Maintenance!2026'
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Host and focused tests
+        shell: bash
+        run: |
+          mkdir -p artifacts/TestResults
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~AssetHealthMaintenanceDecisionEngineTests' \
+            --logger 'trx;LogFileName=asset-health-maintenance.trx' \
+            --results-directory artifacts/TestResults
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          echo "$sql_container" > artifacts/sql-container-id.txt
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_Maintenance]"
+          '
+
+      - name: Start Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/maintenance-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/maintenance-host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/maintenance/status" \
+                | tee artifacts/maintenance-initial-status.json
+              jq -e '.runtime.enabled == true and .runtime.ruleSetValid == true and .runtime.ruleCount == 1 and .store.isAvailable == true and .store.registeredRuleSets == 1' \
+                artifacts/maintenance-initial-status.json >/dev/null
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/maintenance-host.pid)" 2>/dev/null; then
+              cat artifacts/maintenance-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/maintenance-host.log
+          exit 1
+
+      - name: Verify recommendation and idempotency
+        shell: bash
+        run: |
+          cat > artifacts/maintenance-request.json <<'JSON'
+          {
+            "analysis": {
+              "analysisId": "ANALYSIS-MAINT-E2E",
+              "triggerEventId": "E-STATION-MAINT",
+              "triggerEventVersion": 3,
+              "triggerAssetId": "ST-01",
+              "graphVersion": "graph-e2e-v1",
+              "graphHash": "graph-e2e-hash",
+              "windowStartUtc": "2026-07-28T00:00:00Z",
+              "windowEndUtc": "2026-07-28T00:05:00Z",
+              "analyzedAtUtc": "2026-07-28T00:05:00Z",
+              "observedEventCount": 3,
+              "observedEventIds": ["E-MOTOR", "E-CONVEYOR", "E-STATION-MAINT"],
+              "candidates": [
+                {
+                  "nodeId": "N-MOTOR",
+                  "entityId": "MOTOR-01",
+                  "displayName": "Motor 01",
+                  "kind": 1,
+                  "confidence": 0.82,
+                  "coverageScore": 1.0,
+                  "topologyScore": 1.0,
+                  "temporalScore": 0.95,
+                  "severityScore": 0.8,
+                  "supportingEventCount": 3,
+                  "supportingEventIds": ["E-MOTOR", "E-CONVEYOR", "E-STATION-MAINT"],
+                  "propagationPaths": [],
+                  "explanation": "reviewed upstream motor root cause"
+                }
+              ],
+              "primaryCandidate": {
+                "nodeId": "N-MOTOR",
+                "entityId": "MOTOR-01",
+                "displayName": "Motor 01",
+                "kind": 1,
+                "confidence": 0.82,
+                "coverageScore": 1.0,
+                "topologyScore": 1.0,
+                "temporalScore": 0.95,
+                "severityScore": 0.8,
+                "supportingEventCount": 3,
+                "supportingEventIds": ["E-MOTOR", "E-CONVEYOR", "E-STATION-MAINT"],
+                "propagationPaths": [],
+                "explanation": "reviewed upstream motor root cause"
+              },
+              "reviewDecision": 1,
+              "reviewedBy": "root-cause-reviewer",
+              "reviewedAtUtc": "2026-07-28T00:06:00Z",
+              "reviewNote": "confirmed after field evidence review",
+              "selectedRootCauseNodeId": "N-MOTOR"
+            },
+            "healthEvent": {
+              "eventId": "E-STATION-MAINT",
+              "eventKey": "ST-01",
+              "assetId": "ST-01",
+              "version": 3,
+              "lifecycleStatus": 0,
+              "grade": 3,
+              "peakGrade": 3,
+              "healthScore": 20,
+              "lowestHealthScore": 20,
+              "firstDetectedUtc": "2026-07-28T00:00:20Z",
+              "lastObservedUtc": "2026-07-28T00:05:00Z",
+              "acknowledged": true,
+              "isSuppressed": false,
+              "reason": "station cycle timeout",
+              "source": "LoadTest",
+              "category": "Deterministic"
+            }
+          }
+          JSON
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/maintenance-request.json \
+            "$ASPNETCORE_URLS/api/anomaly/maintenance/load/recommendations" \
+            | tee artifacts/maintenance-first.json
+          jq -e '.inserted == true and .recommendation.ruleId == "RULE-MOTOR-E2E" and .recommendation.rootCauseNodeId == "N-MOTOR" and .recommendation.status == 0 and ((.recommendation.inspectionItems | length) == 2)' \
+            artifacts/maintenance-first.json >/dev/null
+          recommendation_id="$(jq -r '.recommendation.recommendationId' artifacts/maintenance-first.json)"
+          echo "$recommendation_id" > artifacts/recommendation-id.txt
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/maintenance-request.json \
+            "$ASPNETCORE_URLS/api/anomaly/maintenance/load/recommendations" \
+            | tee artifacts/maintenance-duplicate.json
+          jq -e --arg id "$recommendation_id" '.inserted == false and .recommendation.recommendationId == $id and .status.retainedRecommendations == 1' \
+            artifacts/maintenance-duplicate.json >/dev/null
+
+      - name: Verify MES work-order feedback and metrics
+        shell: bash
+        run: |
+          recommendation_id="$(cat artifacts/recommendation-id.txt)"
+          cat > artifacts/maintenance-accepted.json <<'JSON'
+          {
+            "feedbackId": "FEEDBACK-ACCEPTED-E2E",
+            "decision": 0,
+            "actor": "planner-a",
+            "mesWorkOrderNo": "MES-WO-1001",
+            "assignedTo": "technician-a",
+            "note": "inspection accepted and work order assigned"
+          }
+          JSON
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/maintenance-accepted.json \
+            "$ASPNETCORE_URLS/api/anomaly/maintenance/load/recommendations/$recommendation_id/feedback" \
+            | tee artifacts/maintenance-after-accepted.json
+          jq -e '.recommendation.status == 1 and .recommendation.mesWorkOrderNo == "MES-WO-1001" and .recommendation.assignedTo == "technician-a" and (.feedback | length) == 1 and (.labels | length) == 0 and .metrics.acceptedRecommendations == 1 and .metrics.acceptanceRate == 1' \
+            artifacts/maintenance-after-accepted.json >/dev/null
+
+          cat > artifacts/maintenance-repaired.json <<'JSON'
+          {
+            "feedbackId": "FEEDBACK-REPAIRED-E2E",
+            "decision": 3,
+            "actor": "technician-a",
+            "postHealthScore": 92,
+            "mesWorkOrderNo": "MES-WO-1001",
+            "assignedTo": "technician-a",
+            "note": "motor terminal retightened and coupling realigned"
+          }
+          JSON
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/maintenance-repaired.json \
+            "$ASPNETCORE_URLS/api/anomaly/maintenance/load/recommendations/$recommendation_id/feedback" \
+            | tee artifacts/maintenance-after-repaired.json
+          jq -e '.recommendation.status == 4 and .recommendation.postMaintenanceHealthScore == 92 and .recommendation.latestFeedbackDecision == 3 and (.feedback | length) == 2 and (.labels | length) == 1 and .labels[0].label == "fault-confirmed" and .labels[0].status == 0 and .metrics.repairedCount == 1 and .metrics.confirmedFaultRate == 1 and .metrics.falsePositiveRate == 0' \
+            artifacts/maintenance-after-repaired.json >/dev/null
+          candidate_id="$(jq -r '.labels[0].candidateId' artifacts/maintenance-after-repaired.json)"
+          echo "$candidate_id" > artifacts/training-label-id.txt
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/maintenance-repaired.json \
+            "$ASPNETCORE_URLS/api/anomaly/maintenance/load/recommendations/$recommendation_id/feedback" \
+            | tee artifacts/maintenance-repaired-duplicate.json
+          jq -e '(.feedback | length) == 2 and (.labels | length) == 1 and .metrics.repairedCount == 1' \
+            artifacts/maintenance-repaired-duplicate.json >/dev/null
+
+      - name: Verify training label approval
+        shell: bash
+        run: |
+          candidate_id="$(cat artifacts/training-label-id.txt)"
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data '{"status":1,"actor":"model-governor-a","note":"approved as candidate label only"}' \
+            "$ASPNETCORE_URLS/api/anomaly/maintenance/training-labels/$candidate_id/review" \
+            | tee artifacts/maintenance-label-approved.json
+          jq -e '.status == 1 and .reviewedBy == "model-governor-a" and .label == "fault-confirmed"' \
+            artifacts/maintenance-label-approved.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/maintenance/training-labels?maxCount=10" \
+            | tee artifacts/maintenance-labels.json
+          jq -e 'length == 1 and .[0].status == 1' artifacts/maintenance-labels.json >/dev/null
+
+      - name: Verify SQL exact counts
+        shell: bash
+        run: |
+          sql_container="$(cat artifacts/sql-container-id.txt)"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_Maintenance -W -h -1 -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM Wcs_AssetHealthMaintenanceRuleSetVersion; SELECT COUNT(*) FROM Wcs_AssetHealthMaintenanceRecommendation; SELECT COUNT(*) FROM Wcs_AssetHealthMaintenanceFeedbackJournal; SELECT COUNT(*) FROM Wcs_AssetHealthMaintenanceTrainingLabel;"
+          ' | sed '/^[[:space:]]*$/d' | tee artifacts/maintenance-sql-counts.txt
+          mapfile -t counts < <(grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' artifacts/maintenance-sql-counts.txt | tr -d ' ')
+          [[ "${counts[0]}" == "1" ]]
+          [[ "${counts[1]}" == "1" ]]
+          [[ "${counts[2]}" == "2" ]]
+          [[ "${counts[3]}" == "1" ]]
+
+      - name: Verify Host restart recovery
+        shell: bash
+        run: |
+          kill "$(cat artifacts/maintenance-host.pid)"
+          wait "$(cat artifacts/maintenance-host.pid)" 2>/dev/null || true
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/maintenance-host-restart.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/maintenance-host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then break; fi
+            if ! kill -0 "$(cat artifacts/maintenance-host.pid)" 2>/dev/null; then
+              cat artifacts/maintenance-host-restart.log
+              exit 1
+            fi
+            if [[ "$attempt" -eq 90 ]]; then cat artifacts/maintenance-host-restart.log; exit 1; fi
+            sleep 2
+          done
+
+          recommendation_id="$(cat artifacts/recommendation-id.txt)"
+          candidate_id="$(cat artifacts/training-label-id.txt)"
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 5 \
+              "$ASPNETCORE_URLS/api/anomaly/maintenance/recommendations/$recommendation_id" \
+              -o artifacts/maintenance-after-restart.json \
+              && jq -e '.status == 4 and .postMaintenanceHealthScore == 92 and .mesWorkOrderNo == "MES-WO-1001" and .latestFeedbackDecision == 3' \
+                artifacts/maintenance-after-restart.json >/dev/null; then break; fi
+            if [[ "$attempt" -eq 30 ]]; then cat artifacts/maintenance-after-restart.json 2>/dev/null || true; cat artifacts/maintenance-host-restart.log; exit 1; fi
+            sleep 1
+          done
+          cat artifacts/maintenance-after-restart.json
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/maintenance/recommendations/$recommendation_id/feedback?maxCount=10" \
+            | tee artifacts/maintenance-feedback-after-restart.json
+          jq -e 'length == 2 and .[0].decision == 3 and .[1].decision == 0' \
+            artifacts/maintenance-feedback-after-restart.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/maintenance/training-labels?maxCount=10" \
+            | tee artifacts/maintenance-label-after-restart.json
+          jq -e --arg id "$candidate_id" 'length == 1 and .[0].candidateId == $id and .[0].status == 1' \
+            artifacts/maintenance-label-after-restart.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/maintenance/status" \
+            | tee artifacts/maintenance-final-status.json
+          jq -e '.store.registeredRuleSets == 1 and .store.retainedRecommendations == 1 and .store.retainedFeedbackRows == 2 and .store.pendingTrainingLabels == 0 and .metrics.totalRecommendations == 1 and .metrics.repairedCount == 1' \
+            artifacts/maintenance-final-status.json >/dev/null
+
+      - name: Stop services
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/maintenance-host.pid ]]; then kill "$(cat artifacts/maintenance-host.pid)" 2>/dev/null || true; fi
+          if [[ -f artifacts/sql-container-id.txt ]]; then docker logs "$(cat artifacts/sql-container-id.txt)" > artifacts/sqlserver.log 2>&1 || true; fi
+
+      - name: Upload maintenance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-asset-health-maintenance-${{ github.run_number }}
+          path: artifacts/**
+          if-no-files-found: error
+          retention-days: 14

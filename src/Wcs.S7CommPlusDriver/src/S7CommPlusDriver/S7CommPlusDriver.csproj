@@ -24,17 +24,26 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
 
-  <!-- OpenSSL 原生 DLL -->
+  <!--
+    OpenSSL 原生 DLL 由现场/开发机部署包提供，不提交到源码仓库。
+    仅在文件实际存在时复制，避免纯编译和单元测试环境因缺少本机二进制文件失败。
+  -->
   <ItemGroup>
-    <Content Include="OpenSSL-dll-x64\libcrypto-3-x64.dll">
+    <Content Include="OpenSSL-dll-x64\libcrypto-3-x64.dll"
+             Condition="Exists('OpenSSL-dll-x64\libcrypto-3-x64.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="OpenSSL-dll-x86\libcrypto-3.dll">
+    <Content Include="OpenSSL-dll-x86\libcrypto-3.dll"
+             Condition="Exists('OpenSSL-dll-x86\libcrypto-3.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <Link>libcrypto-3.dll</Link>
     </Content>
-    <Content Include="OpenSSL-dll-x86\libssl-3.dll">
+    <Content Include="OpenSSL-dll-x86\libssl-3.dll"
+             Condition="Exists('OpenSSL-dll-x86\libssl-3.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
 

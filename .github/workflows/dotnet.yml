@@ -1,28 +1,120 @@
-# This workflow will build a .NET project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
-
-name: .NET
+name: WCS Windows CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "develop" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "develop" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-windows-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
-
+  core-tests:
+    name: Build and test Wcs.Core
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+      TEST_PROJECT: src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore $env:TEST_PROJECT
+      - run: dotnet build $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-restore
+      - run: dotnet test $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-build --verbosity normal --logger "trx;LogFileName=wcs-core-tests.trx" --results-directory TestResults
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-core-test-results-${{ github.run_number }}
+          path: TestResults
+          if-no-files-found: warn
+          retention-days: 14
+
+  simulator-tests:
+    name: Build and test Wcs.Simulator verification
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+      TEST_PROJECT: src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+      SIMULATOR_TEST_FILTER: FullyQualifiedName!~DecisionIntelligenceSqlPersistenceTests&FullyQualifiedName!~BoundedAutomationSqlEvidenceTests&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlRegistry_PersistsAcrossRegistryInstances&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlRegistry_RejectsSameVersionWithDifferentManifestHash&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlDeployment_RestartRecoveryRestoresChampionAndFallback&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlDeployment_ThreePromotionsKeepExactlyOneChampionAndOneFallback&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlAuditJournal_DuplicateAuditIdIsRejectedByAppendOnlyConstraint&FullyQualifiedName!~ModelOpsCenterAdvancedTests.SqlQuarantine_PersistsFailClosedStateAndAuditAcrossInstances
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Verify dedicated SQL workflow ownership
+        shell: pwsh
+        run: |
+          $workflowPaths = @(
+            '.github/workflows/idi-p1-modelops.yml',
+            '.github/workflows/idi-p3-decision-sql.yml',
+            '.github/workflows/idi-p6-readiness-sql.yml'
+          )
+          foreach ($path in $workflowPaths) {
+            if (-not (Test-Path $path)) {
+              throw "Dedicated SQL workflow is missing: $path"
+            }
+            $content = Get-Content $path -Raw
+            if ($content -notmatch [regex]::Escape("- '.github/workflows/dotnet.yml'")) {
+              throw "Dedicated SQL workflow must be triggered when dotnet.yml changes: $path"
+            }
+          }
+      - run: dotnet restore $env:TEST_PROJECT
+      - run: dotnet build $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-restore
+      - run: dotnet test $env:TEST_PROJECT --configuration $env:CONFIGURATION --no-build --filter "$env:SIMULATOR_TEST_FILTER" --verbosity normal --logger "trx;LogFileName=wcs-simulator-tests.trx" --results-directory TestResults
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulator-test-results-${{ github.run_number }}
+          path: TestResults
+          if-no-files-found: warn
+          retention-days: 14
+
+  host-build:
+    name: Build Wcs.Host
+    needs: [core-tests, simulator-tests]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+      HOST_PROJECT: src/Wcs.Host/Wcs.Host.csproj
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore $env:HOST_PROJECT
+      - run: dotnet build $env:HOST_PROJECT --configuration $env:CONFIGURATION --no-restore
+
+  desktop-build:
+    name: Build Wcs.Desktop
+    needs: [core-tests, simulator-tests]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CONFIGURATION: Release
+      DESKTOP_PROJECT: src/Wcs.Desktop/Wcs.Desktop.csproj
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore $env:DESKTOP_PROJECT
+      - run: dotnet build $env:DESKTOP_PROJECT --configuration $env:CONFIGURATION --no-restore

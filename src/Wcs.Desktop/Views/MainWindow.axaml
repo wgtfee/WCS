@@ -4,228 +4,207 @@
         xmlns:vm="using:Wcs.Desktop.ViewModels"
         xmlns:Vc="using:Wcs.Entity"
         xmlns:ctl="using:Wcs.Desktop.Controls"
+        xmlns:atom="https://atomui.net"
         x:DataType="vm:MainWindowViewModel"
         x:Name="MainWin"
-        Title="WCS Runtime Engine"
-        Width="1280" Height="800"
+        Title="WCS · Warehouse Control System"
+        Width="1440" Height="900"
+        MinWidth="1100" MinHeight="720"
         Background="{DynamicResource BgPrimary}"
-        Foreground="White"
+        Foreground="{DynamicResource TextPrimary}"
         WindowStartupLocation="CenterScreen">
 
     <Window.Styles>
-        <!-- 全局去掉焦点白框 + Flyout 白边框 -->
-        <Style Selector="Button">
-            <Setter Property="FocusAdorner" Value="{x:Null}"/>
-        </Style>
         <Style Selector="FlyoutPresenter">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
         </Style>
-        <Style Selector="TreeView">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-        </Style>
-        <Style Selector="TreeViewItem">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
-        </Style>
-        <Style Selector="TreeViewItem:selected /template/ Border#RootBorder,
-                         TreeViewItem:focus-visible /template/ Border#RootBorder,
-                         TreeViewItem:selected:focus /template/ Border#RootBorder,
-                         TreeViewItem:selected:pointerover /template/ Border#RootBorder">
-            <Setter Property="Background" Value="{DynamicResource TreeViewSelectedBg}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-        </Style>
-        <Style Selector="TreeViewItem:selected, TreeViewItem:selected:focus">
-            <Setter Property="Background" Value="{DynamicResource TreeViewSelectedBg}"/>
-        </Style>
-
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto">
-
-        <!-- 顶部 Header 
-        <Border Background="{DynamicResource BgSecondary}" Padding="16,8">
-            <TextBlock Text="{Binding ConnectionText}" FontSize="12" Foreground="{DynamicResource TextSecondary}"/>
-        </Border>
--->
-        <!-- 主区域：固定左侧菜单 + 右侧标签页 -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
-
-            <!-- 左侧菜单 -->
-            <Border Background="{DynamicResource BgSidebar}"
-                    BorderThickness="0,0,1,0" BorderBrush="{DynamicResource BorderColor}"
-                    Width="{Binding SidebarWidth}">
-                <Grid RowDefinitions="Auto,*">
-
-                    <!-- 展开/折叠切换按钮 -->
-                    <Button Grid.Row="0"
-                            Width="36" Height="36" Margin="0,8,0,4"
-                            HorizontalAlignment="Center"
-                            Background="Transparent" BorderThickness="0"
-                            Focusable="False"
-                            Command="{Binding ToggleSidebarCommand}"
-                            ToolTip.Tip="切换侧边栏">
-                        <Grid>
-                            <TextBlock Text="◀" FontSize="16"
-                                       Foreground="{DynamicResource TextSecondary}"
+    <Grid RowDefinitions="*,30">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*">
+            <!-- Industrial navigation rail -->
+            <Border Grid.Column="0"
+                    Width="{Binding SidebarWidth}"
+                    Background="{DynamicResource BgSidebar}"
+                    BorderThickness="0,0,1,0"
+                    BorderBrush="#24354D">
+                <Grid RowDefinitions="72,Auto,*,52">
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="14,12,10,8">
+                        <Border Width="38" Height="38"
+                                CornerRadius="9"
+                                Background="{DynamicResource AccentBlue}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="W" FontSize="18" FontWeight="Bold"
+                                       Foreground="White"
                                        HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}"/>
-                            <TextBlock Text="☰" FontSize="20"
-                                       Foreground="{DynamicResource TextSecondary}"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       IsVisible="{Binding IsSidebarCollapsed}"/>
-                        </Grid>
-                    </Button>
+                                       VerticalAlignment="Center" />
+                        </Border>
 
-                    <!-- ========== 展开模式：TreeView ========== -->
-                    <TreeView Grid.Row="1"
-                              ItemsSource="{Binding MenuItems}"
-                              IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}"
-                              Background="Transparent"
-                              BorderThickness="0"
-                              SelectionMode="Single"
-                              SelectedItem="{Binding SelectedMenuItem, Mode=TwoWay}">
-                        <TreeView.DataTemplates>
+                        <StackPanel Grid.Column="1"
+                                    Margin="10,0,4,0"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}">
+                            <TextBlock Classes="wcs-sidebar-brand" Text="WCS" />
+                            <TextBlock Classes="wcs-sidebar-caption" Text="WAREHOUSE CONTROL SYSTEM" />
+                        </StackPanel>
+
+                        <atom:Button Grid.Column="2"
+                                     Width="32" Height="32"
+                                     VerticalAlignment="Center"
+                                     Command="{Binding ToggleSidebarCommand}"
+                                     ToolTip.Tip="展开 / 收起导航">
+                            <TextBlock Text="≡" FontSize="17" Foreground="{DynamicResource TextOnDarkSecondary}" />
+                        </atom:Button>
+                    </Grid>
+
+                    <Border Grid.Row="1" Height="1" Background="#263750" Margin="14,0,14,8" />
+
+                    <atom:TreeView Grid.Row="2"
+                                   Margin="8,0,8,10"
+                                   ItemsSource="{Binding MenuItems}"
+                                   IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}"
+                                   SelectedItem="{Binding SelectedMenuItem, Mode=TwoWay}"
+                                   NodeHoverMode="Block">
+                        <atom:TreeView.ItemTemplate>
                             <TreeDataTemplate ItemsSource="{Binding Children}" DataType="Vc:MenuItemDto">
-                                <Border Padding="12,8" Background="Transparent">
-                                    <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimary}" FontSize="13"/>
-                                    </StackPanel>
-                                </Border>
+                                <Grid ColumnDefinitions="28,*" Margin="3,4">
+                                    <TextBlock Grid.Column="0"
+                                               Classes="wcs-sidebar-menu-icon"
+                                               Text="{Binding Icon}" />
+                                    <TextBlock Grid.Column="1"
+                                               Classes="wcs-sidebar-menu-text"
+                                               Text="{Binding Name}"
+                                               Margin="6,0,0,0" />
+                                </Grid>
                             </TreeDataTemplate>
-                        </TreeView.DataTemplates>
-                         <TreeView.Resources>
-                             <SolidColorBrush x:Key="TreeViewItemForeground" Color="{StaticResource TextSecondary}"/>
-                         </TreeView.Resources>
-                         <TreeView.Styles>
-                            <Style Selector="TreeViewItem:pointerover /template/ Path#ChevronPath">
-                                <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
-                            </Style>
-                            <Style Selector="TreeViewItem:selected /template/ Path#ChevronPath">
-                                <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
-                            </Style>
-                        </TreeView.Styles>
-                    </TreeView>
+                        </atom:TreeView.ItemTemplate>
+                    </atom:TreeView>
 
-                    <!-- ========== 折叠模式：图标按钮 ========== -->
-                    <ItemsControl Grid.Row="1"
+                    <ItemsControl Grid.Row="2"
                                   ItemsSource="{Binding MenuItems}"
                                   IsVisible="{Binding IsSidebarCollapsed}"
-                                  Margin="0,4,0,0">
+                                  Margin="8,2,8,10">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="Vc:MenuItemDto">
-                                <Button Width="48" Height="48" Padding="0"
-                                        Background="Transparent" BorderThickness="0"
-                                        ToolTip.Tip="{Binding Name}"
-                                        Command="{Binding $parent[ItemsControl].DataContext.CollapsedMenuClickCommand}"
-                                        CommandParameter="{Binding}">
-                                    <TextBlock Text="{Binding Name[0]}"
+                                <atom:Button Width="50" Height="48"
+                                             Margin="0,2"
+                                             ToolTip.Tip="{Binding Name}"
+                                             Command="{Binding $parent[ItemsControl].DataContext.CollapsedMenuClickCommand}"
+                                             CommandParameter="{Binding}">
+                                    <TextBlock Text="{Binding Icon}"
+                                               Foreground="{DynamicResource TextOnDark}"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
                                                HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"
-                                               FontSize="18"
-                                               Foreground="{DynamicResource TextSecondary}"/>
-                                </Button>
+                                               VerticalAlignment="Center" />
+                                </atom:Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!-- ========== 折叠模式弹出菜单 ========== -->
                     <Popup IsOpen="{Binding IsCollapsedFlyoutOpen}"
                            Placement="RightEdgeAlignedTop"
                            IsLightDismissEnabled="True"
-                           HorizontalOffset="1"
+                           HorizontalOffset="2"
                            VerticalOffset="-4">
-                        <Border Background="{DynamicResource BgCard}"
-                                BorderBrush="{DynamicResource BorderColor}"
-                                BorderThickness="1" CornerRadius="4"
-                                Width="200" MaxHeight="400"
-                                Padding="4">
-                            <TreeView ItemsSource="{Binding ActiveFlyoutChildren}"
-                                      Background="Transparent"
-                                      BorderThickness="0"
-                                      SelectionMode="Single"
-                                      SelectedItem="{Binding ActiveFlyoutSelectedItem, Mode=TwoWay}">
-                                <TreeView.DataTemplates>
+                        <atom:Card StyleVariant="Outlined" Width="250" MaxHeight="480">
+                            <atom:TreeView ItemsSource="{Binding ActiveFlyoutChildren}"
+                                           SelectedItem="{Binding ActiveFlyoutSelectedItem, Mode=TwoWay}"
+                                           NodeHoverMode="Block">
+                                <atom:TreeView.ItemTemplate>
                                     <TreeDataTemplate ItemsSource="{Binding Children}" DataType="Vc:MenuItemDto">
-                                        <Border Padding="12,8" Background="Transparent">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <TextBlock Text="{Binding Name}"
-                                                           Foreground="{DynamicResource TextPrimary}"
-                                                           FontSize="13"
-                                                           VerticalAlignment="Center"/>
-                                                <TextBlock Text="▶" FontSize="10"
-                                                           Foreground="{DynamicResource TextSecondary}"
-                                                           VerticalAlignment="Center"
-                                                           IsVisible="{Binding Children.Count}"/>
-                                            </StackPanel>
-                                        </Border>
+                                        <Grid ColumnDefinitions="30,*" Margin="4,3">
+                                            <TextBlock Text="{Binding Icon}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" Margin="6,0,0,0" VerticalAlignment="Center" />
+                                        </Grid>
                                     </TreeDataTemplate>
-                                </TreeView.DataTemplates>
-                            </TreeView>
-                        </Border>
+                                </atom:TreeView.ItemTemplate>
+                            </atom:TreeView>
+                        </atom:Card>
                     </Popup>
 
+                    <Border Grid.Row="3" Background="{DynamicResource BgSidebarElevated}" Padding="14,9">
+                        <Grid>
+                            <StackPanel IsVisible="{Binding IsSidebarCollapsed, Converter={StaticResource InverseBool}}">
+                                <TextBlock Text="CONTROL PLANE" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextOnDarkSecondary}" />
+                                <TextBlock Text="受治理运行 · 软件仿真隔离" FontSize="10" Foreground="{DynamicResource TextOnDarkSecondary}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <TextBlock IsVisible="{Binding IsSidebarCollapsed}"
+                                       Text="CP"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextOnDarkSecondary}"
+                                       FontSize="10" FontWeight="SemiBold" />
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
 
-            <!-- 右侧可关闭标签页 -->
-            <ctl:ClosableTabControl Grid.Column="1"
-                                    Tabs="{Binding Tabs}"
-                                    SelectedTab="{Binding SelectedTabItem}" />
+            <!-- Workspace -->
+            <Grid Grid.Column="1" RowDefinitions="58,*" Background="{DynamicResource BgPrimary}">
+                <Border Grid.Row="0"
+                        Background="{DynamicResource BgTopBar}"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource BorderColor}"
+                        Padding="20,0,14,0">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="{Binding SelectedTabItem.Header}"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock Text="WCS 运行与调度工作台"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource TextSecondary}" />
+                        </StackPanel>
 
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Border Classes="wcs-status-success" Padding="9,4">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Ellipse Width="7" Height="7" Fill="{DynamicResource AccentGreen}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding ConnectionText}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+
+                            <atom:Button Width="42" Height="34" ToolTip.Tip="通知中心">
+                                <TextBlock Text="!" FontSize="15" FontWeight="Bold" />
+                                <atom:Button.Flyout>
+                                    <Flyout Placement="Bottom" FlyoutPresenterClasses="NotificationFlyout">
+                                        <ctl:NotificationCenterView/>
+                                    </Flyout>
+                                </atom:Button.Flyout>
+                            </atom:Button>
+
+                            <atom:Button MinWidth="64" Height="34" ToolTip.Tip="用户菜单">
+                                <TextBlock Text="USER" FontSize="10" FontWeight="SemiBold" />
+                                <atom:Button.Flyout>
+                                    <Flyout Placement="Bottom">
+                                        <ctl:ProfileMenuView/>
+                                    </Flyout>
+                                </atom:Button.Flyout>
+                            </atom:Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <ctl:ClosableTabControl Grid.Row="1"
+                                        Tabs="{Binding Tabs}"
+                                        SelectedTab="{Binding SelectedTabItem}" />
+            </Grid>
         </Grid>
 
-        <!-- 底部状态栏 -->
-        <Border Grid.Row="2" Background="{DynamicResource BgStatusBar}" Padding="8,4" Height="30">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*">
-
-                <!-- 用户信息按钮（放最左侧） -->
-                <Button Grid.Column="0" MinWidth="40" Height="28" Padding="8,0"
-                        Background="Transparent" BorderThickness="0" Focusable="False"
-                        Content="👤" FontSize="14"
-                        ToolTip.Tip="用户菜单">
-                    <Button.Flyout>
-                        <Flyout Placement="Top">
-                            <ctl:ProfileMenuView/>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-
-                <!-- 消息通知按钮 -->
-                <Button Grid.Column="1" MinWidth="40" Height="28" Padding="8,0" Margin="2,0"
-                        Background="Transparent" BorderThickness="0" Focusable="False"
-                        Content="🔔" FontSize="14"
-                        ToolTip.Tip="消息中心">
-                    <Button.Flyout>
-                        <Flyout Placement="Top" FlyoutPresenterClasses="NotificationFlyout">
-                            <ctl:NotificationCenterView/>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-
-                <!-- 分隔线 -->
-                <Border Grid.Column="2" Width="1" Background="{DynamicResource BorderColor}" Margin="8,2"/>
-
-                <!-- 连接状态 -->
-                <Ellipse Grid.Column="3" x:Name="StatusDot" Width="8" Height="8" Fill="Gray"
-                         VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="4" x:Name="StatusText"
-                           Text="{Binding ConnectionText}"
-                           FontSize="12" Foreground="{DynamicResource TextSecondary}" Margin="6,0,0,0"
-                           VerticalAlignment="Center"/>
-
+        <Border Grid.Row="1" Background="{DynamicResource BgStatusBar}" Padding="12,0">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10">
+                <TextBlock Grid.Column="0" Text="WCS RUNTIME" Foreground="{DynamicResource TextOnDarkSecondary}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Border Grid.Column="1" Width="1" Height="12" Background="#31445E" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="受治理控制面 · Production / 未授权环境保持 fail-closed" Foreground="{DynamicResource TextOnDarkSecondary}" FontSize="10" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3" Text="S0–S10" Foreground="{DynamicResource TextOnDarkSecondary}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
             </Grid>
         </Border>
 
-        <!-- Profile 覆盖层 -->
-        <Border Grid.Row="1" x:Name="ProfileOverlay" IsVisible="False"
-                Background="#80000000"
-                ZIndex="100"
+        <Border Grid.Row="0" x:Name="ProfileOverlay" IsVisible="False"
+                Background="#80000000" ZIndex="100"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
             <ctl:UserProfileOverlay x:Name="ProfileOverlayControl"
                                     CloseRequested="OnProfileOverlayClosed"
@@ -233,16 +212,13 @@
                                     VerticalAlignment="Center"/>
         </Border>
 
-        <!-- 修改密码覆盖层 -->
-        <Border Grid.Row="1" x:Name="ChangePasswordOverlay" IsVisible="False"
-                Background="#80000000"
-                ZIndex="100"
+        <Border Grid.Row="0" x:Name="ChangePasswordOverlay" IsVisible="False"
+                Background="#80000000" ZIndex="100"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
             <ctl:ChangePasswordOverlay x:Name="ChangePasswordOverlayControl"
                                        CloseRequested="OnChangePasswordOverlayClosed"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
         </Border>
-
     </Grid>
 </Window>

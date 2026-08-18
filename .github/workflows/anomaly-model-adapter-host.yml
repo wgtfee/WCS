@@ -1,0 +1,334 @@
+name: WCS PLC ML Model Adapter Host E2E
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Core/AnomalyDetection/MachineLearning/Adapters/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/Adapters/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/PlcMlDependencyInjection.cs'
+      - 'src/Wcs.Host/Controllers/PlcMlAdapterController.cs'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - '.github/workflows/anomaly-model-adapter*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  ASPNETCORE_ENVIRONMENT: MlLoadTest
+  DOTNET_ENVIRONMENT: MlLoadTest
+  ASPNETCORE_URLS: http://127.0.0.1:5160
+  ConnectionStrings__WcsDb: 'Server=127.0.0.1,1433;Database=WCS_OnnxAdapterHost;User Id=sa;Password=Wcs_OnnxHost!2026;Encrypt=False;TrustServerCertificate=True;'
+  Simulator__Enabled: 'true'
+  Storage__Telemetry__Provider: Disabled
+  AnomalyDetection__MachineLearning__ModelDirectory: '${{ github.workspace }}/artifacts/onnx-host-models'
+  AnomalyDetection__MachineLearning__Profiles__0__CollectTrainingData: 'false'
+  AnomalyDetection__MachineLearning__Profiles__0__CollectTrainingDataWhileModelActive: 'false'
+  AnomalyDetection__MachineLearning__Profiles__0__AutoTrain: 'false'
+  AnomalyDetection__MachineLearning__PluggableRuntime__Enabled: 'true'
+  AnomalyDetection__MachineLearning__PluggableRuntime__MaximumTrackedWindows: '1000'
+  AnomalyDetection__MachineLearning__PluggableRuntime__InactiveStateRetentionSeconds: '30'
+  AnomalyDetection__MachineLearning__PluggableRuntime__Profiles__0__ProfileId: ML-CV-CURRENT
+  AnomalyDetection__MachineLearning__PluggableRuntime__Profiles__0__AdapterKind: Onnx
+  AnomalyDetection__MachineLearning__PluggableRuntime__Profiles__0__Required: 'true'
+
+jobs:
+  host-e2e:
+    name: raw signal, ONNX lifecycle, SQL, activation, failure isolation, and restart
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: 'Wcs_OnnxHost!2026'
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate approved local ONNX versions
+        shell: bash
+        run: |
+          mkdir -p artifacts/onnx-host artifacts/onnx-host-models/external/ML-CV-CURRENT
+          python -m pip install --disable-pip-version-check --no-cache-dir 'onnx==1.22.0' \
+            2>&1 | tee artifacts/onnx-host/onnx-install.log
+          python - <<'PY'
+          import hashlib
+          import json
+          import onnx
+          from pathlib import Path
+          from onnx import TensorProto, helper
+
+          root = Path('artifacts/onnx-host-models/external/ML-CV-CURRENT')
+          model_path = root / 'model.onnx'
+          input_info = helper.make_tensor_value_info('features', TensorProto.FLOAT, [1, 8])
+          output_info = helper.make_tensor_value_info('score', TensorProto.FLOAT, [1, 1])
+          mean = helper.make_node('ReduceMean', ['features'], ['mean'], axes=[1], keepdims=1)
+          sigmoid = helper.make_node('Sigmoid', ['mean'], ['score'])
+          graph = helper.make_graph([mean, sigmoid], 'wcs_onnx_host_e2e', [input_info], [output_info])
+          model = helper.make_model(graph, producer_name='wcs-ci', opset_imports=[helper.make_operatorsetid('', 13)])
+          model.ir_version = 10
+          onnx.checker.check_model(model)
+          onnx.save(model, model_path)
+          digest = hashlib.sha256(model_path.read_bytes()).hexdigest().upper()
+          features = [
+              'Current.mean', 'Current.stddev', 'Current.min', 'Current.max',
+              'Current.last', 'Current.slope', 'Current.range', 'Current.samplesPerSecond'
+          ]
+          base = {
+              'schemaVersion': 1,
+              'profileId': 'ML-CV-CURRENT',
+              'adapterKind': 1,
+              'adapterId': 'microsoft.onnxruntime.cpu.v1',
+              'artifactFile': 'model.onnx',
+              'artifactSha256': digest,
+              'source': 'github-actions-generated-offline',
+              'approvedBy': 'ci-model-reviewer',
+              'approvedAtUtc': '2026-07-28T00:01:00Z',
+              'featureNames': features,
+              'means': [5.0, 0.15, 5.0, 5.0, 5.0, 0.0, 0.5, 3.0],
+              'standardDeviations': [5.0, 1.0, 5.0, 5.0, 5.0, 5.0, 5.0, 1.0],
+              'inputName': 'features',
+              'outputName': 'score',
+              'inputShape': [1, 8],
+              'scoreTransform': 0,
+              'decisionThreshold': 0.78,
+              'calibrationMeanScore': 0.50,
+              'calibrationP95Score': 0.65,
+              'description': 'CI generated local CPU ONNX model.'
+          }
+          for version, created in [('onnx-host-v1', '2026-07-28T00:00:00Z'), ('onnx-host-v2', '2026-07-28T00:02:00Z')]:
+              manifest = dict(base)
+              manifest['version'] = version
+              manifest['createdUtc'] = created
+              (root / f'manifest-{version}.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+              if version == 'onnx-host-v1':
+                  (root / 'active.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+          Path('artifacts/onnx-host/model.sha256').write_text(digest + '\n', encoding='utf-8')
+          PY
+          find artifacts/onnx-host-models -type f -maxdepth 4 -print | sort | tee artifacts/onnx-host/model-files.log
+          test -s artifacts/onnx-host-models/external/ML-CV-CURRENT/active.json
+
+      - name: Build Host
+        shell: bash
+        run: |
+          rm -rf src/Wcs.Host/bin src/Wcs.Host/obj src/Wcs.Infrastructure/bin src/Wcs.Infrastructure/obj
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj 2>&1 | tee artifacts/onnx-host/restore.log
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore \
+            2>&1 | tee artifacts/onnx-host/build.log
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          echo "$sql_container" > artifacts/onnx-host/sql-container-id.txt
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_OnnxAdapterHost]"
+          '
+
+      - name: Start Host and verify external runtime
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/onnx-host/host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/onnx-host/host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/adapters/status" \
+                | tee artifacts/onnx-host/initial-adapter-status.json
+              jq -e 'length == 1 and .[0].profileId == "ML-CV-CURRENT" and .[0].activeAdapterId == "microsoft.onnxruntime.cpu.v1" and .[0].activeModelVersion == "onnx-host-v1" and .[0].failures == 0' \
+                artifacts/onnx-host/initial-adapter-status.json >/dev/null
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/onnx-host/host.pid)" 2>/dev/null; then
+              cat artifacts/onnx-host/host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/onnx-host/host.log
+          exit 1
+
+      - name: Verify normal and anomalous lifecycle
+        shell: bash
+        run: |
+          curl --fail --silent --show-error -H 'Content-Type: application/json' \
+            --data '{"mode":"normal","devices":2,"windows":3,"deviceOffset":100,"startOffsetSeconds":0,"concurrency":2}' \
+            "$ASPNETCORE_URLS/api/anomaly/ml/load" | tee artifacts/onnx-host/normal.json
+          jq -e '.predictionDelta == 6 and .raisedDelta == 0 and .failureDelta == 0 and .status.activeModelVersion == "onnx-host-v1"' \
+            artifacts/onnx-host/normal.json >/dev/null
+
+          curl --fail --silent --show-error -H 'Content-Type: application/json' \
+            --data '{"mode":"anomaly","devices":2,"windows":3,"deviceOffset":200,"startOffsetSeconds":100,"concurrency":2}' \
+            "$ASPNETCORE_URLS/api/anomaly/ml/load" | tee artifacts/onnx-host/anomaly.json
+          jq -e '.predictionDelta == 6 and .raisedDelta == 2 and .failureDelta == 0 and .status.activeAnomalies == 2' \
+            artifacts/onnx-host/anomaly.json >/dev/null
+
+          status="$(curl --silent --output artifacts/onnx-host/blocked-activation.json --write-out '%{http_code}' \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/models/ML-CV-CURRENT/onnx-host-v2/activate")"
+          [[ "$status" == "409" ]]
+          jq -e '.error | contains("active anomalies")' artifacts/onnx-host/blocked-activation.json >/dev/null
+
+          curl --fail --silent --show-error -H 'Content-Type: application/json' \
+            --data '{"mode":"recovery","devices":2,"windows":3,"deviceOffset":200,"startOffsetSeconds":200,"concurrency":2}' \
+            "$ASPNETCORE_URLS/api/anomaly/ml/load" | tee artifacts/onnx-host/recovery.json
+          jq -e '.predictionDelta == 6 and .recoveredDelta == 2 and .failureDelta == 0 and .status.activeAnomalies == 0' \
+            artifacts/onnx-host/recovery.json >/dev/null
+
+      - name: Verify SQL candidate journal and version activation
+        shell: bash
+        run: |
+          sql_container="$(cat artifacts/onnx-host/sql-container-id.txt)"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_OnnxAdapterHost -h -1 -W -Q "
+              SELECT COUNT_BIG(*) AS CandidateRows,
+                     SUM(CASE WHEN IsActive = 0 THEN 1 ELSE 0 END) AS RecoveredRows,
+                     COUNT(DISTINCT ModelVersion) AS ModelVersions
+              FROM Wcs_PlcMlCandidate;"
+          ' | tee artifacts/onnx-host/sql-candidates.txt
+          values="$(grep -E '^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]*$' artifacts/onnx-host/sql-candidates.txt | tail -n1 | xargs)"
+          [[ "$values" == "2 2 1" ]]
+
+          curl --fail --silent --show-error --request POST \
+            "$ASPNETCORE_URLS/api/anomaly/ml/models/ML-CV-CURRENT/onnx-host-v2/activate" \
+            | tee artifacts/onnx-host/activated-v2.json
+          jq -e '.version == "onnx-host-v2" and .isActive == true and .treeCount == 0' \
+            artifacts/onnx-host/activated-v2.json >/dev/null
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/adapters/status" \
+            | tee artifacts/onnx-host/v2-status.json
+          jq -e '.[0].activeModelVersion == "onnx-host-v2" and .[0].failures == 0' \
+            artifacts/onnx-host/v2-status.json >/dev/null
+
+      - name: Verify restart recovery
+        shell: bash
+        run: |
+          pid="$(cat artifacts/onnx-host/host.pid)"
+          kill "$pid" 2>/dev/null || true
+          for attempt in {1..30}; do if ! kill -0 "$pid" 2>/dev/null; then break; fi; sleep 1; done
+          kill -9 "$pid" 2>/dev/null || true
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/onnx-host/restarted-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/onnx-host/host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/adapters/status" \
+                | tee artifacts/onnx-host/restarted-status.json
+              jq -e '.[0].activeModelVersion == "onnx-host-v2" and .[0].failures == 0' \
+                artifacts/onnx-host/restarted-status.json >/dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          cat artifacts/onnx-host/restarted-host.log
+          exit 1
+
+      - name: Verify bad hash failure isolation and recovery
+        shell: bash
+        run: |
+          profile_dir="artifacts/onnx-host-models/external/ML-CV-CURRENT"
+          cp "$profile_dir/active.json" artifacts/onnx-host/active-good.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('artifacts/onnx-host-models/external/ML-CV-CURRENT/active.json')
+          value = json.loads(path.read_text(encoding='utf-8'))
+          value['artifactSha256'] = '0' * 64
+          path.write_text(json.dumps(value, indent=2), encoding='utf-8')
+          PY
+          pid="$(cat artifacts/onnx-host/host.pid)"
+          kill "$pid" 2>/dev/null || true
+          for attempt in {1..30}; do if ! kill -0 "$pid" 2>/dev/null; then break; fi; sleep 1; done
+          kill -9 "$pid" 2>/dev/null || true
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/onnx-host/bad-hash-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/onnx-host/host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/adapters/status" \
+                | tee artifacts/onnx-host/bad-hash-status.json
+              jq -e '.[0].activeModelVersion == null and .[0].failures >= 1 and (.[0].lastError | contains("hash mismatch"))' \
+                artifacts/onnx-host/bad-hash-status.json >/dev/null
+              break
+            fi
+            sleep 2
+          done
+          cp artifacts/onnx-host/active-good.json "$profile_dir/active.json"
+          pid="$(cat artifacts/onnx-host/host.pid)"
+          kill "$pid" 2>/dev/null || true
+          for attempt in {1..30}; do if ! kill -0 "$pid" 2>/dev/null; then break; fi; sleep 1; done
+          kill -9 "$pid" 2>/dev/null || true
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/onnx-host/recovered-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/onnx-host/host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/adapters/status" \
+                | tee artifacts/onnx-host/recovered-status.json
+              jq -e '.[0].activeModelVersion == "onnx-host-v2" and .[0].failures == 0' \
+                artifacts/onnx-host/recovered-status.json >/dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          cat artifacts/onnx-host/recovered-host.log
+          exit 1
+
+      - name: Stop Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/onnx-host/host.pid ]]; then
+            pid="$(cat artifacts/onnx-host/host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..20}; do if ! kill -0 "$pid" 2>/dev/null; then break; fi; sleep 1; done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload Host E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-ml-model-adapter-host-${{ github.run_number }}
+          path: artifacts/onnx-host/**
+          if-no-files-found: error
+          retention-days: 14

@@ -15,38 +15,39 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
 {
     private readonly IWcsRealtimeService _realtime;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IDataProvider _dataProvider;
+    private readonly ClosableTabItem _homeTab;
 
-    [ObservableProperty]
-    private string _connectionText = "Disconnected";
+    [ObservableProperty] private string _connectionText = "Disconnected";
+    [ObservableProperty] private ClosableTabItem? _selectedTabItem;
+    [ObservableProperty] private ObservableCollection<MenuItemDto> _menuItems = new();
+    [ObservableProperty] private bool _isSidebarCollapsed;
+    [ObservableProperty] private MenuItemDto? _selectedMenuItem;
+    [ObservableProperty] private bool _isCollapsedFlyoutOpen;
+    [ObservableProperty] private ObservableCollection<MenuItemDto>? _activeFlyoutChildren;
+    [ObservableProperty] private MenuItemDto? _activeFlyoutSelectedItem;
 
-    [ObservableProperty]
-    private ClosableTabItem? _selectedTabItem;
+    public double SidebarWidth => IsSidebarCollapsed ? 68 : 264;
+    public NotificationCenterViewModel NotificationCenter { get; } = new();
+    public ObservableCollection<ClosableTabItem> Tabs { get; } = new();
 
-    [ObservableProperty]
-    private ObservableCollection<MenuItemDto> _menuItems = new();
-
-    [ObservableProperty]
-    private bool _isSidebarCollapsed;
-
-    [ObservableProperty]
-    private MenuItemDto? _selectedMenuItem;
-
-    // -- 折叠模式弹出菜单状态 --
-    [ObservableProperty]
-    private bool _isCollapsedFlyoutOpen;
-
-    [ObservableProperty]
-    private ObservableCollection<MenuItemDto>? _activeFlyoutChildren;
-
-    [ObservableProperty]
-    private MenuItemDto? _activeFlyoutSelectedItem;
-
-    public double SidebarWidth => IsSidebarCollapsed ? 48 : 240;
+    public MainWindowViewModel(IWcsRealtimeService realtime, IWcsApiService api, IOptions<WcsDesktopOptions> options, IServiceProvider serviceProvider, DashboardViewModel dashboard, IDataProvider dataprovider)
+    {
+        _realtime = realtime;
+        _serviceProvider = serviceProvider;
+        _dataProvider = dataprovider;
+        _homeTab = new ClosableTabItem { Header = "运行总览", Content = dashboard, CanClose = false, IsSelected = true };
+        Tabs.Add(_homeTab);
+        SelectedTabItem = _homeTab;
+        _realtime.ConnectionStateChanged += OnConnectionStateChanged;
+        _ = InitializeMenuAsync(api);
+    }
 
     partial void OnIsSidebarCollapsedChanged(bool value)
     {
         OnPropertyChanged(nameof(SidebarWidth));
-        if (!value) CloseCollapsedFlyout(); // 展开时关闭弹出
+        if (!value)
+            CloseCollapsedFlyout();
     }
 
     partial void OnSelectedMenuItemChanged(MenuItemDto? value)
@@ -60,16 +61,12 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
 
     partial void OnActiveFlyoutSelectedItemChanged(MenuItemDto? value)
     {
-        if (value == null) return;
-
+        if (value == null)
+            return;
         if (value.Children.Count > 0)
-        {
-            // 有子菜单 → 切换到下一级
             ActiveFlyoutChildren = value.Children;
-        }
         else
         {
-            // 叶子节点 → 导航并关闭
             _ = OpenPageFromMenu(value);
             CloseCollapsedFlyout();
         }
@@ -90,86 +87,76 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         }
     }
 
+    [RelayCommand]
+    private void ToggleSidebar() => IsSidebarCollapsed = !IsSidebarCollapsed;
+
     private void CloseCollapsedFlyout()
     {
         IsCollapsedFlyoutOpen = false;
         ActiveFlyoutChildren = null;
     }
 
-    [RelayCommand]
-    private void ToggleSidebar() => IsSidebarCollapsed = !IsSidebarCollapsed;
-
-    public NotificationCenterViewModel NotificationCenter { get; } = new();
-
-    public ObservableCollection<ClosableTabItem> Tabs { get; } = new();
-    private readonly IDataProvider _dataProvider;
-    private ClosableTabItem _homeTab;
-
-    public MainWindowViewModel(
-        IWcsRealtimeService realtime,
-        IWcsApiService api,
-        IOptions<WcsDesktopOptions> options,
-        IServiceProvider serviceProvider,
-        DashboardViewModel dashboard,IDataProvider dataprovider)
-    {
-        _realtime = realtime;
-        _serviceProvider = serviceProvider;
-        _homeTab = new ClosableTabItem { Header = "Dashboard", Content = dashboard, CanClose = false, IsSelected = true };
-        Tabs.Add(_homeTab);
-        SelectedTabItem = _homeTab;
-        _dataProvider = dataprovider;
-        _realtime.ConnectionStateChanged += OnConnectionStateChanged;
-        _ = InitializeMenuAsync(api);
-    }
-    
-    /// <summary>
-    /// 应用启动时的异步初始化方法，当前仅设置连接状态文本，后续可扩展为加载用户信息、权限等
-    /// </summary>
-    /// <returns></returns>
     public async Task InitializeAsync()
     {
         ConnectionText = "Connecting...";
         await Task.CompletedTask;
     }
 
-    /// <summary>构建基础菜单（6 个默认页面 + 补充新增日志页面），Id 偏移 1000 避免与 API 菜单冲突</summary>
     private static List<MenuItemDto> BuildDefaultMenus()
     {
-        int id = 1001;
+        var id = 1001;
+        var operations = id++;
+        var scheduling = id++;
+        var simulation = id++;
+        var intelligence = id++;
+        var diagnostics = id++;
+
         return new List<MenuItemDto>
         {
-            new() { Id = id++, ParentId = 0, Name = "Dashboard", Url = "/Dashboard" },
-            new() { Id = id++, ParentId = 0, Name = "Devices",   Url = "/Devices" },
-            new() { Id = id++, ParentId = 0, Name = "Tasks",     Url = "/Tasks" },
-            new() { Id = id++, ParentId = 0, Name = "Alarms",    Url = "/Alarms" },
-            new() { Id = id++, ParentId = 0, Name = "Objects",   Url = "/Objects" },
-            new() { Id = id++, ParentId = 0, Name = "Event Log", Url = "/EventLog" },
+            new() { Id = operations, ParentId = 0, Name = "运行中心", Icon = "▦" },
+            new() { Id = id++, ParentId = operations, Name = "运行总览", Url = "/Dashboard", Icon = "⌂" },
+            new() { Id = id++, ParentId = operations, Name = "设备状态", Url = "/Devices", Icon = "◫" },
+            new() { Id = id++, ParentId = operations, Name = "任务管理", Url = "/Tasks", Icon = "✓" },
+            new() { Id = id++, ParentId = operations, Name = "告警中心", Url = "/Alarms", Icon = "!" },
+            new() { Id = id++, ParentId = operations, Name = "对象追踪", Url = "/Objects", Icon = "◎" },
+
+            new() { Id = scheduling, ParentId = 0, Name = "调度控制", Icon = "⇄" },
+            new() { Id = id++, ParentId = scheduling, Name = "EMS / RGV 调度", Url = "/TransportScheduling", Icon = "⇆" },
+            new() { Id = id++, ParentId = scheduling, Name = "交通控制与死锁", Url = "/TransportTraffic", Icon = "◇" },
+            new() { Id = id++, ParentId = scheduling, Name = "充电与运行优化", Url = "/TransportOptimization", Icon = "↯" },
+            new() { Id = id++, ParentId = scheduling, Name = "生产级调度", Url = "/TransportProduction", Icon = "▶" },
+            new() { Id = id++, ParentId = scheduling, Name = "可观测性与一致性", Url = "/TransportObservability", Icon = "◉" },
+            new() { Id = id++, ParentId = scheduling, Name = "生产韧性与恢复演练", Url = "/TransportResilience", Icon = "↻" },
+            new() { Id = id++, ParentId = scheduling, Name = "现场联调工作台", Url = "/TransportCommissioning", Icon = "⌘" },
+            new() { Id = id++, ParentId = scheduling, Name = "PLC 驱动诊断", Url = "/TransportDriverDiagnostics", Icon = "PLC" },
+            new() { Id = id++, ParentId = scheduling, Name = "配置与审计", Url = "/TransportAdministration", Icon = "⚙" },
+
+            new() { Id = simulation, ParentId = 0, Name = "软件仿真", Icon = "▷" },
+            new() { Id = id++, ParentId = simulation, Name = "调度仿真与最终验收", Url = "/TransportSimulation", Icon = "▶" },
+            new() { Id = id++, ParentId = simulation, Name = "统一仿真验证中心", Url = "/SimulationVerification", Icon = "S10" },
+
+            new() { Id = intelligence, ParentId = 0, Name = "工业智能", Icon = "AI" },
+            new() { Id = id++, ParentId = intelligence, Name = "智能运维中心", Url = "/AssetIntelligence", Icon = "◇" },
+            new() { Id = id++, ParentId = intelligence, Name = "IDI 总览", Url = "/IndustrialIntelligenceOverview", Icon = "IDI" },
+            new() { Id = id++, ParentId = intelligence, Name = "P1 ModelOps Center", Url = "/ModelOps", Icon = "P1" },
+            new() { Id = id++, ParentId = intelligence, Name = "P2 Feature Center", Url = "/FeatureCenter", Icon = "P2" },
+            new() { Id = id++, ParentId = intelligence, Name = "P3 Shadow Decision", Url = "/ShadowDecision", Icon = "P3" },
+            new() { Id = id++, ParentId = intelligence, Name = "P4 Maintenance Learning", Url = "/MaintenanceLearning", Icon = "P4" },
+            new() { Id = id++, ParentId = intelligence, Name = "P5 Digital Twin Optimizer", Url = "/DigitalTwinOptimizer", Icon = "P5" },
+            new() { Id = id++, ParentId = intelligence, Name = "P6 Automation Readiness", Url = "/BoundedAutomationReadiness", Icon = "P6" },
+
+            new() { Id = diagnostics, ParentId = 0, Name = "记录与审计", Icon = "≡" },
+            new() { Id = id++, ParentId = diagnostics, Name = "事件日志", Url = "/EventLog", Icon = "LOG" },
         };
     }
-    
-    /// <summary>
-    /// 从 API 获取菜单数据并构建菜单树，若失败则使用默认菜单
-    /// </summary>
-    /// <param name="api"></param>
-    /// <returns></returns>
+
     private async Task InitializeMenuAsync(IWcsApiService api)
     {
         try
         {
-            WebResponseContent<List<MenuItemDto>> menus = null;
-            //------获取后端的API菜单数据，若失败则使用默认菜单
-            //try
-            //{
-            //    menus = await _dataProvider.GetMenus(UserInfo.User?.RoleId ?? 1);
-            //}
-            //catch (Exception ex)
-            //{
-            //    System.Diagnostics.Debug.WriteLine($"[Menu] API exception: {ex.Message}");
-            //}
-
-            // 合并：默认菜单在后，API 动态菜单在前
+            WebResponseContent<List<MenuItemDto>>? menus = null;
             var all = BuildDefaultMenus();
-            if (menus != null && menus.Data != null && menus.Data.Count > 0)
+            if (menus?.Data is { Count: > 0 })
                 all.InsertRange(0, menus.Data);
             MenuItems = BuildMenuTree(all, 0);
         }
@@ -177,14 +164,10 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         {
             MenuItems = BuildMenuTree(BuildDefaultMenus(), 0);
         }
+        await Task.CompletedTask;
     }
 
-    /// <summary>
-    /// 连接状态变化回调，更新 UI 显示
-    /// </summary>
-    /// <param name="connected"></param>
-    private void OnConnectionStateChanged(bool connected)
-        => ConnectionText = connected ? "Connected" : "Disconnected";
+    private void OnConnectionStateChanged(bool connected) => ConnectionText = connected ? "Connected" : "Disconnected";
 
     private static ObservableCollection<MenuItemDto> BuildMenuTree(List<MenuItemDto> flatList, int parentId)
     {
@@ -196,66 +179,99 @@ public partial class MainWindowViewModel : ObservableObject, IAsyncInitializable
         }
         return tree;
     }
-    
-    /// <summary>
-    /// 打开一个新的标签页，若已存在同名标签则切换到该标签
-    /// </summary>
-    /// <param name="title"></param>
-    /// <param name="content"></param>
+
+    private void SelectTab(ClosableTabItem tab)
+    {
+        foreach (var item in Tabs)
+            item.IsSelected = ReferenceEquals(item, tab);
+        SelectedTabItem = tab;
+    }
+
     public void OpenTab(string title, object content)
     {
         var existing = Tabs.FirstOrDefault(x => x.Header == title);
-        if (existing != null) { SelectedTabItem = existing; return; }
+        if (existing != null)
+        {
+            SelectTab(existing);
+            return;
+        }
 
         var tab = new ClosableTabItem { Header = title, Content = content, CanClose = true };
         Tabs.Add(tab);
-        SelectedTabItem = tab;
+        SelectTab(tab);
     }
-    
-    /// <summary>
-    /// 关闭指定标签页，若无剩余标签则回到主页
-    /// </summary>
-    /// <param name="tab"></param>
+
     public void CloseTab(ClosableTabItem? tab)
     {
-        if (tab == null || tab.CanClose == false) return;
+        if (tab == null || tab.CanClose == false)
+            return;
         var idx = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
         if (Tabs.Count > 0)
-            SelectedTabItem = idx > 0 ? Tabs[idx - 1] : Tabs[0];
+            SelectTab(idx > 0 ? Tabs[idx - 1] : Tabs[0]);
         else
         {
             Tabs.Add(_homeTab);
-            SelectedTabItem = _homeTab;
+            SelectTab(_homeTab);
         }
     }
 
-    /// <summary>根据路由名自动匹配 ViewModel，约定：{Route}ViewModel</summary>
     private static Type? ResolveViewModelType(string route)
     {
-        // 将下划线命名转为帕斯卡（如 "Sys_Log" → "SysLog"）
-        var pascalRoute = string.Concat(
-            route.Split('_', '-', '.')
-                .Select(s => s.Length > 0 ? char.ToUpper(s[0]) + s[1..] : ""));
+        var pascalRoute = string.Concat(route.Split('_', '-', '.').Select(s => s.Length > 0 ? char.ToUpper(s[0]) + s[1..] : string.Empty));
         var typeName = $"Wcs.Desktop.ViewModels.{pascalRoute}ViewModel";
-        return Type.GetType(typeName);
+        var type = Type.GetType(typeName);
+        if (type != null)
+            return type;
+
+        type = AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(a =>
+            {
+                try { return a.GetTypes(); } catch { return Array.Empty<Type>(); }
+            })
+            .FirstOrDefault(t => string.Equals(t.FullName, typeName, StringComparison.Ordinal));
+
+        if (type == null)
+            Console.WriteLine($"[MainWindowViewModel] ResolveViewModelType: type not found for route '{route}' (expected '{typeName}')");
+
+        return type;
     }
 
-    /// <summary>
-    /// 根据菜单项打开对应页面，约定：菜单 URL 对应 ViewModel 路由（如 "/Devices" → DevicesViewModel）
-    /// </summary>
-    /// <param name="menu"></param>
-    /// <returns></returns>
     public async Task OpenPageFromMenu(MenuItemDto? menu)
     {
-        if (menu == null || string.IsNullOrWhiteSpace(menu.Url)) return;
+        if (menu == null || string.IsNullOrWhiteSpace(menu.Url))
+            return;
 
-        var route = menu.Url.TrimStart('/');
-        var type = ResolveViewModelType(route);
-        if (type == null) return;
+        var type = ResolveViewModelType(menu.Url.TrimStart('/'));
+        if (type == null)
+            return;
 
-        var content = _serviceProvider.GetRequiredService(type);
-        if (content is IAsyncInitializable init) await init.InitializeAsync();
+        object content;
+        try
+        {
+            content = _serviceProvider.GetRequiredService(type);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MainWindowViewModel] Failed to resolve page '{menu.Url}': {ex}");
+            return;
+        }
+
+        // Navigation must be immediate and must not depend on API/data initialization succeeding.
         OpenTab(menu.Name, content);
+
+        if (content is IAsyncInitializable init)
+        {
+            try
+            {
+                await init.InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                // Keep the tab visible even when page data initialization fails. This makes
+                // navigation deterministic and lets the page surface its empty/error state.
+                Console.WriteLine($"[MainWindowViewModel] Page initialization failed for '{menu.Url}': {ex}");
+            }
+        }
     }
 }

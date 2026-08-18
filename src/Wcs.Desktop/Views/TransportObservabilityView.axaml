@@ -1,0 +1,106 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
+             x:Class="Wcs.Desktop.Views.TransportObservabilityView"
+             x:DataType="vm:TransportObservabilityViewModel"
+             Background="{DynamicResource BgPrimary}">
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-page-title" Text="EMS / RGV 可观测性与一致性" />
+                <TextBlock Classes="wcs-page-subtitle" Text="全链路追踪、运行指标、三方一致性、健康评分与配置快照。" />
+                <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
+            </StackPanel>
+            <atom:Button Grid.Column="1" Content="健康评估" Command="{Binding EvaluateHealthCommand}" />
+            <atom:Button Grid.Column="2" Content="三方巡检" Command="{Binding InspectConsistencyCommand}" />
+            <atom:Button Grid.Column="3" Content="刷新" Command="{Binding RefreshCommand}" />
+        </Grid>
+
+        <UniformGrid Grid.Row="1" Columns="8" Rows="1">
+            <atom:Card Margin="0,0,5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="健康状态" Value="{Binding HealthState}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="健康评分" Value="{Binding HealthScore}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="在线车辆" Value="{Binding OnlineVehicleCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="离线车辆" Value="{Binding OfflineVehicleCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="活动任务" Value="{Binding ActiveExecutionCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="等待队列" Value="{Binding QueueLength}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="一致性差异" Value="{Binding ConsistencyIssueCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0,0,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="活动报警" Value="{Binding ActiveAlarmCount}" ContentFontSize="20" /></atom:Card>
+        </UniformGrid>
+
+        <atom:TabControl Grid.Row="2">
+            <atom:TabItem Header="健康组件">
+                <atom:DataGrid ItemsSource="{Binding HealthComponents}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="组件" Binding="{Binding Component}" Width="180" />
+                        <atom:DataGridTextColumn Header="状态" Binding="{Binding State}" Width="120" />
+                        <atom:DataGridTextColumn Header="评分" Binding="{Binding Score}" Width="90" />
+                        <atom:DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="*" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </atom:TabItem>
+            <atom:TabItem Header="一致性差异">
+                <atom:DataGrid ItemsSource="{Binding ConsistencyIssues}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="级别" Binding="{Binding Severity}" Width="100" />
+                        <atom:DataGridTextColumn Header="类型" Binding="{Binding IssueType}" Width="210" />
+                        <atom:DataGridTextColumn Header="实体" Binding="{Binding EntityType}" Width="110" />
+                        <atom:DataGridTextColumn Header="实体号" Binding="{Binding EntityId}" Width="160" />
+                        <atom:DataGridTextColumn Header="内存" Binding="{Binding RuntimeValue}" Width="180" />
+                        <atom:DataGridTextColumn Header="数据库" Binding="{Binding PersistedValue}" Width="180" />
+                        <atom:DataGridTextColumn Header="PLC" Binding="{Binding PlcValue}" Width="180" />
+                        <atom:DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="2*" />
+                        <atom:DataGridTextColumn Header="时间" Binding="{Binding DetectedAtUtc}" Width="190" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </atom:TabItem>
+            <atom:TabItem Header="链路追踪">
+                <atom:DataGrid ItemsSource="{Binding Traces}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="TraceId" Binding="{Binding TraceId}" Width="250" />
+                        <atom:DataGridTextColumn Header="类型" Binding="{Binding Kind}" Width="150" />
+                        <atom:DataGridTextColumn Header="操作" Binding="{Binding OperationName}" Width="220" />
+                        <atom:DataGridTextColumn Header="任务" Binding="{Binding RequestId}" Width="180" />
+                        <atom:DataGridTextColumn Header="车辆" Binding="{Binding VehicleId}" Width="120" />
+                        <atom:DataGridCheckBoxColumn Header="成功" Binding="{Binding Success}" Width="80" />
+                        <atom:DataGridTextColumn Header="耗时ms" Binding="{Binding DurationMilliseconds}" Width="110" />
+                        <atom:DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="*" />
+                        <atom:DataGridTextColumn Header="完成时间" Binding="{Binding CompletedAtUtc}" Width="190" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </atom:TabItem>
+            <atom:TabItem Header="指标">
+                <Grid RowDefinitions="Auto,*">
+                    <StackPanel Orientation="Horizontal" Spacing="28" Margin="12">
+                        <TextBlock Text="累计一致性差异：" /><TextBlock Text="{Binding TotalConsistencyIssueCount}" FontWeight="Bold" />
+                        <TextBlock Text="最近排队耗时ms：" /><TextBlock Text="{Binding LastQueueWaitMilliseconds}" FontWeight="Bold" />
+                        <TextBlock Text="最近PLC响应ms：" /><TextBlock Text="{Binding LastPlcResponseMilliseconds}" FontWeight="Bold" />
+                        <TextBlock Text="活动路权：" /><TextBlock Text="{Binding ActiveReservationCount}" FontWeight="Bold" />
+                    </StackPanel>
+                    <atom:DataGrid Grid.Row="1" ItemsSource="{Binding OperationMetrics}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                        <atom:DataGrid.Columns>
+                            <atom:DataGridTextColumn Header="操作类型" Binding="{Binding Kind}" Width="*" />
+                            <atom:DataGridTextColumn Header="总次数" Binding="{Binding TotalCount}" Width="130" />
+                            <atom:DataGridTextColumn Header="失败次数" Binding="{Binding FailureCount}" Width="130" />
+                            <atom:DataGridTextColumn Header="平均耗时ms" Binding="{Binding AverageDurationMilliseconds}" Width="160" />
+                            <atom:DataGridTextColumn Header="最大耗时ms" Binding="{Binding MaximumDurationMilliseconds}" Width="160" />
+                        </atom:DataGrid.Columns>
+                    </atom:DataGrid>
+                </Grid>
+            </atom:TabItem>
+            <atom:TabItem Header="配置快照">
+                <atom:DataGrid ItemsSource="{Binding ConfigurationSnapshots}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                    <atom:DataGrid.Columns>
+                        <atom:DataGridTextColumn Header="快照号" Binding="{Binding SnapshotId}" Width="250" />
+                        <atom:DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="180" />
+                        <atom:DataGridTextColumn Header="原因" Binding="{Binding Reason}" Width="*" />
+                        <atom:DataGridTextColumn Header="运行配置版本" Binding="{Binding RuntimeConfiguration.Version}" Width="140" />
+                        <atom:DataGridTextColumn Header="整定版本" Binding="{Binding ProductionTuning.Version}" Width="120" />
+                        <atom:DataGridTextColumn Header="创建人" Binding="{Binding CreatedBy}" Width="140" />
+                        <atom:DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="190" />
+                    </atom:DataGrid.Columns>
+                </atom:DataGrid>
+            </atom:TabItem>
+        </atom:TabControl>
+    </Grid>
+</UserControl>

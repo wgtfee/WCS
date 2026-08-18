@@ -1,0 +1,120 @@
+name: WCS Asset Failure Forecast Runtime
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Core/AnomalyDetection/Forecasting/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Forecasting/**'
+      - 'src/Wcs.Forecast.E2E/**'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - '.github/workflows/anomaly-failure-forecast*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-e2e:
+    name: generate, infer, reject, reload, and bound local forecast ONNX
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate deterministic local forecast ONNX
+        shell: bash
+        run: |
+          mkdir -p artifacts/failure-forecast-runtime
+          python -m pip install --disable-pip-version-check --no-cache-dir 'onnx==1.22.0' \
+            2>&1 | tee artifacts/failure-forecast-runtime/onnx-install.log
+          python - <<'PY'
+          import onnx
+          from pathlib import Path
+          from onnx import TensorProto, helper
+
+          root = Path('artifacts/failure-forecast-runtime')
+          input_info = helper.make_tensor_value_info('features', TensorProto.FLOAT, [1, 14])
+          output_info = helper.make_tensor_value_info('forecast', TensorProto.FLOAT, [1, 6])
+          values = helper.make_tensor(
+              name='forecast_values',
+              data_type=TensorProto.FLOAT,
+              dims=[1, 6],
+              vals=[0.10, 0.30, 0.60, 40.0, 72.0, 120.0])
+          constant = helper.make_node('Constant', [], ['forecast'], value=values)
+          graph = helper.make_graph([constant], 'wcs_failure_forecast_e2e', [input_info], [output_info])
+          model = helper.make_model(graph, producer_name='wcs-ci', opset_imports=[helper.make_operatorsetid('', 13)])
+          model.ir_version = 10
+          onnx.checker.check_model(model)
+          onnx.save(model, root / 'forecast.onnx')
+          print(onnx.helper.printable_graph(model.graph))
+          PY
+          test -s artifacts/failure-forecast-runtime/forecast.onnx
+      - name: Clean build forecast E2E
+        shell: bash
+        run: |
+          rm -rf src/Wcs.Forecast.E2E/bin src/Wcs.Forecast.E2E/obj
+          rm -rf src/Wcs.Infrastructure/bin src/Wcs.Infrastructure/obj
+          dotnet restore src/Wcs.Forecast.E2E/Wcs.Forecast.E2E.csproj \
+            2>&1 | tee artifacts/failure-forecast-runtime/restore.log
+          dotnet build src/Wcs.Forecast.E2E/Wcs.Forecast.E2E.csproj --configuration Release --no-restore \
+            2>&1 | tee artifacts/failure-forecast-runtime/build.log
+      - name: Run real local forecast inference
+        shell: bash
+        run: |
+          dotnet run --project src/Wcs.Forecast.E2E/Wcs.Forecast.E2E.csproj \
+            --configuration Release --no-build -- \
+            "$GITHUB_WORKSPACE/artifacts/failure-forecast-runtime/forecast.onnx" \
+            "$GITHUB_WORKSPACE/artifacts/failure-forecast-runtime/evidence.json" \
+            2>&1 | tee artifacts/failure-forecast-runtime/run.log
+          jq -e '
+            .offlineLocalArtifact == true and
+            .remoteDownloadUsed == false and
+            .featureCount == 14 and
+            .outputCount == 6 and
+            .prediction.failureProbability24Hours > 0.099 and
+            .prediction.failureProbability24Hours < 0.101 and
+            .prediction.failureProbability72Hours > 0.299 and
+            .prediction.failureProbability72Hours < 0.301 and
+            .prediction.failureProbability168Hours > 0.599 and
+            .prediction.failureProbability168Hours < 0.601 and
+            .prediction.rulLowerHours == 40 and
+            .prediction.rulMedianHours == 72 and
+            .prediction.rulUpperHours == 120 and
+            .samplesPerSecond > 1000 and
+            .memoryGrowthBytes <= 268435456 and
+            .hashRejected == true and
+            .shapeRejected == true and
+            .featureOrderRejected == true and
+            .weakEvidenceRejected == true and
+            .restartRecovery == true and
+            .controlWrites == 0' \
+            artifacts/failure-forecast-runtime/evidence.json >/dev/null
+      - name: Verify Linux x64 native linkage
+        shell: bash
+        run: |
+          native="$(find "$HOME/.nuget/packages" -type f -path '*/runtimes/linux-x64/native/libonnxruntime.so' | head -n1)"
+          test -n "$native"
+          echo "$native" | tee artifacts/failure-forecast-runtime/native-path.log
+          ldd "$native" | tee artifacts/failure-forecast-runtime/native-ldd.log
+          ! grep -q 'not found' artifacts/failure-forecast-runtime/native-ldd.log
+      - name: Upload forecast runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-asset-failure-forecast-runtime-${{ github.run_number }}
+          path: artifacts/failure-forecast-runtime/**
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,103 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
+             x:Class="Wcs.Desktop.Views.SimulationTimelineEditorView"
+             x:DataType="vm:SimulationVerificationViewModel">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+        <Border Grid.Row="0" Classes="wcs-boundary-strip">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-section-title" Text="多故障时间轴场景编辑器" />
+                <TextBlock Classes="wcs-page-subtitle" Text="把不同面板生成的控制器、轨道车、交通、外部接口、健康与恢复场景追加到同一虚拟时间轴，也可以直接新增执行动作和预期检查。已知故障填写持续时间后会自动补充恢复动作。" TextWrapping="Wrap" />
+                <TextBlock Classes="wcs-page-subtitle" Text="最终仍生成严格的受治理场景数据，并继续经过场景注册、内容校验和隔离运行；本机模板只保存在当前电脑，不写入生产数据库。" TextWrapping="Wrap" />
+                <TextBlock Classes="wcs-toolbar-status" Text="{Binding TimelineStatusText}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+        <atom:Card Grid.Row="1" Header="场景基本信息与导入" StyleVariant="Outlined">
+            <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="2*,*,*,*,Auto" ColumnSpacing="8">
+                    <StackPanel Spacing="4"><TextBlock Text="场景编号"/><atom:LineEdit Text="{Binding ScenarioId}" Watermark="visual-timeline-scenario" /></StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="场景版本"/><atom:LineEdit Text="{Binding ScenarioVersion}" Watermark="1.0.0" /></StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="随机种子"/><atom:LineEdit Text="{Binding ScenarioSeedText}" /></StackPanel>
+                    <StackPanel Grid.Column="3" Spacing="4"><TextBlock Text="追加时间偏移（毫秒）"/><atom:LineEdit Text="{Binding TimelineAppendOffsetMsText}" Watermark="0" /></StackPanel>
+                    <atom:Button Grid.Column="4" VerticalAlignment="Bottom" Content="版本修订号 +1" Command="{Binding BumpTimelineScenarioVersionCommand}" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <atom:Button Content="新建空白时间轴" Command="{Binding NewTimelineScenarioCommand}" />
+                    <atom:Button Content="替换为当前场景" Command="{Binding ReplaceTimelineFromCurrentScenarioCommand}" />
+                    <atom:Button Content="追加当前场景" Command="{Binding AppendCurrentScenarioToTimelineCommand}" />
+                    <atom:Button Content="新增执行动作" Command="{Binding AddTimelineActionCommand}" />
+                    <atom:Button Content="新增预期检查" Command="{Binding AddTimelineAssertionCommand}" />
+                    <atom:Button Content="自动补充预期检查" Command="{Binding AutoGenerateTimelineAssertionsCommand}" />
+                    <atom:Button Content="清空" Command="{Binding ClearTimelineCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </atom:Card>
+        <Grid Grid.Row="2" ColumnDefinitions="3*,2*" ColumnSpacing="12">
+            <atom:Card Header="时间轴" StyleVariant="Outlined">
+                <Grid RowDefinitions="*,Auto" RowSpacing="8">
+                    <atom:DataGrid ItemsSource="{Binding TimelineItems}" SelectedItem="{Binding SelectedTimelineItem}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                        <atom:DataGrid.Columns>
+                            <atom:DataGridTextColumn Header="#" Binding="{Binding Order}" Width="55" />
+                            <atom:DataGridTextColumn Header="类型" Binding="{Binding ItemTypeText}" Width="90" />
+                            <atom:DataGridTextColumn Header="发生时间（毫秒）" Binding="{Binding AtMillisecondsText}" Width="120" />
+                            <atom:DataGridTextColumn Header="持续时间" Binding="{Binding DurationMillisecondsText}" Width="95" />
+                            <atom:DataGridTextColumn Header="记录编号" Binding="{Binding Id}" Width="160" />
+                            <atom:DataGridTextColumn Header="系统动作 / 检查内容" Binding="{Binding OperationText}" Width="210" />
+                            <atom:DataGridTextColumn Header="目标对象" Binding="{Binding Target}" Width="160" />
+                            <atom:DataGridTextColumn Header="输入 / 预期数据" Binding="{Binding BodySummary}" Width="*" />
+                        </atom:DataGrid.Columns>
+                    </atom:DataGrid>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                        <atom:Button Content="上移" Command="{Binding MoveSelectedTimelineItemUpCommand}" />
+                        <atom:Button Content="下移" Command="{Binding MoveSelectedTimelineItemDownCommand}" />
+                        <atom:Button Content="删除选中" Command="{Binding DeleteSelectedTimelineItemCommand}" />
+                    </StackPanel>
+                </Grid>
+            </atom:Card>
+            <StackPanel Grid.Column="1" Spacing="12">
+                <atom:Card Header="编辑选中记录" StyleVariant="Outlined">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <StackPanel Spacing="4"><TextBlock Text="记录类型（高级字段）"/><atom:LineEdit Text="{Binding SelectedTimelineItem.ItemType}" Watermark="Action / Assertion" /></StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="记录编号"/><atom:LineEdit Text="{Binding SelectedTimelineItem.Id}" /></StackPanel>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                            <StackPanel Spacing="4"><TextBlock Text="发生时间（毫秒）"/><atom:LineEdit Text="{Binding SelectedTimelineItem.AtMillisecondsText}" /></StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="持续时间（毫秒）"/><atom:LineEdit Text="{Binding SelectedTimelineItem.DurationMillisecondsText}" /></StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="执行顺序"/><TextBlock Text="{Binding SelectedTimelineItem.Order}" FontWeight="SemiBold" Margin="4,8" /></StackPanel>
+                        </Grid>
+                        <StackPanel Spacing="4"><TextBlock Text="动作类型（高级字段）"/><atom:LineEdit Text="{Binding SelectedTimelineItem.Kind}" Watermark="plc.fault.apply / external.fault.apply / ..." /></StackPanel>
+                        <StackPanel Spacing="4"><TextBlock Text="目标对象"/><atom:LineEdit Text="{Binding SelectedTimelineItem.Target}" /></StackPanel>
+                        <StackPanel Spacing="4"><TextBlock Text="输入 / 预期数据（结构化数据）" /><atom:LineEdit Text="{Binding SelectedTimelineItem.BodyJson}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="110" /></StackPanel>
+                        <TextBlock Classes="wcs-page-subtitle" Text="持续时间自动语义：控制器故障和外部接口故障会自动补清除动作；控制器断线和轨道车离线会自动补恢复动作。其它动作的持续时间只参与场景总时长计算。" TextWrapping="Wrap" />
+                    </StackPanel>
+                </atom:Card>
+                <atom:Card Header="本机模板" StyleVariant="Outlined">
+                    <StackPanel Spacing="8">
+                        <StackPanel Spacing="4"><TextBlock Text="模板名称"/><atom:LineEdit Text="{Binding TimelineTemplateName}" Watermark="我的场景" /></StackPanel>
+                        <TextBlock Classes="wcs-toolbar-status" Text="{Binding TimelineTemplateNamesText}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <atom:Button Content="刷新模板" Command="{Binding RefreshTimelineTemplatesCommand}" />
+                            <atom:Button Content="保存" Command="{Binding SaveTimelineTemplateCommand}" />
+                            <atom:Button Content="载入" Command="{Binding LoadTimelineTemplateCommand}" />
+                            <atom:Button Content="删除" Command="{Binding DeleteTimelineTemplateCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </atom:Card>
+            </StackPanel>
+        </Grid>
+        <atom:Card Grid.Row="3" Header="生成与治理" StyleVariant="Outlined">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding CheckpointStateText}" TextWrapping="Wrap" />
+                    <TextBlock Classes="wcs-toolbar-status" Text="生成时会自动重新排序、补充已知预期检查、计算总时长，并保留当前场景版本。" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <atom:Button Content="生成时间轴场景" Command="{Binding GenerateTimelineScenarioCommand}" />
+                    <atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterTimelineScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                </StackPanel>
+            </Grid>
+        </atom:Card>
+    </Grid>
+</UserControl>

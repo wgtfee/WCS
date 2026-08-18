@@ -6,8 +6,6 @@ namespace Wcs.Simulator.PlcSimulatorEngine;
 /// </summary>
 public static class PlcSimulatorEngine
 {
-    private static readonly Random _rng = new();
-
     // ==================== PLC1: 输送线 ====================
 
     /// <summary>PLC1.DB1: 输送线状态 (40 字节, 10 站 × 4 字节)</summary>
@@ -18,10 +16,10 @@ public static class PlcSimulatorEngine
         {
             int offset = i * 4;
             data[offset] = 0x01; // DriveReady
-            if (_rng.NextDouble() > 0.7) data[offset] |= 0x02; // PalletArrived
-            if (_rng.NextDouble() > 0.95) data[offset] |= 0x04; // Fault
-            if (_rng.NextDouble() > 0.8) data[offset] |= 0x08; // Busy
-            var spd = BitConverter.GetBytes((short)_rng.Next(500, 2000));
+            if (Random.Shared.NextDouble() > 0.7) data[offset] |= 0x02; // PalletArrived
+            if (Random.Shared.NextDouble() > 0.95) data[offset] |= 0x04; // Fault
+            if (Random.Shared.NextDouble() > 0.8) data[offset] |= 0x08; // Busy
+            var spd = BitConverter.GetBytes((short)Random.Shared.Next(500, 2000));
             if (BitConverter.IsLittleEndian) Array.Reverse(spd);
             data[offset + 2] = spd[0];
             data[offset + 3] = spd[1];
@@ -36,9 +34,9 @@ public static class PlcSimulatorEngine
         for (int i = 0; i < 10; i++)
         {
             int offset = i * 2;
-            if (_rng.NextDouble() > 0.85) data[offset] |= 0x01; // RequestOut
-            if (_rng.NextDouble() > 0.90) data[offset] |= 0x02; // RequestIn
-            data[offset + 1] = (byte)_rng.Next(1, 11); // TargetStation
+            if (Random.Shared.NextDouble() > 0.85) data[offset] |= 0x01; // RequestOut
+            if (Random.Shared.NextDouble() > 0.90) data[offset] |= 0x02; // RequestIn
+            data[offset + 1] = (byte)Random.Shared.Next(1, 11); // TargetStation
         }
         return data;
     }
@@ -50,10 +48,10 @@ public static class PlcSimulatorEngine
         for (int i = 0; i < 10; i++)
         {
             int offset = i * 2;
-            if (_rng.NextDouble() > 0.92)
+            if (Random.Shared.NextDouble() > 0.92)
             {
                 data[offset] = 0x01; // Alarm
-                data[offset + 1] = (byte)_rng.Next(1, 10); // AlarmCode
+                data[offset + 1] = (byte)Random.Shared.Next(1, 10); // AlarmCode
             }
         }
         return data;
@@ -68,12 +66,12 @@ public static class PlcSimulatorEngine
         for (int i = 0; i < 4; i++)
         {
             int offset = i * 6;
-            if (_rng.NextDouble() > 0.7) data[offset] |= 0x01; // Busy
-            if (_rng.NextDouble() > 0.95) data[offset] |= 0x02; // Fault
+            if (Random.Shared.NextDouble() > 0.7) data[offset] |= 0x01; // Busy
+            if (Random.Shared.NextDouble() > 0.95) data[offset] |= 0x02; // Fault
             data[offset] |= 0x04; // AutoMode
-            if (_rng.NextDouble() > 0.8) data[offset] |= 0x08; // PositionArrived
-            var col = BitConverter.GetBytes((short)_rng.Next(1, 100));
-            var row = BitConverter.GetBytes((short)_rng.Next(1, 20));
+            if (Random.Shared.NextDouble() > 0.8) data[offset] |= 0x08; // PositionArrived
+            var col = BitConverter.GetBytes((short)Random.Shared.Next(1, 100));
+            var row = BitConverter.GetBytes((short)Random.Shared.Next(1, 20));
             if (BitConverter.IsLittleEndian) { Array.Reverse(col); Array.Reverse(row); }
             data[offset + 2] = col[0]; data[offset + 3] = col[1];
             data[offset + 4] = row[0]; data[offset + 5] = row[1];
@@ -88,10 +86,10 @@ public static class PlcSimulatorEngine
         for (int i = 0; i < 4; i++)
         {
             int offset = i * 6;
-            if (_rng.NextDouble() > 0.85) data[offset] |= 0x01; // StoreReq
-            if (_rng.NextDouble() > 0.90) data[offset] |= 0x02; // RetrieveReq
-            var col = BitConverter.GetBytes((short)_rng.Next(1, 100));
-            var row = BitConverter.GetBytes((short)_rng.Next(1, 20));
+            if (Random.Shared.NextDouble() > 0.85) data[offset] |= 0x01; // StoreReq
+            if (Random.Shared.NextDouble() > 0.90) data[offset] |= 0x02; // RetrieveReq
+            var col = BitConverter.GetBytes((short)Random.Shared.Next(1, 100));
+            var row = BitConverter.GetBytes((short)Random.Shared.Next(1, 20));
             if (BitConverter.IsLittleEndian) { Array.Reverse(col); Array.Reverse(row); }
             data[offset + 2] = col[0]; data[offset + 3] = col[1];
             data[offset + 4] = row[0]; data[offset + 5] = row[1];
@@ -106,11 +104,11 @@ public static class PlcSimulatorEngine
         for (int i = 0; i < 4; i++)
         {
             int offset = i * 4; // 2B header + 2B fault
-            if (_rng.NextDouble() > 0.90)
+            if (Random.Shared.NextDouble() > 0.90)
             {
                 data[offset] = 0x01;
-                data[offset + 1] = (byte)_rng.Next(1, 20);
-                var fd = BitConverter.GetBytes((short)_rng.Next(100, 9999));
+                data[offset + 1] = (byte)Random.Shared.Next(1, 20);
+                var fd = BitConverter.GetBytes((short)Random.Shared.Next(100, 9999));
                 if (BitConverter.IsLittleEndian) Array.Reverse(fd);
                 data[offset + 2] = fd[0]; data[offset + 3] = fd[1];
             }
@@ -127,11 +125,11 @@ public static class PlcSimulatorEngine
         for (int i = 0; i < 4; i++)
         {
             int offset = i * 4;
-            if (_rng.NextDouble() > 0.7) data[offset] |= 0x01; // Busy
-            if (_rng.NextDouble() > 0.9) data[offset] |= 0x02; // Gripped
-            if (_rng.NextDouble() > 0.95) data[offset] |= 0x04; // Fault
-            if (_rng.NextDouble() > 0.6) data[offset] |= 0x08; // PalletPresent
-            var pos = BitConverter.GetBytes((short)_rng.Next(0, 360));
+            if (Random.Shared.NextDouble() > 0.7) data[offset] |= 0x01; // Busy
+            if (Random.Shared.NextDouble() > 0.9) data[offset] |= 0x02; // Gripped
+            if (Random.Shared.NextDouble() > 0.95) data[offset] |= 0x04; // Fault
+            if (Random.Shared.NextDouble() > 0.6) data[offset] |= 0x08; // PalletPresent
+            var pos = BitConverter.GetBytes((short)Random.Shared.Next(0, 360));
             if (BitConverter.IsLittleEndian) Array.Reverse(pos);
             data[offset + 2] = pos[0]; data[offset + 3] = pos[1];
         }
@@ -145,10 +143,10 @@ public static class PlcSimulatorEngine
         for (int i = 0; i < 4; i++)
         {
             int offset = i * 4;
-            if (_rng.NextDouble() > 0.85) data[offset] |= 0x01; // GripReq
-            if (_rng.NextDouble() > 0.90) data[offset] |= 0x02; // ReleaseReq
-            if (_rng.NextDouble() > 0.88) data[offset] |= 0x04; // MoveReq
-            var pos = BitConverter.GetBytes((short)_rng.Next(0, 360));
+            if (Random.Shared.NextDouble() > 0.85) data[offset] |= 0x01; // GripReq
+            if (Random.Shared.NextDouble() > 0.90) data[offset] |= 0x02; // ReleaseReq
+            if (Random.Shared.NextDouble() > 0.88) data[offset] |= 0x04; // MoveReq
+            var pos = BitConverter.GetBytes((short)Random.Shared.Next(0, 360));
             if (BitConverter.IsLittleEndian) Array.Reverse(pos);
             data[offset + 2] = pos[0]; data[offset + 3] = pos[1];
         }
@@ -162,10 +160,10 @@ public static class PlcSimulatorEngine
         for (int i = 0; i < 4; i++)
         {
             int offset = i * 2;
-            if (_rng.NextDouble() > 0.92)
+            if (Random.Shared.NextDouble() > 0.92)
             {
                 data[offset] = 0x01;
-                data[offset + 1] = (byte)_rng.Next(1, 15);
+                data[offset + 1] = (byte)Random.Shared.Next(1, 15);
             }
         }
         return data;

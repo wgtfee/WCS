@@ -1,0 +1,133 @@
+name: WCS PLC ML Model Adapter E2E
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Core/AnomalyDetection/MachineLearning/Adapters/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/Adapters/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/PlcMlDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - 'src/Wcs.OnnxAdapter.E2E/**'
+      - '.github/workflows/anomaly-model-adapter*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  onnx-e2e:
+    name: generate, verify, infer, reload, and bound local ONNX
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate deterministic tiny ONNX model
+        shell: bash
+        run: |
+          mkdir -p artifacts/onnx-e2e
+          python -m pip install --disable-pip-version-check --no-cache-dir 'onnx==1.22.0' \
+            2>&1 | tee artifacts/onnx-e2e/onnx-install.log
+          python - <<'PY'
+          import onnx
+          from onnx import TensorProto, helper
+
+          input_info = helper.make_tensor_value_info('features', TensorProto.FLOAT, [1, 8])
+          output_info = helper.make_tensor_value_info('score', TensorProto.FLOAT, [1, 1])
+          mean = helper.make_node('ReduceMean', ['features'], ['mean'], axes=[1], keepdims=1)
+          sigmoid = helper.make_node('Sigmoid', ['mean'], ['score'])
+          graph = helper.make_graph([mean, sigmoid], 'wcs_onnx_adapter_e2e', [input_info], [output_info])
+          model = helper.make_model(
+              graph,
+              producer_name='wcs-ci',
+              opset_imports=[helper.make_operatorsetid('', 13)])
+          model.ir_version = 10
+          onnx.checker.check_model(model)
+          onnx.save(model, 'artifacts/onnx-e2e/model.onnx')
+          print(onnx.helper.printable_graph(model.graph))
+          PY
+          sha256sum artifacts/onnx-e2e/model.onnx | tee artifacts/onnx-e2e/model.sha256
+          test -s artifacts/onnx-e2e/model.onnx
+
+      - name: Clean build ONNX E2E
+        shell: bash
+        run: |
+          rm -rf src/Wcs.OnnxAdapter.E2E/bin src/Wcs.OnnxAdapter.E2E/obj
+          dotnet restore src/Wcs.OnnxAdapter.E2E/Wcs.OnnxAdapter.E2E.csproj \
+            2>&1 | tee artifacts/onnx-e2e/restore.log
+          dotnet build src/Wcs.OnnxAdapter.E2E/Wcs.OnnxAdapter.E2E.csproj \
+            --configuration Release --no-restore \
+            2>&1 | tee artifacts/onnx-e2e/build.log
+          find src/Wcs.OnnxAdapter.E2E/bin/Release/net8.0 -type f \
+            \( -iname 'Microsoft.ML.OnnxRuntime.dll' -o -iname 'libonnxruntime.so*' \) \
+            | sort | tee artifacts/onnx-e2e/runtime-files.log
+          grep -Eq 'Microsoft\.ML\.OnnxRuntime\.dll$' artifacts/onnx-e2e/runtime-files.log
+          grep -Eq 'runtimes/linux-x64/native/libonnxruntime\.so([.][0-9.]+)?$' artifacts/onnx-e2e/runtime-files.log
+
+      - name: Run real ONNX inference and restart recovery
+        shell: bash
+        run: |
+          dotnet run --project src/Wcs.OnnxAdapter.E2E/Wcs.OnnxAdapter.E2E.csproj \
+            --configuration Release --no-build -- \
+            "$GITHUB_WORKSPACE/artifacts/onnx-e2e/model.onnx" \
+            "$GITHUB_WORKSPACE/artifacts/onnx-e2e/evidence.json" \
+            2>&1 | tee artifacts/onnx-e2e/run.log
+
+          jq -e '
+            .adapter == "microsoft.onnxruntime.cpu.v1" and
+            .offlineLocalArtifact == true and
+            .remoteDownloadUsed == false and
+            .profileId == "ONNX-E2E" and
+            .version == "onnx-e2e-v1" and
+            .featureCount == 8 and
+            .normalScore < 0.2 and
+            .anomalyScore > 0.8 and
+            .reloadedScore == .anomalyScore and
+            .samplesPerSecond > 1000 and
+            .memoryGrowthBytes <= 268435456 and
+            .hashRejected == true and
+            .shapeRejected == true and
+            .featureOrderRejected == true and
+            .versionCount == 1 and
+            .restartRecovery == true and
+            .controlWrites == 0
+          ' artifacts/onnx-e2e/evidence.json >/dev/null
+
+      - name: Verify local-only evidence and native linkage
+        shell: bash
+        run: |
+          ! grep -REqi 'https?://' artifacts/onnx-e2e/model-store artifacts/onnx-e2e/evidence.json
+          native="$(grep -E 'runtimes/linux-x64/native/libonnxruntime\.so([.][0-9.]+)?$' artifacts/onnx-e2e/runtime-files.log | head -n1)"
+          test -n "$native"
+          file "$native" | tee artifacts/onnx-e2e/native-file-type.log
+          ldd "$native" | tee artifacts/onnx-e2e/native-ldd.log
+          ! grep -Eqi 'not found' artifacts/onnx-e2e/native-ldd.log
+
+      - name: Upload ONNX E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-ml-model-adapter-e2e-${{ github.run_number }}
+          path: artifacts/onnx-e2e/**
+          if-no-files-found: error
+          retention-days: 14

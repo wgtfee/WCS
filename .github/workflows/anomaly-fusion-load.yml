@@ -1,0 +1,103 @@
+name: WCS Anomaly Fusion Load
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/anomaly-fusion-load.yml'
+      - 'src/Wcs.Core/AnomalyDetection/Fusion/**'
+      - 'src/Wcs.Core.Tests/AnomalyFusion*Tests.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Fusion/**'
+      - 'src/Wcs.Host/Controllers/AnomalyFusionController.cs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  fusion-build-unit-and-load:
+    name: build, unit, and one-million-evidence load
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Prepare evidence directory
+        run: mkdir -p artifacts/TestResults
+
+      - name: Restore projects
+        run: |
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+
+      - name: Build Core, Infrastructure, and Host
+        run: |
+          set -o pipefail
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore 2>&1 | tee artifacts/fusion-build-tests.log
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee artifacts/fusion-build-host.log
+
+      - name: Run fusion unit tests
+        run: |
+          set -o pipefail
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~AnomalyFusionEngineTests' \
+            --logger 'trx;LogFileName=anomaly-fusion-unit.trx' \
+            --logger 'console;verbosity=detailed' \
+            --results-directory artifacts/TestResults 2>&1 | tee artifacts/fusion-unit.log
+
+      - name: Run one-million-evidence lifecycle load
+        env:
+          WCS_RUN_FUSION_LOAD: 'true'
+        run: |
+          set -o pipefail
+          /usr/bin/time -v dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~AnomalyFusionLoadTests' \
+            --logger 'trx;LogFileName=anomaly-fusion-load.trx' \
+            --logger 'console;verbosity=detailed' \
+            --results-directory artifacts/TestResults \
+            2>&1 | tee artifacts/fusion-load.log
+
+      - name: Validate load evidence
+        run: |
+          test -s artifacts/fusion-load.log
+          test -s artifacts/TestResults/anomaly-fusion-load.trx
+          grep -q 'Test Run Successful.' artifacts/fusion-load.log
+          grep -Eq 'events=1000000' artifacts/fusion-load.log
+          grep -Eq 'assets=10000' artifacts/fusion-load.log
+          grep -Eq 'evicted_assets=10000' artifacts/fusion-load.log
+          grep -Eq 'managed_growth_mb=' artifacts/fusion-load.log
+          grep -Eq 'rss_growth_mb=' artifacts/fusion-load.log
+          if grep -Eqi 'OutOfMemory|Stack overflow|Unhandled exception|Test Run Failed' artifacts/fusion-build-tests.log artifacts/fusion-build-host.log artifacts/fusion-unit.log artifacts/fusion-load.log; then
+            grep -Eni -C 5 'OutOfMemory|Stack overflow|Unhandled exception|Test Run Failed' artifacts/*.log || true
+            exit 1
+          fi
+
+      - name: Upload fusion load evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-anomaly-fusion-load-${{ github.run_number }}
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 30

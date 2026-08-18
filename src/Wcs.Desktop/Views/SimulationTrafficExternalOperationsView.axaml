@@ -1,0 +1,133 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
+             x:Class="Wcs.Desktop.Views.SimulationTrafficExternalOperationsView"
+             x:DataType="vm:SimulationVerificationViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="14" Margin="0,4,0,10">
+            <Border Classes="wcs-boundary-strip">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="wcs-section-title" Text="S4/S5 交通管制与外部接口仿真操作" />
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="这里只生成现有受治理场景数据，再经过场景注册、内容校验和隔离运行；不会直接调用生产交通控制、制造执行系统、数据库、网络接口或真实硬件在环。"
+                               TextWrapping="Wrap" />
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding TrafficExternalStatusText}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <atom:Card Header="S4 · 路权占用、滚动预约、过期回收与死锁" StyleVariant="Outlined">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                        <StackPanel Spacing="4"><TextBlock Text="轨道车一"/><atom:LineEdit Text="{Binding TrafficVehicleId}" Watermark="RGV1" /></StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="轨道车二"/><atom:LineEdit Text="{Binding TrafficVehicleBId}" Watermark="RGV2" /></StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="区段编号（两个）"/><atom:LineEdit Text="{Binding TrafficSegmentIdsText}" Watermark="S1,S2" /></StackPanel>
+                        <StackPanel Grid.Column="3" Spacing="4"><TextBlock Text="区段长度（毫米）"/><atom:LineEdit Text="{Binding TrafficSegmentLengthMmText}" Watermark="1000" /></StackPanel>
+
+                        <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="起点"/><atom:LineEdit Text="{Binding TrafficSourceNodeId}" Watermark="N1" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="中间节点"/><atom:LineEdit Text="{Binding TrafficMiddleNodeId}" Watermark="N2" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="终点"/><atom:LineEdit Text="{Binding TrafficDestinationNodeId}" Watermark="N3" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="3" Spacing="4"><TextBlock Text="轨道车速度（毫米/秒）"/><atom:LineEdit Text="{Binding TrafficVehicleSpeedMmPerSecondText}" Watermark="1000" /></StackPanel>
+
+                        <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="交通区域一"/><atom:LineEdit Text="{Binding TrafficZoneId}" Watermark="Z1" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="交通区域二"/><atom:LineEdit Text="{Binding TrafficZoneBId}" Watermark="Z2" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="2" Spacing="4"><TextBlock Text="区域类型一"/><atom:LineEdit Text="{Binding TrafficZoneKind}" Watermark="SharedSegment" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="3" Spacing="4"><TextBlock Text="区域类型二"/><atom:LineEdit Text="{Binding TrafficZoneBKind}" Watermark="OpposingDirection" /></StackPanel>
+
+                        <StackPanel Grid.Row="3" Spacing="4"><TextBlock Text="区域容量"/><atom:LineEdit Text="{Binding TrafficCapacityText}" Watermark="1" /></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4"><TextBlock Text="优先级一 / 二"/><Grid ColumnDefinitions="*,*" ColumnSpacing="6"><atom:LineEdit Text="{Binding TrafficPriorityText}"/><atom:LineEdit Grid.Column="1" Text="{Binding TrafficPriorityBText}"/></Grid></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="2" Spacing="4"><TextBlock Text="占用时长（毫秒） / 前瞻数"/><Grid ColumnDefinitions="*,*" ColumnSpacing="6"><atom:LineEdit Text="{Binding TrafficLeaseMsText}"/><atom:LineEdit Grid.Column="1" Text="{Binding TrafficLookAheadText}"/></Grid></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="3" Spacing="4"><TextBlock Text="死锁检测时间（毫秒）"/><atom:LineEdit Text="{Binding TrafficDeadlockDetectAtMsText}" Watermark="30" /></StackPanel>
+                    </Grid>
+
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding TrafficZoneKindsText}" TextWrapping="Wrap" />
+                    <WrapPanel Orientation="Horizontal">
+                        <atom:Button Margin="0,0,6,6" Content="共享区段" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="SharedSegment" />
+                        <atom:Button Margin="0,0,6,6" Content="对向行驶" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="OpposingDirection" />
+                        <atom:Button Margin="0,0,6,6" Content="汇流" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="Merge" />
+                        <atom:Button Margin="0,0,6,6" Content="交叉口" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="Intersection" />
+                        <atom:Button Margin="0,0,6,6" Content="自定义" Command="{Binding SelectTrafficZoneKindCommand}" CommandParameter="Custom" />
+                    </WrapPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <atom:Button Content="生成路权生命周期场景" Command="{Binding GenerateTrafficOperationsScenarioCommand}" />
+                        <atom:Button Content="生成并注册路权场景" Command="{Binding GenerateAndRegisterTrafficOperationsScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                        <atom:Button Content="生成死锁检测与解除场景" Command="{Binding GenerateTrafficDeadlockScenarioCommand}" />
+                        <atom:Button Content="生成并注册死锁场景" Command="{Binding GenerateAndRegisterTrafficDeadlockScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                    </StackPanel>
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="路权生命周期场景包含交通区域定义、占用、释放、滚动预约、滚动释放和过期回收；死锁场景使用确定性的双轨道车等待关系，并执行死锁检测与解除。"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </atom:Card>
+
+            <atom:Card Header="S5 · 外部接口异常、调用与熔断恢复" StyleVariant="Outlined">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                        <StackPanel Spacing="4"><TextBlock Text="接口编号"/><atom:LineEdit Text="{Binding ExternalEndpointId}" Watermark="MES1" /></StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="外部系统类型"/><atom:LineEdit Text="{Binding ExternalSystemKind}" Watermark="Mes" /></StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="故障编号"/><atom:LineEdit Text="{Binding ExternalFaultId}" Watermark="F-EXT-1" /></StackPanel>
+                        <StackPanel Grid.Column="3" Spacing="4"><TextBlock Text="故障类型"/><atom:LineEdit Text="{Binding ExternalFaultKind}" Watermark="Timeout" /></StackPanel>
+
+                        <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="故障开始时间（毫秒）"/><atom:LineEdit Text="{Binding ExternalFaultStartMsText}" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="故障结束时间（毫秒）"/><atom:LineEdit Text="{Binding ExternalFaultEndMsText}" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="接口状态码（仅状态异常）"/><atom:LineEdit Text="{Binding ExternalHttpStatusCodeText}" Watermark="503" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="3" Spacing="4"><TextBlock Text="附加延迟（毫秒）"/><atom:LineEdit Text="{Binding ExternalDelayMsText}" Watermark="0" /></StackPanel>
+
+                        <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="调用操作标识"/><atom:LineEdit Text="{Binding ExternalOperation}" Watermark="Order.Push" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="错误码（可选）"/><atom:LineEdit Text="{Binding ExternalErrorCode}" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="2" Spacing="4"><TextBlock Text="幂等键"/><atom:LineEdit Text="{Binding ExternalIdempotencyKey}" /></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="3" Spacing="4"><TextBlock Text="数据摘要"/><atom:LineEdit Text="{Binding ExternalPayloadHash}" /></StackPanel>
+
+                        <StackPanel Grid.Row="3" Spacing="4"><TextBlock Text="最大尝试次数"/><atom:LineEdit Text="{Binding ExternalMaxAttemptsText}" Watermark="2" /></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4"><TextBlock Text="请求超时（毫秒）"/><atom:LineEdit Text="{Binding ExternalTimeoutMsText}" Watermark="20" /></StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="2" Spacing="4"><TextBlock Text="重试延迟（毫秒）"/><atom:LineEdit Text="{Binding ExternalRetryDelayMsText}" Watermark="100" /></StackPanel>
+                    </Grid>
+
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding ExternalSystemKindsText}" TextWrapping="Wrap" />
+                    <WrapPanel Orientation="Horizontal">
+                        <atom:Button Margin="0,0,6,6" Content="制造执行系统" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="Mes" />
+                        <atom:Button Margin="0,0,6,6" Content="数据库" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="SqlServer" />
+                        <atom:Button Margin="0,0,6,6" Content="通用接口" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="Http" />
+                        <atom:Button Margin="0,0,6,6" Content="网络" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="Network" />
+                        <atom:Button Margin="0,0,6,6" Content="自定义" Command="{Binding SelectExternalSystemKindCommand}" CommandParameter="Custom" />
+                    </WrapPanel>
+
+                    <TextBlock Classes="wcs-toolbar-status" Text="{Binding ExternalFaultKindsText}" TextWrapping="Wrap" />
+                    <WrapPanel Orientation="Horizontal">
+                        <atom:Button Margin="0,0,6,6" Content="超时" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="Timeout" />
+                        <atom:Button Margin="0,0,6,6" Content="不可用" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="Unavailable" />
+                        <atom:Button Margin="0,0,6,6" Content="接口状态异常" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="HttpStatus" />
+                        <atom:Button Margin="0,0,6,6" Content="无效响应" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="InvalidResponse" />
+                        <atom:Button Margin="0,0,6,6" Content="重复响应" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="DuplicateResponse" />
+                        <atom:Button Margin="0,0,6,6" Content="数据库死锁" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="SqlDeadlock" />
+                        <atom:Button Margin="0,0,6,6" Content="数据库命令超时" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="SqlCommandTimeout" />
+                        <atom:Button Margin="0,0,6,6" Content="连接重置" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="ConnectionReset" />
+                        <atom:Button Margin="0,0,6,6" Content="高延迟" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="HighLatency" />
+                        <atom:Button Margin="0,0,6,6" Content="丢包" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="PacketLoss" />
+                        <atom:Button Margin="0,0,6,6" Content="半开连接" Command="{Binding SelectExternalFaultKindCommand}" CommandParameter="HalfOpen" />
+                    </WrapPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <atom:Button Content="生成外部接口场景" Command="{Binding GenerateExternalOperationsScenarioCommand}" />
+                        <atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterExternalOperationsScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                    </StackPanel>
+                    <TextBlock Classes="wcs-page-subtitle"
+                               Text="场景包含接口定义、故障注入、接口调用、故障清除和熔断复位；只有接口状态异常会携带状态码，避免违反现有运行契约。"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </atom:Card>
+
+            <atom:Card Header="当前生成结果" StyleVariant="Outlined">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+                    <TextBlock Text="场景编号" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="1" Text="{Binding ScenarioId}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="1" Text="场景文件" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioFile}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="2" Text="场景摘要" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CheckpointStateText}" TextWrapping="Wrap" />
+                </Grid>
+            </atom:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

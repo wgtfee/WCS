@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
+    <ProjectReference Include="..\Wcs.Optimization\Wcs.Optimization.csproj" />
   </ItemGroup>
 
 </Project>

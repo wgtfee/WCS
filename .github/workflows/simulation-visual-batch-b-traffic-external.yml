@@ -1,0 +1,158 @@
+name: WCS Visual Simulation Batch B Traffic External
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'src/Wcs.Desktop/ViewModels/SimulationVerificationTrafficExternalOperationsViewModel.cs'
+      - 'src/Wcs.Desktop/Views/SimulationTrafficExternalOperationsView.axaml'
+      - 'src/Wcs.Desktop/Views/SimulationTrafficExternalOperationsView.axaml.cs'
+      - 'src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs'
+      - '.github/workflows/simulation-visual-batch-b-traffic-external.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  batch-b:
+    name: build and verify Traffic External governed panels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Desktop Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Desktop/Wcs.Desktop.csproj
+          dotnet build src/Wcs.Desktop/Wcs.Desktop.csproj -c Release --no-restore
+
+      - name: Build Simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+
+      - name: Run S4 S5 simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/simulation-visual-batch-b
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            -c Release --no-build \
+            --filter 'FullyQualifiedName~SimulationVirtualTrafficTests|FullyQualifiedName~SimulationVirtualExternalTests' \
+            --logger 'trx;LogFileName=batch-b.trx' \
+            --results-directory artifacts/simulation-visual-batch-b
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root=ET.parse('artifacts/simulation-visual-batch-b/batch-b.trx').getroot()
+          results=root.findall('.//{*}UnitTestResult')
+          failed=[x.attrib.get('testName') for x in results if x.attrib.get('outcome') != 'Passed']
+          assert len(results) == 16, f'expected 16 S4/S5 tests, got {len(results)}'
+          assert not failed, f'failed Batch B tests: {failed}'
+          print('Batch B S4/S5 tests: 16/16 success')
+          PY
+
+      - name: Verify Traffic External panel contract and safety boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          vm = Path('src/Wcs.Desktop/ViewModels/SimulationVerificationTrafficExternalOperationsViewModel.cs').read_text(encoding='utf-8')
+          view = Path('src/Wcs.Desktop/Views/SimulationTrafficExternalOperationsView.axaml').read_text(encoding='utf-8')
+          host = Path('src/Wcs.Desktop/Views/SimulationStageInspectionView.axaml.cs').read_text(encoding='utf-8')
+          source = vm + view + host
+
+          traffic_actions = (
+              'traffic.zone.define', 'traffic.reserve', 'traffic.release', 'traffic.expire',
+              'traffic.rolling.reserve', 'traffic.rolling.release',
+              'traffic.deadlock.detect', 'traffic.deadlock.resolve'
+          )
+          external_actions = (
+              'external.endpoint.define', 'external.fault.apply', 'external.fault.clear',
+              'external.request.invoke', 'external.circuit.reset'
+          )
+          fault_kinds = (
+              'Timeout', 'Unavailable', 'HttpStatus', 'InvalidResponse', 'DuplicateResponse',
+              'SqlDeadlock', 'SqlCommandTimeout', 'ConnectionReset', 'HighLatency', 'PacketLoss', 'HalfOpen'
+          )
+          zone_kinds = ('SharedSegment', 'OpposingDirection', 'Merge', 'Intersection', 'Custom')
+          missing=[x for x in traffic_actions + external_actions + fault_kinds + zone_kinds if x not in source]
+          assert not missing, f'missing Batch B capability markers: {missing}'
+
+          required_commands = (
+              'GenerateTrafficOperationsScenarioCommand',
+              'GenerateAndRegisterTrafficOperationsScenarioCommand',
+              'GenerateTrafficDeadlockScenarioCommand',
+              'GenerateAndRegisterTrafficDeadlockScenarioCommand',
+              'GenerateExternalOperationsScenarioCommand',
+              'GenerateAndRegisterExternalOperationsScenarioCommand',
+              'SelectExternalFaultKindCommand'
+          )
+          missing_commands=[x for x in required_commands if x not in view]
+          assert not missing_commands, f'missing Batch B UI commands: {missing_commands}'
+
+          assert 'rgv.route.assign' in vm and 'rgv.vehicle.define' in vm, 'rolling reservation scenario must define RGV route first'
+          assert 'DL-000000000007' in vm, 'deadlock resolve must use deterministic S4 id from tested operation sequence'
+          assert 'if (httpStatus.HasValue)' in vm, 'HttpStatusCode must only be emitted for HttpStatus faults'
+          assert 'IsSha256Hex' in vm, 'external payload hash must be validated as SHA-256 hex'
+          assert 'RegisterScenarioAsync' in vm, 'Batch B must reuse existing S0 registration path'
+
+          assert 'xmlns:atom="https://atomui.net"' in view
+          for marker in ('<atom:Card', '<atom:LineEdit', '<atom:Button'):
+              assert marker in view, f'AtomUI marker missing: {marker}'
+          assert not re.search(r'<Button([ >])|<TextBox([ >])|<DataGrid([ >])|<TabControl([ >])|<TabItem([ >])', view), \
+              'Batch B view regressed to native product controls'
+          assert '交通管制与外部接口' in host and 'SimulationTrafficExternalOperationsView' in host
+
+          forbidden = (
+              'CommandBus', 'TaskScheduler', 'TaskOrchestrator', 'DeviceManager',
+              'TrafficCoordinator', 'RouteReservationManager', 'IPlcConnection', 'S7Connection',
+              'PlcForceWrite', '/api/hil/verification', 'HttpClient', 'SqlConnection', 'SqlSugarClient',
+              'PostAsync', 'PutAsync', 'PatchAsync', 'DeleteAsync'
+          )
+          found=[x for x in forbidden if x in source]
+          assert not found, f'Batch B references forbidden production/HIL/external runtime surface: {found}'
+          print('Batch B Traffic/External governed panel: PASS')
+          PY
+
+      - name: Write evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > artifacts/simulation-visual-batch-b/evidence.txt <<EOF
+          head_sha=${GITHUB_SHA}
+          batch=B
+          desktop_build=true
+          simulator_s4_s5_tests=16
+          traffic_actions=8
+          external_actions=5
+          external_fault_kinds=11
+          governed_s0_registration=true
+          direct_production_control=false
+          direct_real_external_io=false
+          direct_hil_control=false
+          atomui_surface=true
+          EOF
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-simulation-visual-batch-b-${{ github.run_number }}
+          path: artifacts/simulation-visual-batch-b/**
+          if-no-files-found: error
+          retention-days: 30

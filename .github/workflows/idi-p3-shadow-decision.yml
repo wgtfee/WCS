@@ -1,0 +1,77 @@
+name: WCS IDI P3 Shadow Decision Contract
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.DecisionIntelligence/**'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligence*.cs'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - 'src/Wcs.Host/**'
+      - 'src/Wcs.Desktop/**'
+      - 'src/Wcs.Simulator.Tests/DecisionIntelligence*Tests.cs'
+      - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
+      - 'docs/交付文件/97-*'
+      - 'docs/交付文件/98-*'
+      - 'docs/交付文件/99-*'
+      - 'docs/交付文件/100-*'
+      - 'docs/交付文件/101-*'
+      - 'docs/交付文件/102-*'
+      - '.github/workflows/idi-p3-shadow-decision.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shadow-decision-contract:
+    # P3 is a cumulative governance gate for later IDI stages as well.  A
+    # workflow_dispatch is always allowed, and PR runs on P3+ IDI feature
+    # branches must execute instead of producing a misleading skipped run that
+    # a later exact-head matrix could accidentally select.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'feature/idi-p') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore and build P3
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet restore src/Wcs.Infrastructure/Wcs.Infrastructure.csproj
+          dotnet build src/Wcs.DecisionIntelligence/Wcs.DecisionIntelligence.csproj -c Release --no-restore
+          dotnet build src/Wcs.Infrastructure/Wcs.Infrastructure.csproj -c Release --no-restore
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+      - name: Run exactly 24 P3 contract tests
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/idi-p3-shadow-decision
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~DecisionIntelligenceContractTests' --logger 'trx;LogFileName=idi-p3.trx' | tee artifacts/idi-p3-shadow-decision/test-output.txt
+          grep -Eq 'Passed![[:space:]]+- Failed:[[:space:]]+0,[[:space:]]+Passed:[[:space:]]+24,[[:space:]]+Skipped:[[:space:]]+0,[[:space:]]+Total:[[:space:]]+24' artifacts/idi-p3-shadow-decision/test-output.txt
+      - name: Verify proposal-only zero-control boundary
+        run: |
+          set -euo pipefail
+          if grep -RInE 'IPlcConnection|S7Client|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|IRouteReservationManager|HttpClient|SqlSugar|SqlConnection' src/Wcs.DecisionIntelligence; then
+            echo 'P3 domain contains forbidden control/network/SQL dependency.' >&2
+            exit 1
+          fi
+          grep -RIn 'ControlWriteAllowed => false' src/Wcs.DecisionIntelligence >/dev/null
+          grep -RIn 'FeatureSnapshotRequired' src/Wcs.DecisionIntelligence >/dev/null
+          grep -RIn 'ModelUnavailable' src/Wcs.DecisionIntelligence >/dev/null
+          grep -RIn 'Wcs_DecisionProposal' src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligenceEntities.cs >/dev/null
+          grep -RIn 'Wcs_DecisionConstraintResult' src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligenceEntities.cs >/dev/null
+          grep -RIn 'Wcs_DecisionApprovalJournal' src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligenceEntities.cs >/dev/null
+          grep -RIn 'Wcs_DecisionOutcomeJournal' src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligenceEntities.cs >/dev/null
+          grep -RIn 'Wcs_DecisionExplanationEvidence' src/Wcs.Infrastructure/IndustrialIntelligence/DecisionIntelligenceEntities.cs >/dev/null
+      - name: Write software evidence
+        run: |
+          printf 'stage=IDI-P3\nhead_sha=%s\ntest_count=24\nsql_tables=5\ncontrol_write_allowed=false\nproduction_automation_allowed=false\n' "$GITHUB_SHA" | tee artifacts/idi-p3-shadow-decision/evidence.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wcs-idi-p3-shadow-decision-${{ github.run_number }}
+          path: artifacts/idi-p3-shadow-decision/**
+          if-no-files-found: error
+          retention-days: 30

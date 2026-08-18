@@ -5,29 +5,9 @@
              xmlns:atom="https://atomui.net"
              x:DataType="vm:LoginViewModel"
              Background="{DynamicResource BgPrimary}">
-    <UserControl.Styles>
-        <Style Selector="Button">
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Margin" Value="0,5"/>
-            <Setter Property="FontSize" Value="14"/>
-        </Style>
-        <Style Selector="TextBox">
-            <Setter Property="Padding" Value="8"/>
-            <Setter Property="Margin" Value="0,5"/>
-            <Setter Property="FontSize" Value="14"/>
-        </Style>
-        <Style Selector="TextBlock">
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
-    </UserControl.Styles>
-
-    <!-- 左右分栏：左边图片，右边登录表单 -->
     <Grid ColumnDefinitions="*,1.2*">
-
-        <!-- 左边：图片区域 -->
         <Border Grid.Column="0" Background="{DynamicResource AccentBlue}">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="40">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="40" Spacing="10">
                 <TextBlock Text="工业智能管理系统"
                            FontSize="28"
                            FontWeight="Bold"
@@ -36,122 +16,90 @@
                 <TextBlock Text="Industrial Intelligence Management System"
                            FontSize="14"
                            Foreground="#B0D4F1"
-                           HorizontalAlignment="Center"
-                           Margin="0,10,0,0"/>
+                           HorizontalAlignment="Center"/>
             </StackPanel>
         </Border>
 
-        <!-- 右边：登录表单 -->
-        <Grid Grid.Column="1"
-              RowDefinitions="Auto,*,Auto"
-              Margin="50,40">
+        <Grid Grid.Column="1" Margin="50,40">
+            <atom:Card StyleVariant="Outlined" VerticalAlignment="Center">
+                <StackPanel Spacing="18" Margin="8">
+                    <StackPanel Spacing="4">
+                        <TextBlock Classes="wcs-page-title" Text="用户登录"/>
+                        <TextBlock Classes="wcs-page-subtitle" Text="登录 WCS Runtime Engine 管理与监控工作台。"/>
+                    </StackPanel>
 
-            <!-- 标题 -->
-            <TextBlock Grid.Row="0"
-                       Text="用户登录"
-                       FontSize="24"
-                       FontWeight="Bold"
-                       HorizontalAlignment="Left"
-                       Margin="0,0,0,30"
-                       Foreground="{DynamicResource TextPrimary}"/>
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="用户名" Foreground="{DynamicResource TextSecondary}"/>
+                        <atom:LineEdit Text="{Binding UserName, Mode=TwoWay}"
+                                       Watermark="请输入用户名"
+                                       IsEnabled="{Binding !IsLoading}">
+                            <atom:LineEdit.InnerLeftContent>
+                                <PathIcon Data="{StaticResource UserIcon}"
+                                          Width="16" Height="16"
+                                          Foreground="{DynamicResource TextSecondary}"/>
+                            </atom:LineEdit.InnerLeftContent>
+                        </atom:LineEdit>
+                    </StackPanel>
 
-            <!-- 登录表单 -->
-            <StackPanel Grid.Row="1" Spacing="15">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="密码" Foreground="{DynamicResource TextSecondary}"/>
+                        <atom:LineEdit Text="{Binding Password, Mode=TwoWay}"
+                                       PasswordChar="*"
+                                       Watermark="请输入密码"
+                                       IsEnabled="{Binding !IsLoading}">
+                            <atom:LineEdit.InnerLeftContent>
+                                <PathIcon Data="{StaticResource LockIcon}"
+                                          Width="16" Height="16"
+                                          Foreground="{DynamicResource TextSecondary}"/>
+                            </atom:LineEdit.InnerLeftContent>
+                        </atom:LineEdit>
+                    </StackPanel>
 
-                <!-- 用户名 -->
-                <StackPanel Spacing="5">
-                    <TextBlock Text="用户名" Foreground="{DynamicResource TextSecondary}"/>
-                    <TextBox Text="{Binding UserName, Mode=TwoWay}"
-                             PlaceholderText="请输入用户名"
-                             IsEnabled="{Binding !IsLoading}">
-                        <TextBox.InnerLeftContent>
-                            <PathIcon Data="{StaticResource UserIcon}"
-                                      Width="16" Height="16"
-                                      Margin="8,0,0,0"
-                                      Foreground="{DynamicResource TextSecondary}"/>
-                        </TextBox.InnerLeftContent>
-                    </TextBox>
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="验证码" Foreground="{DynamicResource TextSecondary}"/>
+                        <Grid ColumnDefinitions="*,130,70" ColumnSpacing="8">
+                            <atom:LineEdit Grid.Column="0"
+                                           Text="{Binding Captcha, Mode=TwoWay}"
+                                           Watermark="请输入验证码"
+                                           MaxLength="6"
+                                           MinWidth="100"
+                                           IsEnabled="{Binding !IsLoading}"/>
+                            <Border Grid.Column="1"
+                                    Width="130" Height="40"
+                                    CornerRadius="6"
+                                    BorderBrush="{DynamicResource BorderColor}"
+                                    BorderThickness="1"
+                                    Background="{DynamicResource BgCard}">
+                                <Image Source="{Binding CaptchaImage}"
+                                       Width="126" Height="36"
+                                       Stretch="Uniform"
+                                       Margin="2"/>
+                            </Border>
+                            <atom:Button Grid.Column="2"
+                                         Content="刷新"
+                                         Height="40"
+                                         Command="{Binding GenerateCaptchaCommand}"
+                                         IsEnabled="{Binding !IsLoading}"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Border Background="#FEE2E2"
+                            CornerRadius="6"
+                            Padding="10,6"
+                            IsVisible="{Binding HasError}">
+                        <TextBlock Text="{Binding ErrorMessage}"
+                                   Foreground="#DC2626"
+                                   TextWrapping="Wrap"
+                                   FontSize="13"/>
+                    </Border>
+
+                    <atom:Button Content="登 录"
+                                 Command="{Binding LoginCommand}"
+                                 IsEnabled="{Binding !IsLoading}"
+                                 HorizontalAlignment="Stretch"
+                                 Height="44"/>
                 </StackPanel>
-
-                <!-- 密码 -->
-                <StackPanel Spacing="5">
-                    <TextBlock Text="密码" Foreground="{DynamicResource TextSecondary}"/>
-                    <TextBox Text="{Binding Password, Mode=TwoWay}"
-                             PasswordChar="*"
-                             PlaceholderText="请输入密码"
-                             IsEnabled="{Binding !IsLoading}">
-                        <TextBox.InnerLeftContent>
-                            <PathIcon Data="{StaticResource LockIcon}"
-                                      Width="16" Height="16"
-                                      Margin="8,0,0,0"
-                                      Foreground="{DynamicResource TextSecondary}"/>
-                        </TextBox.InnerLeftContent>
-                    </TextBox>
-                </StackPanel>
-
-                <!-- 验证码 -->
-                <StackPanel Spacing="5">
-                    <TextBlock Text="验证码" Foreground="{DynamicResource TextSecondary}"/>
-                    <!-- 使用固定列宽避免图片加载导致布局抖动 -->
-                    <Grid ColumnDefinitions="*,130,60" ColumnSpacing="8">
-                        <TextBox Grid.Column="0"
-                                 Text="{Binding Captcha, Mode=TwoWay}"
-                                 PlaceholderText="请输入验证码"
-                                 MaxLength="6"
-                                 MinWidth="100"
-                                 IsEnabled="{Binding !IsLoading}"/>
-                        <Border Grid.Column="1"
-                                Width="130" Height="40"
-                                CornerRadius="4"
-                                BorderBrush="{DynamicResource BorderColor}"
-                                BorderThickness="1"
-                                Background="{DynamicResource BgCard}">
-                            <Image Source="{Binding CaptchaImage}"
-                                   Width="126" Height="36"
-                                   Stretch="Uniform"
-                                   Margin="2"/>
-                        </Border>
-                        <Button Grid.Column="2"
-                                Content="刷新"
-                                Width="60" Height="40"
-                                Command="{Binding GenerateCaptchaCommand}"
-                                IsEnabled="{Binding !IsLoading}"
-                                Background="{DynamicResource BgSecondary}"
-                                Foreground="{DynamicResource TextPrimary}"
-                                FontSize="13"
-                                CornerRadius="4"/>
-                    </Grid>
-                </StackPanel>
-
-                <!-- 错误信息 -->
-                <Border Background="#FEE2E2"
-                        CornerRadius="4"
-                        Padding="10,6"
-                        IsVisible="{Binding HasError}">
-                    <TextBlock Text="{Binding ErrorMessage}"
-                               Foreground="#DC2626"
-                               TextWrapping="Wrap"
-                               FontSize="13"/>
-                </Border>
-            </StackPanel>
-
-            <!-- 登录按钮 -->
-            <atom:Button Grid.Row="2"
-                    Content="登 录"
-                    Command="{Binding LoginCommand}"
-                    IsEnabled="{Binding !IsLoading}"
-                    HorizontalAlignment="Stretch"
-                    Height="45"
-                    Background="{DynamicResource AccentBlue}"
-                    Foreground="White"
-                    FontWeight="Bold"
-                    FontSize="16">
-                <Button.Styles>
-                    <Style Selector="Button:pointerover">
-                        <Setter Property="Background" Value="#106EBE"/>
-                    </Style>
-                </Button.Styles>
-            </atom:Button>
+            </atom:Card>
         </Grid>
     </Grid>
 </UserControl>

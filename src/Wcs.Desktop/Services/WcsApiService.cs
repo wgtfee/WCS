@@ -3,14 +3,12 @@ using System.Net.Http.Json;
 using Wcs.Core.Recovery;
 using Wcs.Core.StateCenter.Models;
 using Wcs.Core.TaskEngine.Context;
+using Wcs.Core.TransportScheduling;
 using Wcs.Desktop.Models;
 using Wcs.Entity;
 
 namespace Wcs.Desktop.Services;
 
-/// <summary>
-/// REST API 客户端 - 基于 HttpClient 的实现
-/// </summary>
 public class WcsApiService : IWcsApiService
 {
     private readonly HttpClient _http;
@@ -21,24 +19,14 @@ public class WcsApiService : IWcsApiService
         _http.BaseAddress = new Uri(options.Value.ServerUrl);
     }
 
-    public async Task<SystemOverview?> GetOverviewAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<SystemOverview>("/api/overview", ct);
+    public async Task<SystemOverview?> GetOverviewAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<SystemOverview>("/api/overview", ct);
+    public async Task<List<DeviceState>> GetDevicesAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<DeviceState>>("/api/devices", ct) ?? [];
+    public async Task<DeviceState?> GetDeviceAsync(string deviceId, CancellationToken ct = default) => await _http.GetFromJsonAsync<DeviceState>($"/api/devices/{deviceId}", ct);
+    public async Task<List<TaskContext>> GetActiveTasksAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TaskContext>>("/api/tasks", ct) ?? [];
 
-    public async Task<List<DeviceState>> GetDevicesAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<DeviceState>>("/api/devices", ct) ?? [];
-
-    public async Task<DeviceState?> GetDeviceAsync(string deviceId, CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<DeviceState>($"/api/devices/{deviceId}", ct);
-
-    public async Task<List<TaskContext>> GetActiveTasksAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<TaskContext>>("/api/tasks", ct) ?? [];
-
-    public async Task<TaskContext?> CreateTaskAsync(string deviceId, string routeId,
-        int priority = 2, Dictionary<string, object>? parameters = null,
-        CancellationToken ct = default)
+    public async Task<TaskContext?> CreateTaskAsync(string deviceId, string routeId, int priority = 2, Dictionary<string, object>? parameters = null, CancellationToken ct = default)
     {
-        var response = await _http.PostAsJsonAsync("/api/tasks",
-            new { deviceId, routeId, priority, parameters }, ct);
+        var response = await _http.PostAsJsonAsync("/api/tasks", new { deviceId, routeId, priority, parameters }, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<TaskContext>(ct);
     }
@@ -50,23 +38,10 @@ public class WcsApiService : IWcsApiService
         return await response.Content.ReadFromJsonAsync<bool>(ct);
     }
 
-    public async Task<List<AlarmState>> GetAlarmsAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms", ct) ?? [];
-
-    public async Task AckAlarmAsync(string alarmId, CancellationToken ct = default)
-    {
-        var response = await _http.PostAsync($"/api/alarms/{alarmId}/ack", null, ct);
-        response.EnsureSuccessStatusCode();
-    }
-
-    public async Task RecoverAlarmAsync(string alarmCode, CancellationToken ct = default)
-    {
-        var response = await _http.PostAsync($"/api/alarms/{alarmCode}/recover", null, ct);
-        response.EnsureSuccessStatusCode();
-    }
-
-    public async Task<List<ObjectState>> GetObjectsAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<ObjectState>>("/api/objects", ct) ?? [];
+    public async Task<List<AlarmState>> GetAlarmsAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms", ct) ?? [];
+    public async Task AckAlarmAsync(string alarmId, CancellationToken ct = default) { var response = await _http.PostAsync($"/api/alarms/{alarmId}/ack", null, ct); response.EnsureSuccessStatusCode(); }
+    public async Task RecoverAlarmAsync(string alarmCode, CancellationToken ct = default) { var response = await _http.PostAsync($"/api/alarms/{alarmCode}/recover", null, ct); response.EnsureSuccessStatusCode(); }
+    public async Task<List<ObjectState>> GetObjectsAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<ObjectState>>("/api/objects", ct) ?? [];
 
     public async Task<RecoveryResult?> RecoverAsync(CancellationToken ct = default)
     {
@@ -75,48 +50,198 @@ public class WcsApiService : IWcsApiService
         return await response.Content.ReadFromJsonAsync<RecoveryResult>(ct);
     }
 
-    public async Task<List<MenuItemDto>> GetMenusAsync(CancellationToken ct = default)
-        => await _http.GetFromJsonAsync<List<MenuItemDto>>("/api/menus", ct) ?? [];
+    public async Task<List<MenuItemDto>> GetMenusAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<MenuItemDto>>("/api/menus", ct) ?? [];
+    public async Task<List<TransportVehicleSnapshot>> GetTransportVehiclesAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TransportVehicleSnapshot>>("/api/transport/vehicles", ct) ?? [];
+    public async Task<List<TransportExecutionSnapshot>> GetTransportExecutionsAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TransportExecutionSnapshot>>("/api/transport/executions", ct) ?? [];
+    public async Task<List<RouteReservation>> GetTransportReservationsAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<RouteReservation>>("/api/transport/reservations", ct) ?? [];
+    public async Task<TransportTrafficSnapshot?> GetTransportTrafficAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<TransportTrafficSnapshot>("/api/transport/traffic", ct);
+    public async Task<List<TransportDeadlockCycle>> GetTransportDeadlocksAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TransportDeadlockCycle>>("/api/transport/traffic/deadlocks", ct) ?? [];
 
-    // ---- 数据库查询 ----
+    public async Task<List<TransportChargingStationSnapshot>> GetTransportChargingStationsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportChargingStationSnapshot>>("/api/transport/optimization/charging/stations", ct) ?? [];
+    public async Task<List<TransportChargingPlan>> GetTransportChargingPlansAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportChargingPlan>>("/api/transport/optimization/charging/plans", ct) ?? [];
+    public async Task<List<TransportTaskReassignmentRecord>> GetTransportReassignmentsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportTaskReassignmentRecord>>("/api/transport/optimization/reassignments", ct) ?? [];
+    public async Task<TransportPerformanceSnapshot?> GetTransportPerformanceAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportPerformanceSnapshot>("/api/transport/optimization/metrics", ct);
 
-    public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
+    public async Task<List<TransportChargingEvaluation>> EvaluateTransportChargingAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/optimization/charging/evaluate", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<TransportChargingEvaluation>>(ct) ?? [];
+    }
 
-    public async Task<List<AlarmState>> GetAlarmHistoryAsync(
-        DateTime? from = null, DateTime? to = null,
-        string? level = null, int page = 1, int pageSize = 50,
+    public async Task<TransportRuntimeConfiguration?> GetTransportConfigurationAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportRuntimeConfiguration>("/api/transport/administration/configuration", ct);
+    public async Task<List<TransportGovernedOperation>> GetTransportGovernedOperationsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportGovernedOperation>>("/api/transport/administration/operations", ct) ?? [];
+    public async Task<List<TransportAuditRecord>> GetTransportAuditsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportAuditRecord>>("/api/transport/administration/audits", ct) ?? [];
+
+    public async Task<List<TransportJournalRecord>> GetTransportJournalAsync(
+        TransportJournalCategory? category = null,
         CancellationToken ct = default)
     {
-        var query = BuildQuery("/api/alarms/history", ("from", from?.ToString("O")),
-            ("to", to?.ToString("O")), ("level", level),
-            ("page", page.ToString()), ("pageSize", pageSize.ToString()));
+        var path = category.HasValue
+            ? $"/api/transport/administration/journal?category={Uri.EscapeDataString(category.Value.ToString())}"
+            : "/api/transport/administration/journal";
+        return await _http.GetFromJsonAsync<List<TransportJournalRecord>>(path, ct) ?? [];
+    }
+
+    public async Task<List<TransportPlcSignalMap>> GetTransportPlcSignalMapsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportPlcSignalMap>>("/api/transport/drivers/maps", ct) ?? [];
+    public async Task<List<TransportDriverDiagnosticSnapshot>> GetTransportDriverDiagnosticsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportDriverDiagnosticSnapshot>>("/api/transport/drivers/diagnostics", ct) ?? [];
+
+    public async Task<TransportDriverSyncReport?> PollTransportDriversAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/drivers/poll", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportDriverSyncReport>(ct);
+    }
+
+    public async Task<TransportDriverReconciliationReport?> ReconcileTransportDriversAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/drivers/reconcile", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportDriverReconciliationReport>(ct);
+    }
+
+    public async Task<List<TransportSignalTemplate>> GetTransportSignalTemplatesAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportSignalTemplate>>("/api/transport/commissioning/templates", ct) ?? [];
+
+    public async Task<List<TransportFaultDefinition>> GetTransportFaultDefinitionsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportFaultDefinition>>("/api/transport/commissioning/faults", ct) ?? [];
+
+    public async Task<List<TransportRecoveryConflictCase>> GetTransportRecoveryConflictsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportRecoveryConflictCase>>("/api/transport/commissioning/conflicts", ct) ?? [];
+
+    public async Task<List<TransportRecoveryConflictCase>> RefreshTransportRecoveryConflictsAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/commissioning/conflicts/refresh", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<TransportRecoveryConflictCase>>(ct) ?? [];
+    }
+
+    public async Task<TransportCommandCompensationReport?> GetTransportCommandCompensationAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportCommandCompensationReport>("/api/transport/commissioning/compensation", ct);
+
+    public async Task<List<TransportCommunicationTrace>> GetTransportCommunicationTracesAsync(
+        int maxCount = 500,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportCommunicationTrace>>(
+            $"/api/transport/commissioning/traces?maxCount={Math.Clamp(maxCount, 1, 2000)}",
+            ct) ?? [];
+
+    public async Task<TransportSignalProbeResult?> ProbeTransportVehicleAsync(
+        string vehicleId,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportSignalProbeResult>(
+            $"/api/transport/commissioning/vehicles/{Uri.EscapeDataString(vehicleId)}/probe",
+            ct);
+
+    public async Task<TransportProductionTuningOptions?> GetTransportProductionTuningAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportProductionTuningOptions>("/api/transport/production/tuning", ct);
+
+    public async Task<List<TransportStationRuntimeSnapshot>> GetTransportProductionStationsAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportStationRuntimeSnapshot>>("/api/transport/production/stations", ct) ?? [];
+
+    public async Task<List<TransportSingleTrackSectionSnapshot>> GetTransportSingleTrackAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportSingleTrackSectionSnapshot>>("/api/transport/production/single-track", ct) ?? [];
+
+    public async Task<List<TransportProductionQueueItem>> GetTransportProductionQueueAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportProductionQueueItem>>("/api/transport/production/queue", ct) ?? [];
+
+    public async Task<TransportProductionDispatchCycleResult?> RunTransportProductionDispatchCycleAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/production/dispatch-cycle", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportProductionDispatchCycleResult>(ct);
+    }
+
+    public async Task<TransportProductionDryRunReport?> GetTransportProductionDryRunAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportProductionDryRunReport>("/api/transport/production/dry-run", ct);
+
+    public async Task<List<TransportDispatchDecisionFrame>> GetTransportDispatchDecisionsAsync(
+        int maxCount = 500,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportDispatchDecisionFrame>>(
+            $"/api/transport/production/decisions?maxCount={Math.Clamp(maxCount, 1, 5000)}",
+            ct) ?? [];
+
+    public async Task<TransportProductionTrendSummary?> GetTransportProductionTrendsAsync(
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
+        CancellationToken ct = default)
+    {
+        var path = BuildQuery(
+            "/api/transport/production/trends",
+            ("fromUtc", fromUtc?.ToString("O")),
+            ("toUtc", toUtc?.ToString("O")));
+        return await _http.GetFromJsonAsync<TransportProductionTrendSummary>(path, ct);
+    }
+
+    public async Task<TransportFaultTakeoverReport?> EvaluateTransportFaultTakeoverAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/production/fault-takeover/evaluate", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportFaultTakeoverReport>(ct);
+    }
+
+    public async Task<TransportObservabilitySnapshot?> GetTransportObservabilityAsync(CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<TransportObservabilitySnapshot>("/api/transport/observability/summary", ct);
+
+    public async Task<TransportHealthSnapshot?> EvaluateTransportHealthAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/observability/health/evaluate", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportHealthSnapshot>(ct);
+    }
+
+    public async Task<TransportConsistencyReport?> InspectTransportConsistencyAsync(CancellationToken ct = default)
+    {
+        var response = await _http.PostAsync("/api/transport/observability/consistency/inspect", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TransportConsistencyReport>(ct);
+    }
+
+    public async Task<List<TransportTraceRecord>> GetTransportTracesAsync(
+        int maxCount = 500,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportTraceRecord>>(
+            $"/api/transport/observability/traces?maxCount={Math.Clamp(maxCount, 1, 5000)}",
+            ct) ?? [];
+
+    public async Task<List<TransportConfigurationSnapshot>> GetTransportConfigurationSnapshotsAsync(
+        int maxCount = 100,
+        CancellationToken ct = default) =>
+        await _http.GetFromJsonAsync<List<TransportConfigurationSnapshot>>(
+            $"/api/transport/observability/configuration-snapshots?maxCount={Math.Clamp(maxCount, 1, 500)}",
+            ct) ?? [];
+
+    public async Task<List<AlarmState>> GetAlarmsFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<AlarmState>>("/api/alarms/db", ct) ?? [];
+
+    public async Task<List<AlarmState>> GetAlarmHistoryAsync(DateTime? from = null, DateTime? to = null, string? level = null, int page = 1, int pageSize = 50, CancellationToken ct = default)
+    {
+        var query = BuildQuery("/api/alarms/history", ("from", from?.ToString("O")), ("to", to?.ToString("O")), ("level", level), ("page", page.ToString()), ("pageSize", pageSize.ToString()));
         return await _http.GetFromJsonAsync<List<AlarmState>>(query, ct) ?? [];
     }
 
-    public async Task<List<TaskContext>> GetTasksFromDbAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<TaskContext>>("/api/tasks/db", ct) ?? [];
+    public async Task<List<TaskContext>> GetTasksFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<TaskContext>>("/api/tasks/db", ct) ?? [];
 
-    public async Task<List<TaskContext>> GetTaskHistoryAsync(
-        DateTime? from = null, DateTime? to = null,
-        string? status = null, int page = 1, int pageSize = 50,
-        CancellationToken ct = default)
+    public async Task<List<TaskContext>> GetTaskHistoryAsync(DateTime? from = null, DateTime? to = null, string? status = null, int page = 1, int pageSize = 50, CancellationToken ct = default)
     {
-        var query = BuildQuery("/api/tasks/history", ("from", from?.ToString("O")),
-            ("to", to?.ToString("O")), ("status", status),
-            ("page", page.ToString()), ("pageSize", pageSize.ToString()));
+        var query = BuildQuery("/api/tasks/history", ("from", from?.ToString("O")), ("to", to?.ToString("O")), ("status", status), ("page", page.ToString()), ("pageSize", pageSize.ToString()));
         return await _http.GetFromJsonAsync<List<TaskContext>>(query, ct) ?? [];
     }
 
-    public async Task<List<DeviceState>> GetDevicesFromDbAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<DeviceState>>("/api/devices/db", ct) ?? [];
+    public async Task<List<DeviceState>> GetDevicesFromDbAsync(CancellationToken ct = default) => await _http.GetFromJsonAsync<List<DeviceState>>("/api/devices/db", ct) ?? [];
 
-    /// <summary>构建查询字符串，跳过 null/空参数</summary>
     private static string BuildQuery(string basePath, params (string Name, string? Value)[] parameters)
     {
-        var parts = parameters
-            .Where(p => !string.IsNullOrEmpty(p.Value))
-            .Select(p => $"{p.Name}={Uri.EscapeDataString(p.Value!)}");
+        var parts = parameters.Where(p => !string.IsNullOrEmpty(p.Value)).Select(p => $"{p.Name}={Uri.EscapeDataString(p.Value!)}");
         var joined = string.Join("&", parts);
         return string.IsNullOrEmpty(joined) ? basePath : $"{basePath}?{joined}";
     }

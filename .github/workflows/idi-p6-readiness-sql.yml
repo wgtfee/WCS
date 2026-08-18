@@ -1,0 +1,104 @@
+name: WCS IDI P6 Readiness SQL Evidence
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.IndustrialIntelligence/Governance/BoundedAutomationReadiness*.cs'
+      - 'src/Wcs.Infrastructure/IndustrialIntelligence/BoundedAutomationReadinessPersistence.cs'
+      - 'src/Wcs.Infrastructure/Wcs.Infrastructure.csproj'
+      - 'src/Wcs.Simulator.Tests/BoundedAutomationSqlEvidenceTests.cs'
+      - '.github/workflows/idi-p6-readiness-sql.yml'
+      - '.github/workflows/dotnet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness-sql-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      EVIDENCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      WCS_P6_SQL_CONNECTION: Server=localhost,1433;Database=master;User Id=sa;Password=P6_Strong!Passw0rd;TrustServerCertificate=True;Encrypt=False
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: P6_Strong!Passw0rd
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'P6_Strong!Passw0rd' -C -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'P6_Strong!Passw0rd' -Q 'SELECT 1' || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=20s
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build SQL Evidence integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj
+          dotnet build src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --no-restore
+
+      - name: Run exactly 6 P6 SQL Evidence tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/idi-p6-sql
+          dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj \
+            -c Release --no-build \
+            --filter 'FullyQualifiedName~BoundedAutomationSqlEvidenceTests' \
+            --logger 'trx;LogFileName=idi-p6-sql.trx' \
+            --results-directory artifacts/idi-p6-sql
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          path='artifacts/idi-p6-sql/idi-p6-sql.trx'
+          root=ET.parse(path).getroot()
+          results=root.findall('.//{*}UnitTestResult')
+          failed=[x for x in results if x.attrib.get('outcome') != 'Passed']
+          assert len(results) == 6, f'expected exactly 6 P6 SQL tests, got {len(results)}'
+          assert not failed, f'failed P6 SQL tests: {[x.attrib.get("testName") for x in failed]}'
+          print('IDI-P6 SQL Evidence tests: 6/6 success')
+          PY
+
+      - name: Verify append-only SQL safety boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='src/Wcs.Infrastructure/IndustrialIntelligence/BoundedAutomationReadinessPersistence.cs'
+          grep -q 'Wcs_BoundedAutomationReadinessEvidence' "$file"
+          grep -q 'ProductionEnablementAllowed = false' "$file"
+          if grep -nE 'Updateable<BoundedAutomation|Deleteable<BoundedAutomation' "$file"; then
+            echo 'P6 SQL Evidence persistence exposes update/delete.' >&2
+            exit 1
+          fi
+          grep -q 'EvaluationId is immutable' "$file"
+
+      - name: Write exact-head SQL Evidence artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > artifacts/idi-p6-sql/evidence.json <<EOF
+          {"schema":"wcs-idi-p6-sql/v1","head_sha":"${EVIDENCE_HEAD_SHA}","testCount":6,"allSuccess":true,"appendOnly":true,"productionEnablementAllowed":false,"controlWriteAllowed":false,"finalClaim":"software-side ready only"}
+          EOF
+          test "$(jq -r '.head_sha' artifacts/idi-p6-sql/evidence.json)" = "$EVIDENCE_HEAD_SHA"
+          test "$(jq -r '.testCount' artifacts/idi-p6-sql/evidence.json)" -eq 6
+          test "$(jq -r '.productionEnablementAllowed' artifacts/idi-p6-sql/evidence.json)" = 'false'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wcs-idi-p6-readiness-sql-${{ github.run_number }}
+          path: artifacts/idi-p6-sql/**
+          if-no-files-found: error
+          retention-days: 30

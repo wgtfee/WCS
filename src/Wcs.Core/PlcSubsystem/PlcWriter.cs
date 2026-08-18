@@ -74,19 +74,20 @@ public class PlcWriter
         try
         {
             var now = DateTime.UtcNow;
-            var id = now.Ticks + Random.Shared.Next(0, 9999);
+            var db = _db.CopyNew();
 
             // Wcs_PlcWriteLog
-            await _db.Insertable(new PlcWriteLogEntity
+            await db.Insertable(new PlcWriteLogEntity
             {
-                Id = id, PlcName = plcName, DbBlock = dbBlock, StartByte = startByte,
+                Id = SnowFlakeSingle.Instance.NextId(),
+                PlcName = plcName, DbBlock = dbBlock, StartByte = startByte,
                 CommandType = commandType, DeviceId = deviceId, TaskId = taskId,
                 DataHex = dataHex, DataLength = dataLength, Success = success,
                 ErrorMessage = error, WriteTime = now
             }).ExecuteCommandAsync();
 
             // Wcs_CommandLog
-            await _db.Insertable(new CommandLogEntity
+            await db.Insertable(new CommandLogEntity
             {
                 CommandId = Guid.NewGuid().ToString("N"),
                 CommandType = commandType,

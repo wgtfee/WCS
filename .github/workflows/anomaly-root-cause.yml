@@ -1,0 +1,335 @@
+name: WCS Asset Health Root Cause
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - '.github/workflows/anomaly-root-cause*.yml'
+      - 'src/Wcs.Core/AnomalyDetection/RootCause/**'
+      - 'src/Wcs.Core.Tests/AssetHealthRootCause*'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/RootCause/**'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Fusion/AnomalyFusionDependencyInjection.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Host/Controllers/AnomalyRootCause*.cs'
+      - 'src/Wcs.Host/appsettings*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  ASPNETCORE_ENVIRONMENT: LoadTest
+  DOTNET_ENVIRONMENT: LoadTest
+  ASPNETCORE_URLS: http://127.0.0.1:5130
+  ConnectionStrings__WcsDb: 'Server=127.0.0.1,1433;Database=WCS_RootCause;User Id=sa;Password=Wcs_RootCause!2026;Encrypt=False;TrustServerCertificate=True;'
+  Simulator__Enabled: 'false'
+  Storage__Telemetry__Provider: Disabled
+  AnomalyDetection__Enabled: 'false'
+  AnomalyDetection__MachineLearning__Enabled: 'false'
+  TransportCycleAnalysis__Enabled: 'false'
+  AnomalyFusion__Enabled: 'false'
+  AnomalyHealthScoring__Enabled: 'false'
+  AssetHealthGovernance__Enabled: 'false'
+  AssetHealthRootCause__Enabled: 'true'
+  AssetHealthRootCause__EvaluationIntervalSeconds: '3600'
+  AssetHealthRootCause__CorrelationWindowSeconds: '300'
+  AssetHealthRootCause__MaximumPropagationDepth: '6'
+  AssetHealthRootCause__MaximumGraphNodes: '100'
+  AssetHealthRootCause__MaximumGraphEdges: '100'
+  AssetHealthRootCause__MaximumEventsPerAnalysis: '100'
+  AssetHealthRootCause__MaximumCandidates: '10'
+  AssetHealthRootCause__MaximumPaths: '100'
+  AssetHealthRootCause__MaximumAnalysesQueryCount: '1000'
+  AssetHealthRootCause__MinimumCandidateConfidence: '0'
+  AssetHealthRootCause__AllowCycles: 'false'
+  AssetHealthRootCause__AnalysisRetentionHours: '24'
+  AssetHealthRootCause__MaintenanceIntervalSeconds: '3600'
+  AssetHealthRootCause__MaintenanceBatchSize: '100'
+  AssetHealthRootCause__Graph__Version: root-cause-e2e-v1
+  AssetHealthRootCause__Graph__Source: github-actions
+  AssetHealthRootCause__Graph__ApprovedBy: ci-reviewer
+  AssetHealthRootCause__Graph__ApprovedAtUtc: '2026-07-28T00:00:00Z'
+  AssetHealthRootCause__Graph__Nodes__0__NodeId: N-MOTOR
+  AssetHealthRootCause__Graph__Nodes__0__EntityId: MOTOR-01
+  AssetHealthRootCause__Graph__Nodes__0__DisplayName: Motor 01
+  AssetHealthRootCause__Graph__Nodes__0__Kind: Component
+  AssetHealthRootCause__Graph__Nodes__1__NodeId: N-CONVEYOR
+  AssetHealthRootCause__Graph__Nodes__1__EntityId: CV-01
+  AssetHealthRootCause__Graph__Nodes__1__DisplayName: Conveyor 01
+  AssetHealthRootCause__Graph__Nodes__1__Kind: Asset
+  AssetHealthRootCause__Graph__Nodes__2__NodeId: N-STATION
+  AssetHealthRootCause__Graph__Nodes__2__EntityId: ST-01
+  AssetHealthRootCause__Graph__Nodes__2__DisplayName: Station 01
+  AssetHealthRootCause__Graph__Nodes__2__Kind: Station
+  AssetHealthRootCause__Graph__Edges__0__EdgeId: E-MOTOR-CV
+  AssetHealthRootCause__Graph__Edges__0__UpstreamNodeId: N-MOTOR
+  AssetHealthRootCause__Graph__Edges__0__DownstreamNodeId: N-CONVEYOR
+  AssetHealthRootCause__Graph__Edges__0__RelationType: Controls
+  AssetHealthRootCause__Graph__Edges__0__Weight: '0.9'
+  AssetHealthRootCause__Graph__Edges__1__EdgeId: E-CV-ST
+  AssetHealthRootCause__Graph__Edges__1__UpstreamNodeId: N-CONVEYOR
+  AssetHealthRootCause__Graph__Edges__1__DownstreamNodeId: N-STATION
+  AssetHealthRootCause__Graph__Edges__1__RelationType: Feeds
+  AssetHealthRootCause__Graph__Edges__1__Weight: '0.8'
+
+jobs:
+  root-cause:
+    name: graph, ranking, sql, review, and restart recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: 'Wcs_RootCause!2026'
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Host and focused tests
+        shell: bash
+        run: |
+          mkdir -p artifacts/TestResults
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore
+          dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter 'FullyQualifiedName~AssetHealthRootCauseAnalysisEngineTests' \
+            --logger 'trx;LogFileName=asset-health-root-cause.trx' \
+            --results-directory artifacts/TestResults
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          echo "$sql_container" > artifacts/sql-container-id.txt
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_RootCause]"
+          '
+
+      - name: Start Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/root-cause-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/root-cause-host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/root-cause/status" \
+                | tee artifacts/root-cause-initial-status.json
+              jq -e '.runtime.enabled == true and .runtime.graphValid == true and .runtime.graphNodes == 3 and .runtime.graphEdges == 2 and .store.isAvailable == true and .store.registeredGraphs == 1' \
+                artifacts/root-cause-initial-status.json >/dev/null
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/root-cause-host.pid)" 2>/dev/null; then
+              cat artifacts/root-cause-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/root-cause-host.log
+          exit 1
+
+      - name: Verify ranking, propagation, and idempotency
+        shell: bash
+        run: |
+          cat > artifacts/root-cause-request.json <<'JSON'
+          {
+            "triggerEventId": "E-STATION",
+            "events": [
+              {
+                "eventId": "E-MOTOR",
+                "assetId": "MOTOR-01",
+                "version": 1,
+                "healthScore": 50,
+                "grade": "Degraded",
+                "firstDetectedUtc": "2026-07-28T00:00:00Z",
+                "lastObservedUtc": "2026-07-28T00:00:05Z",
+                "reason": "motor current deviation"
+              },
+              {
+                "eventId": "E-CONVEYOR",
+                "assetId": "CV-01",
+                "version": 1,
+                "healthScore": 48,
+                "grade": "Degraded",
+                "firstDetectedUtc": "2026-07-28T00:00:10Z",
+                "lastObservedUtc": "2026-07-28T00:00:15Z",
+                "reason": "conveyor speed deviation"
+              },
+              {
+                "eventId": "E-STATION",
+                "assetId": "ST-01",
+                "version": 1,
+                "healthScore": 20,
+                "grade": "Critical",
+                "firstDetectedUtc": "2026-07-28T00:00:20Z",
+                "lastObservedUtc": "2026-07-28T00:00:25Z",
+                "reason": "station cycle timeout"
+              }
+            ]
+          }
+          JSON
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/root-cause-request.json \
+            "$ASPNETCORE_URLS/api/anomaly/root-cause/load/analyses" \
+            | tee artifacts/root-cause-first.json
+          jq -e '.inserted == true and .analysis.observedEventCount == 3 and .analysis.primaryCandidate.nodeId == "N-MOTOR" and .analysis.primaryCandidate.supportingEventCount == 3' \
+            artifacts/root-cause-first.json >/dev/null
+          jq -e '[.analysis.primaryCandidate.propagationPaths[] | select(.targetEventId == "E-STATION" and .depth == 2)] | length == 1' \
+            artifacts/root-cause-first.json >/dev/null
+          analysis_id="$(jq -r '.analysis.analysisId' artifacts/root-cause-first.json)"
+          echo "$analysis_id" > artifacts/analysis-id.txt
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data @artifacts/root-cause-request.json \
+            "$ASPNETCORE_URLS/api/anomaly/root-cause/load/analyses" \
+            | tee artifacts/root-cause-duplicate.json
+          jq -e --arg id "$analysis_id" '.inserted == false and .analysis.analysisId == $id' \
+            artifacts/root-cause-duplicate.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/root-cause/events/E-STATION/latest" \
+            | tee artifacts/root-cause-latest.json
+          jq -e --arg id "$analysis_id" '.analysisId == $id and .primaryCandidate.nodeId == "N-MOTOR"' \
+            artifacts/root-cause-latest.json >/dev/null
+
+      - name: Verify review journal
+        shell: bash
+        run: |
+          analysis_id="$(cat artifacts/analysis-id.txt)"
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data '{"decision":1,"selectedRootCauseNodeId":"N-MOTOR","actor":"reviewer-a","note":"confirmed from current and timing evidence"}' \
+            "$ASPNETCORE_URLS/api/anomaly/root-cause/analyses/$analysis_id/reviews" \
+            | tee artifacts/root-cause-confirmed.json
+          jq -e '.reviewDecision == 1 and .selectedRootCauseNodeId == "N-MOTOR" and .reviewedBy == "reviewer-a"' \
+            artifacts/root-cause-confirmed.json >/dev/null
+
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data '{"decision":3,"selectedRootCauseNodeId":"N-CONVEYOR","actor":"reviewer-b","note":"field inspection suggests conveyor coupling as supplemental root cause"}' \
+            "$ASPNETCORE_URLS/api/anomaly/root-cause/analyses/$analysis_id/reviews" \
+            | tee artifacts/root-cause-supplemented.json
+          jq -e '.reviewDecision == 3 and .selectedRootCauseNodeId == "N-CONVEYOR" and .reviewedBy == "reviewer-b"' \
+            artifacts/root-cause-supplemented.json >/dev/null
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/root-cause/analyses/$analysis_id/reviews?maxCount=10" \
+            | tee artifacts/root-cause-reviews.json
+          jq -e 'length == 2 and .[0].decision == 3 and .[1].decision == 1' \
+            artifacts/root-cause-reviews.json >/dev/null
+
+      - name: Verify SQL exact counts
+        shell: bash
+        run: |
+          sql_container="$(cat artifacts/sql-container-id.txt)"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_RootCause -W -h -1 -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM Wcs_AssetHealthRootCauseGraphVersion; SELECT COUNT(*) FROM Wcs_AssetHealthRootCauseAnalysis; SELECT COUNT(*) FROM Wcs_AssetHealthRootCauseReviewJournal;"
+          ' | sed '/^[[:space:]]*$/d' | tee artifacts/root-cause-sql-counts.txt
+          mapfile -t counts < <(grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' artifacts/root-cause-sql-counts.txt | tr -d ' ')
+          [[ "${counts[0]}" == "1" ]]
+          [[ "${counts[1]}" == "1" ]]
+          [[ "${counts[2]}" == "2" ]]
+
+      - name: Verify Host restart recovery
+        shell: bash
+        run: |
+          kill "$(cat artifacts/root-cause-host.pid)"
+          wait "$(cat artifacts/root-cause-host.pid)" 2>/dev/null || true
+          pushd src/Wcs.Host/bin/Release/net8.0 >/dev/null
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/root-cause-host-restart.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/root-cause-host.pid"
+          popd >/dev/null
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then break; fi
+            if ! kill -0 "$(cat artifacts/root-cause-host.pid)" 2>/dev/null; then
+              cat artifacts/root-cause-host-restart.log
+              exit 1
+            fi
+            if [[ "$attempt" -eq 90 ]]; then cat artifacts/root-cause-host-restart.log; exit 1; fi
+            sleep 2
+          done
+          analysis_id="$(cat artifacts/analysis-id.txt)"
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 5 \
+              "$ASPNETCORE_URLS/api/anomaly/root-cause/analyses/$analysis_id" \
+              -o artifacts/root-cause-after-restart.json \
+              && jq -e '.reviewDecision == 3 and .selectedRootCauseNodeId == "N-CONVEYOR" and .candidates[0].nodeId == "N-MOTOR"' \
+                artifacts/root-cause-after-restart.json >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              cat artifacts/root-cause-after-restart.json 2>/dev/null || true
+              cat artifacts/root-cause-host-restart.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat artifacts/root-cause-after-restart.json
+
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 5 \
+              "$ASPNETCORE_URLS/api/anomaly/root-cause/status" \
+              -o artifacts/root-cause-final-status.json \
+              && jq -e '.store.registeredGraphs == 1 and .store.retainedAnalyses == 1 and .store.retainedReviews == 2' \
+                artifacts/root-cause-final-status.json >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              cat artifacts/root-cause-final-status.json 2>/dev/null || true
+              cat artifacts/root-cause-host-restart.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat artifacts/root-cause-final-status.json
+
+      - name: Stop services
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/root-cause-host.pid ]]; then kill "$(cat artifacts/root-cause-host.pid)" 2>/dev/null || true; fi
+          if [[ -f artifacts/sql-container-id.txt ]]; then docker logs "$(cat artifacts/sql-container-id.txt)" > artifacts/sqlserver.log 2>&1 || true; fi
+
+      - name: Upload root cause evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-asset-health-root-cause-${{ github.run_number }}
+          path: artifacts/**
+          if-no-files-found: error
+          retention-days: 14

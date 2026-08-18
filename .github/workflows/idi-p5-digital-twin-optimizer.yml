@@ -1,0 +1,65 @@
+name: WCS IDI P5 Digital Twin Optimizer Contract
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Optimization/**'
+      - 'src/Wcs.Simulator/Optimization/**'
+      - 'src/Wcs.Simulator/Wcs.Simulator.csproj'
+      - 'src/Wcs.Host/Controllers/DigitalTwinOptimizerController.cs'
+      - 'src/Wcs.Desktop/Services/DigitalTwinOptimizerApiService.cs'
+      - 'src/Wcs.Desktop/ViewModels/DigitalTwinOptimizerViewModel.cs'
+      - 'src/Wcs.Desktop/Views/DigitalTwinOptimizerView.axaml*'
+      - 'src/Wcs.Simulator.Tests/DigitalTwinOptimizerContractTests.cs'
+      - 'src/Wcs.Simulator.Tests/DigitalTwinOptimizerIntegrationTests.cs'
+      - 'src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj'
+      - '.github/workflows/idi-p5-digital-twin-optimizer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  optimizer-contract:
+    runs-on: ubuntu-latest
+    env:
+      EVIDENCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore and build P5
+        run: |
+          dotnet build src/Wcs.Optimization/Wcs.Optimization.csproj -c Release
+          dotnet build src/Wcs.Simulator/Wcs.Simulator.csproj -c Release
+      - name: Run exactly 24 P5 specialty tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(dotnet test src/Wcs.Simulator.Tests/Wcs.Simulator.Tests.csproj -c Release --filter 'FullyQualifiedName~DigitalTwinOptimizer' --logger 'console;verbosity=normal')
+          printf '%s\n' "$OUT"
+          echo "$OUT" | grep -Eq 'Total tests:[[:space:]]+24'
+          echo "$OUT" | grep -Eq 'Passed:[[:space:]]+24'
+          ! echo "$OUT" | grep -Eq 'Failed:[[:space:]]+[1-9][0-9]*'
+      - name: Verify recommendation-only zero-control boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -n 'ControlWriteAllowed => false' src/Wcs.Optimization
+          grep -R -n 'AutoProductionPolicyReplacementAllowed => false' src/Wcs.Optimization
+          grep -R -n 'ProductionAutomationAllowed => false' src/Wcs.Optimization
+          grep -R -n 'MaximumAutomationLevel => "L1"' src/Wcs.Optimization
+          ! grep -R -n -E 'S7Client|S7RealClient|S7CommPlusDriver|Snap7|CommandBus|TaskScheduler|TaskOrchestrator|DeviceManager|UnifiedTransportDispatchEngine|TransportTrafficCoordinator|RouteReservationManager|IRouteReservationManager|WriteAsync\(|HttpClient|SqlSugar' src/Wcs.Optimization src/Wcs.Simulator/Optimization
+      - name: Write software evidence for exact PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          printf '{"schema":"wcs-idi-p5-specialty/v4","head_sha":"%s","testCount":24,"allSuccess":true,"controlWriteAllowed":false,"autoProductionPolicyReplacementAllowed":false,"productionAutomationAllowed":false,"maximumAutomationLevel":"L1","requiredSimulationStages":11,"determinismRoundsPerInput":2,"standardCandidateCount":6}\n' "$EVIDENCE_HEAD_SHA" > artifacts/idi-p5-specialty.json
+          test "$(jq -r '.head_sha' artifacts/idi-p5-specialty.json)" = "$EVIDENCE_HEAD_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wcs-idi-p5-digital-twin-optimizer-${{ github.run_number }}
+          path: artifacts/idi-p5-specialty.json

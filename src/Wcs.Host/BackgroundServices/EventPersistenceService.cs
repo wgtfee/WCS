@@ -6,11 +6,9 @@ using Wcs.Core.EventBus.Publisher;
 using Wcs.Core.PlcSubsystem.Examples;
 
 /// <summary>
-/// 事件持久化服务 — 订阅 EventBus 关键事件写入 SqlSugar
-///
-/// 重要：不共享 DI 单例 ISqlSugarClient。
-/// 使用独立短连接 + 连接池（Max Pool Size=200），
-/// 避免并发写入争用同一个连接导致的 MARS/Connecting 异常。
+/// 业务事件持久化服务。
+/// RawSignalEvent 已迁移到可配置的 PLC telemetry pipeline；
+/// 本服务只保留必须进入业务 SQL 的事件。
 /// </summary>
 public class EventPersistenceService : BackgroundService
 {
@@ -26,7 +24,6 @@ public class EventPersistenceService : BackgroundService
         _logger = logger;
     }
 
-    /// <summary>独立连接，不共享 DI 单例</summary>
     private ISqlSugarClient CreateDb()
         => new SqlSugarClient(new ConnectionConfig
         {
@@ -37,43 +34,18 @@ public class EventPersistenceService : BackgroundService
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _eventBus.Subscribe<RawSignalEvent>(async (evt, ct) =>
-        {
-            if (!await _throttle.WaitAsync(1000, ct)) return;
-            try
-            {
-                using var db = CreateDb();
-                await db.Insertable(new DeviceStateLogEntity
-                {
-                    Id = DateTime.UtcNow.Ticks + Random.Shared.Next(0, 9999),
-                    DeviceId = ExtractDeviceId(evt.FieldName) ?? evt.FieldName,
-                    FieldName = evt.FieldName,
-                    OldValue = evt.OldValue,
-                    NewValue = evt.NewValue,
-                    ChangeTime = evt.OccurTime,
-                    PlcName = evt.PlcName,
-                    DbBlock = evt.DbBlock,
-                    ValidatorPassed = evt.ValidatorPassed,
-                    ValidatorReason = evt.ValidatorReason ?? "",
-                    DomainEventType = evt.DomainEventType ?? ""
-                }).ExecuteCommandAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "写入 DeviceStateLog 失败");
-            }
-            finally { _throttle.Release(); }
-        });
-
         _eventBus.Subscribe<PalletArrivedEvent>(async (evt, ct) =>
         {
-            if (!await _throttle.WaitAsync(1000, ct)) return;
+            var entered = false;
             try
             {
+                entered = await _throttle.WaitAsync(1000, ct);
+                if (!entered) return;
+
                 using var db = CreateDb();
                 await db.Insertable(new DeviceStateLogEntity
                 {
-                    Id = DateTime.UtcNow.Ticks + Random.Shared.Next(0, 9999),
+                    Id = SnowFlakeSingle.Instance.NextId(),
                     DeviceId = evt.DeviceId,
                     FieldName = "PalletArrived",
                     NewValue = "true",
@@ -82,22 +54,25 @@ public class EventPersistenceService : BackgroundService
                     DomainEventType = nameof(PalletArrivedEvent),
                 }).ExecuteCommandAsync(ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Normal publisher/Host shutdown.
+            }
+            catch (Exception) when (ct.IsCancellationRequested)
+            {
+                // SqlClient can translate cancellation into SqlException on shutdown.
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "写入 PalletArrivedEvent 失败");
             }
-            finally { _throttle.Release(); }
+            finally
+            {
+                if (entered) _throttle.Release();
+            }
         });
 
-
-        _logger.LogInformation("EventPersistenceService 已启动");
+        _logger.LogInformation("EventPersistenceService 已启动（业务事件模式）");
         return Task.CompletedTask;
-    }
-
-    private static string? ExtractDeviceId(string fieldName)
-    {
-        if (string.IsNullOrEmpty(fieldName)) return null;
-        var parts = fieldName.Split('_', '.', '-');
-        return parts.Length > 0 ? parts[0] : null;
     }
 }

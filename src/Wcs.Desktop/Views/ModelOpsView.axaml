@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
+             x:Class="Wcs.Desktop.Views.ModelOpsView"
+             x:DataType="vm:ModelOpsViewModel"
+             Background="{DynamicResource BgPrimary}">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,*" Margin="24" RowSpacing="14">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="wcs-page-title" Text="IDI-P1 ModelOps Center" />
+                <TextBlock Classes="wcs-page-subtitle" Text="模型注册、Shadow/Champion/Fallback/Quarantine、重启恢复与 append-only Evidence。" />
+                <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
+            </StackPanel>
+            <atom:Button Grid.Column="1" Content="刷新" Command="{Binding RefreshCommand}" />
+        </Grid>
+
+        <Border Grid.Row="1" Classes="wcs-boundary-strip">
+            <StackPanel Spacing="4"><TextBlock Classes="wcs-section-title" Text="安全边界"/><TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}"/></StackPanel>
+        </Border>
+
+        <atom:Card Grid.Row="2" Header="模型治理输入" StyleVariant="Outlined">
+            <Grid ColumnDefinitions="*,*,*,*,*,Auto" ColumnSpacing="8">
+                <StackPanel><TextBlock Text="ModelId"/><atom:LineEdit Text="{Binding ModelId}"/></StackPanel>
+                <StackPanel Grid.Column="1"><TextBlock Text="AssetType"/><atom:LineEdit Text="{Binding AssetType}"/></StackPanel>
+                <StackPanel Grid.Column="2"><TextBlock Text="Profile"/><atom:LineEdit Text="{Binding Profile}"/></StackPanel>
+                <StackPanel Grid.Column="3"><TextBlock Text="Version"/><atom:LineEdit Text="{Binding ModelVersion}"/></StackPanel>
+                <StackPanel Grid.Column="4"><TextBlock Text="Actor"/><atom:LineEdit Text="{Binding Actor}"/></StackPanel>
+                <atom:Button Grid.Column="5" VerticalAlignment="Bottom" Content="进入 Shadow" Command="{Binding EnterShadowCommand}" />
+            </Grid>
+        </atom:Card>
+
+        <Grid Grid.Row="3" ColumnDefinitions="2*,*" ColumnSpacing="14">
+            <atom:Card Header="部署状态" StyleVariant="Outlined">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                        <TextBlock Classes="wcs-toolbar-status" Text="{Binding RecoveryText}" VerticalAlignment="Center"/>
+                        <atom:Button Grid.Column="1" Content="批准 Champion" Command="{Binding PromoteChampionCommand}"/>
+                        <atom:Button Grid.Column="2" Content="回滚 Fallback" Command="{Binding RollbackCommand}"/>
+                        <atom:Button Grid.Column="3" Content="Quarantine" Command="{Binding QuarantineCommand}"/>
+                    </Grid>
+                    <atom:DataGrid Grid.Row="1" ItemsSource="{Binding Deployments}" SelectedItem="{Binding SelectedDeployment}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                        <atom:DataGrid.Columns>
+                            <atom:DataGridTextColumn Header="版本" Binding="{Binding ModelVersion}" Width="120"/><atom:DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="110"/><atom:DataGridTextColumn Header="AssetType" Binding="{Binding AssetType}" Width="110"/><atom:DataGridTextColumn Header="Profile" Binding="{Binding Profile}" Width="110"/><atom:DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="140"/><atom:DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*"/>
+                        </atom:DataGrid.Columns>
+                    </atom:DataGrid>
+                </Grid>
+            </atom:Card>
+            <atom:Card Grid.Column="1" Header="操作理由" StyleVariant="Outlined">
+                <StackPanel Spacing="8">
+                    <atom:LineEdit Text="{Binding Reason}" AcceptsReturn="True" MinHeight="90" TextWrapping="Wrap"/>
+                    <TextBlock Classes="wcs-section-title" Text="环境"/><TextBlock Text="{Binding Environment}"/>
+                    <TextBlock Classes="wcs-section-title" Text="治理模式"/><TextBlock Text="{Binding ModeText}"/>
+                    <TextBlock Classes="wcs-page-subtitle" Text="所有按钮仅改变 ModelOps 治理状态；不存在 PLC/CommandBus/调度写入。"/>
+                </StackPanel>
+            </atom:Card>
+        </Grid>
+
+        <atom:Card Grid.Row="4" Header="Append-only Audit Journal" StyleVariant="Outlined">
+            <atom:DataGrid ItemsSource="{Binding AuditEntries}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                <atom:DataGrid.Columns>
+                    <atom:DataGridTextColumn Header="时间" Binding="{Binding OccurredAtUtc}" Width="190"/><atom:DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="180"/><atom:DataGridTextColumn Header="版本" Binding="{Binding ModelVersion}" Width="100"/><atom:DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="120"/><atom:DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*"/><atom:DataGridTextColumn Header="Payload SHA-256" Binding="{Binding PayloadHash}" Width="260"/>
+                </atom:DataGrid.Columns>
+            </atom:DataGrid>
+        </atom:Card>
+    </Grid>
+</UserControl>

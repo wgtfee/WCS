@@ -1,0 +1,260 @@
+name: WCS One Hour Soak Load
+
+on:
+  pull_request:
+    branches: [ "develop" ]
+    paths:
+      - ".github/workflows/e2e-soak.yml"
+      - "src/Wcs.Application/**"
+      - "src/Wcs.Core/**"
+      - "src/Wcs.Host/**"
+      - "src/Wcs.Infrastructure/**"
+      - "src/Wcs.Simulator/**"
+      - "tests/load/**"
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: "Soak duration in seconds"
+        required: true
+        default: "3600"
+      http_concurrency:
+        description: "Concurrent HTTP workers"
+        required: true
+        default: "24"
+      signalr_connections:
+        description: "Concurrent SignalR connections"
+        required: true
+        default: "100"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-one-hour-soak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak-load:
+    name: 1h Host + SQL + SimPLC + SignalR
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_LoadTest!2026"
+        ports:
+          - 1433:1433
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: "LoadTest"
+      DOTNET_ENVIRONMENT: "LoadTest"
+      ASPNETCORE_URLS: "http://127.0.0.1:5080"
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_LoadTest;User Id=sa;Password=Wcs_LoadTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0.03"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build Host
+        run: |
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        run: |
+          mkdir -p artifacts
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_LoadTest]"
+          '
+
+      - name: Start isolated Host
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/host.pid"
+          popd
+          for attempt in {1..60}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then exit 0; fi
+            if ! kill -0 "$(cat artifacts/host.pid)" 2>/dev/null; then cat artifacts/host.log; exit 1; fi
+            sleep 2
+          done
+          cat artifacts/host.log
+          exit 1
+
+      - name: Run one-hour realistic soak
+        env:
+          DURATION_SECONDS: ${{ inputs.duration_seconds || '3600' }}
+          HTTP_CONCURRENCY: ${{ inputs.http_concurrency || '24' }}
+          SIGNALR_CONNECTIONS: ${{ inputs.signalr_connections || '100' }}
+          WRITE_INTERVAL_MS: "1000"
+          REQUEST_TIMEOUT_MS: "5000"
+          MAX_ERROR_RATE_PERCENT: "0"
+          MAX_P95_MS: "500"
+          MIN_SIGNALR_MESSAGES: "10000"
+          OUTPUT_PATH: "artifacts/one-hour-soak-results.json"
+        run: |
+          export HOST_PID="$(cat artifacts/host.pid)"
+          samples_file="artifacts/task-queue-samples.txt"
+          stop_file="artifacts/stop-monitor"
+          rm -f "$samples_file" "$stop_file"
+
+          (
+            while [[ ! -f "$stop_file" ]]; do
+              status="$(curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/api/tasks/queue" || true)"
+              if [[ -n "$status" ]]; then
+                printf '%s|%s|%s|%s\n' \
+                  "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
+                  "$(jq -r '.queued // 0' <<<"$status")" \
+                  "$(jq -r '.running // 0' <<<"$status")" \
+                  "$(jq -r '.total // 0' <<<"$status")" >> "$samples_file"
+              fi
+              sleep 1
+            done
+          ) &
+          monitor_pid="$!"
+
+          cleanup_monitor() {
+            touch "$stop_file"
+            wait "$monitor_pid" 2>/dev/null || true
+          }
+          trap cleanup_monitor EXIT
+
+          load_timeout_seconds="$((DURATION_SECONDS + 300))"
+          timeout --signal=TERM --kill-after=30s "${load_timeout_seconds}s" \
+            node tests/load/wcs-one-hour-soak.mjs
+
+          cleanup_monitor
+          trap - EXIT
+
+      - name: Collect post-soak GC diagnostics
+        run: |
+          test -s artifacts/one-hour-soak-results.json
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/load/collect-gc" \
+            | tee artifacts/soak-gc.json
+          sleep 1
+          ps -o rss= -p "$(cat artifacts/host.pid)" | tr -d ' ' > artifacts/soak-post-gc-rss-kb.txt
+
+      - name: Validate one-hour stability
+        run: |
+          result="artifacts/one-hour-soak-results.json"
+          test -s "$result"
+          test -s artifacts/task-queue-samples.txt
+          test -s artifacts/soak-gc.json
+          test -s artifacts/soak-post-gc-rss-kb.txt
+
+          requests="$(jq -r '.http.totalRequests' "$result")"
+          failed="$(jq -r '.http.failedRequests' "$result")"
+          p95="$(jq -r '.http.p95Milliseconds' "$result")"
+          signalr_messages="$(jq -r '.signalR.serverMessages' "$result")"
+          signalr_errors="$(jq -r '(.signalR.errors | length) + .signalR.unexpectedCloses' "$result")"
+          memory_samples="$(jq -r '.memory.samples' "$result")"
+          initial="$(jq -r '.memory.initialRssMb' "$result")"
+          final="$(jq -r '.memory.finalRssMb' "$result")"
+          peak="$(jq -r '.memory.peakRssMb' "$result")"
+          q4_minus_q2="$(jq -r '.memory.q4MinusQ2Mb' "$result")"
+          tail_slope="$(jq -r '.memory.last15MinuteSlopeMbPerMinute' "$result")"
+          managed_after_mb="$(jq -r '.managedAfterBytes / 1048576' artifacts/soak-gc.json)"
+          endpoint_post_gc_mb="$(jq -r '.rssAfterBytes / 1048576' artifacts/soak-gc.json)"
+          sampled_post_gc_mb="$(awk '{printf "%.2f", $1/1024}' artifacts/soak-post-gc-rss-kb.txt)"
+          peak_queued="$(awk -F'|' 'BEGIN {m=0} {if ($2+0>m)m=$2+0} END {print m}' artifacts/task-queue-samples.txt)"
+          final_queued="$(tail -n1 artifacts/task-queue-samples.txt | awk -F'|' '{print $2+0}')"
+          growth="$(awk -v f="$final" -v i="$initial" 'BEGIN {printf "%.2f", f-i}')"
+          post_gc_growth="$(awk -v f="$sampled_post_gc_mb" -v i="$initial" 'BEGIN {printf "%.2f", f-i}')"
+
+          printf 'requests=%s\nfailed=%s\np95_ms=%s\nsignalr_messages=%s\nsignalr_errors=%s\nmemory_samples=%s\ninitial_rss_mb=%s\nfinal_rss_mb=%s\npeak_rss_mb=%s\nrss_growth_mb=%s\nq4_minus_q2_mb=%s\nlast15m_slope_mb_per_minute=%s\nmanaged_after_gc_mb=%s\nendpoint_post_gc_rss_mb=%s\nsampled_post_gc_rss_mb=%s\npost_gc_growth_mb=%s\npeak_queued=%s\nfinal_queued=%s\n' \
+            "$requests" "$failed" "$p95" "$signalr_messages" "$signalr_errors" "$memory_samples" \
+            "$initial" "$final" "$peak" "$growth" "$q4_minus_q2" "$tail_slope" \
+            "$managed_after_mb" "$endpoint_post_gc_mb" "$sampled_post_gc_mb" "$post_gc_growth" \
+            "$peak_queued" "$final_queued" | tee artifacts/soak-summary.txt
+
+          (( requests >= 1000000 ))
+          [[ "$failed" == "0" ]]
+          (( signalr_messages >= 10000 ))
+          [[ "$signalr_errors" == "0" ]]
+          (( memory_samples >= 3300 ))
+          awk -v value="$p95" 'BEGIN {exit !(value <= 500)}'
+          # 初始 RSS 是冷启动样本，包含 JIT、Server GC、Kestrel/SignalR 与原生缓冲区预热，不能作为 GC 后泄漏基线。
+          # 使用进程硬预算、Q2 到 Q4 平台增量、尾段斜率和 GC 后托管存活量共同判定长期稳定性。
+          awk -v value="$growth" 'BEGIN {exit !(value <= 900)}'
+          awk -v value="$peak" 'BEGIN {exit !(value <= 1200)}'
+          awk -v value="$q4_minus_q2" 'BEGIN {exit !(value <= 100)}'
+          awk -v value="$tail_slope" 'BEGIN {exit !(value <= 3)}'
+          awk -v value="$sampled_post_gc_mb" 'BEGIN {exit !(value <= 1024)}'
+          awk -v value="$managed_after_mb" 'BEGIN {exit !(value <= 256)}'
+          (( peak_queued <= 100 ))
+          (( final_queued <= 25 ))
+
+      - name: Validate SQL and runtime evidence
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d WCS_LoadTest -h -1 -W \
+              -Q "SELECT COUNT_BIG(*) FROM Wcs_DeviceStateLog; SELECT COUNT_BIG(*) FROM Wcs_TaskRun;"
+          ' > artifacts/sql-counts.txt
+          mapfile -t counts < <(grep -E '^[0-9]+$' artifacts/sql-counts.txt)
+          device_logs="${counts[0]:-0}"
+          task_runs="${counts[1]:-0}"
+          printf 'device_state_logs=%s\ntask_runs=%s\n' "$device_logs" "$task_runs" | tee artifacts/sql-summary.txt
+          (( device_logs > 0 && device_logs <= 100000 ))
+          (( task_runs >= 3000 ))
+
+          if grep -Eqi 'OutOfMemory|Unhandled exception|PK_Wcs_DeviceStateLog_Id|The connection is broken|The connection is closed|current state is connecting|Persist cycle failed' artifacts/host.log; then
+            grep -Eni 'OutOfMemory|Unhandled exception|PK_Wcs_DeviceStateLog_Id|The connection is broken|The connection is closed|current state is connecting|Persist cycle failed' artifacts/host.log
+            exit 1
+          fi
+
+      - name: Stop Host
+        if: always()
+        run: |
+          if [[ -f artifacts/host.pid ]]; then
+            pid="$(cat artifacts/host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..30}; do
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload one-hour evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-one-hour-soak-${{ github.run_number }}
+          path: |
+            artifacts/host.log
+            artifacts/one-hour-soak-results.json
+            artifacts/task-queue-samples.txt
+            artifacts/soak-summary.txt
+            artifacts/soak-gc.json
+            artifacts/soak-post-gc-rss-kb.txt
+            artifacts/sql-counts.txt
+            artifacts/sql-summary.txt
+          retention-days: 14

@@ -22,6 +22,12 @@ using Wcs.Core.PlcSubsystem.OpcUa;
 using Wcs.Core.PlcSubsystem.S7;
 using Wcs.Core.PlcSubsystem.S7.S7CommPlus;
 using Wcs.Core.SignalSnapshot;
+using Wcs.Core.TransportScheduling;
+using Wcs.Host.Middleware;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 Log.Logger = LoggingSetup.CreateLogger();
 
@@ -32,15 +38,61 @@ try
     builder.Services.AddSerilog(Log.Logger, dispose: true);
     builder.Services.AddWcsApplication();
     builder.Services.AddWcsInfrastructure(builder.Configuration);
+    Wcs.Host.Mcp.WcsMcpHosting.AddWcsMcp(builder);
     builder.Services.Configure<WcsOptions>(builder.Configuration.GetSection("WcsOptions"));
+
+    var transportObservability = builder.Configuration
+        .GetSection("TransportObservability")
+        .Get<TransportObservabilityOptions>() ?? new TransportObservabilityOptions();
+    builder.Services.AddSingleton(transportObservability);
+
+    Uri? otlpEndpoint = null;
+    if (transportObservability.EnableOtlpExporter &&
+        !string.IsNullOrWhiteSpace(transportObservability.OtlpEndpoint) &&
+        Uri.TryCreate(transportObservability.OtlpEndpoint, UriKind.Absolute, out var configuredOtlpEndpoint))
+    {
+        otlpEndpoint = configuredOtlpEndpoint;
+    }
+
+    var openTelemetry = builder.Services
+        .AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService(
+            serviceName: TransportTelemetryNames.ServiceName,
+            serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString()))
+        .WithTracing(tracing =>
+        {
+            tracing
+                .AddSource(TransportTelemetryNames.ActivitySourceName)
+                .AddAspNetCoreInstrumentation(options => options.RecordException = true)
+                .AddHttpClientInstrumentation(options => options.RecordException = true);
+            if (otlpEndpoint is not null)
+                tracing.AddOtlpExporter(options => options.Endpoint = otlpEndpoint);
+        })
+        .WithMetrics(metrics =>
+        {
+            metrics
+                .AddMeter(TransportTelemetryNames.MeterName)
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddRuntimeInstrumentation();
+            if (transportObservability.EnablePrometheusEndpoint)
+                metrics.AddPrometheusExporter();
+            if (otlpEndpoint is not null)
+                metrics.AddOtlpExporter(options => options.Endpoint = otlpEndpoint);
+        });
 
     builder.Services.AddSingleton<IPlcBlockDiffEngine, PlcBlockDiffEngine>();
 
     // ===== SqlSugar DI =====
     var dbConnStr = builder.Configuration.GetConnectionString("WcsDb");
     if (!string.IsNullOrEmpty(dbConnStr))
-        builder.Services.AddSingleton<ISqlSugarClient>(_ => new SqlSugarClient(
-            new ConnectionConfig { ConnectionString = dbConnStr + ";MultipleActiveResultSets=True;Max Pool Size=200", DbType = DbType.SqlServer, IsAutoCloseConnection = false }));
+        builder.Services.AddSingleton<ISqlSugarClient>(_ => new SqlSugarScope(
+            new ConnectionConfig
+            {
+                ConnectionString = dbConnStr + ";MultipleActiveResultSets=True;Max Pool Size=200",
+                DbType = DbType.SqlServer,
+                IsAutoCloseConnection = true
+            }));
 
     // ===== PLC 核心注册 =====
     var connectToPlc = !builder.Configuration.GetSection("Simulator").GetValue<bool>("Enabled");
@@ -135,13 +187,13 @@ try
     }
     else
     {
-        //builder.Services.AddSingleton(sp => new SimulatedPlcPollingService(
-        //    sp.GetRequiredService<Wcs.Core.PlcSubsystem.S7.PlcStructRegistry>(),
-        //    sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
-        //    sp.GetRequiredService<Wcs.Core.EventDetection.EventDetector>(),
-        //    sp.GetRequiredService<Wcs.Core.SignalSnapshot.SignalSnapshotCenter>(),
-        //    sp.GetRequiredService<ILogger<SimulatedPlcPollingService>>()));
-        //builder.Services.AddHostedService<SimulatorBackgroundService>();
+        builder.Services.AddSingleton(sp => new SimulatedPlcPollingService(
+            sp.GetRequiredService<PlcStructRegistry>(),
+            sp.GetRequiredService<Wcs.Core.StateCenter.Interfaces.IStateCenter>(),
+            sp.GetRequiredService<EventDetector>(),
+            sp.GetRequiredService<SignalSnapshotCenter>(),
+            sp.GetRequiredService<ILogger<SimulatedPlcPollingService>>()));
+        builder.Services.AddHostedService<SimulatorBackgroundService>();
         Log.Logger.Information("🧪 模拟模式 — 3 PLC 9 DB + 18 验证器");
     }
 
@@ -149,6 +201,10 @@ try
     builder.Services.AddHostedService<PersistBackgroundService>();
     builder.Services.AddHostedService<AlarmMonitorBackgroundService>();
     builder.Services.AddHostedService<EventPersistenceService>();
+    builder.Services.AddHostedService<PlcTelemetryEventBridgeService>();
+    builder.Services.AddHostedService<PlcAnomalyDetectionService>();
+    builder.Services.AddHostedService<PlcAnomalyPersistenceService>();
+    builder.Services.AddHostedService<PlcAnomalyAlarmBridgeService>();
     builder.Services.AddHostedService<TaskGeneratorService>();
     builder.Services.AddHostedService<TaskExecutionWorker>();
     builder.Services.AddHostedService<AlarmWiringService>();
@@ -156,6 +212,8 @@ try
 
     builder.Services.AddWindowsService(options => options.ServiceName = "WCS Runtime Engine");
     builder.Services.AddSignalR();
+    builder.Services.AddSingleton<SignalRStatePublisher>();
+    builder.Services.AddHostedService<SignalRBridgeBackgroundService>();
     builder.Services.AddControllers();
     builder.Services.AddHealthChecks()
         .AddCheck<Wcs.Host.HealthChecks.WcsReadinessCheck>("readiness")
@@ -170,7 +228,6 @@ try
         var dbInit = app.Services.GetRequiredService<IDatabaseInitializer>();
         await dbInit.EnsureDatabaseAsync();
         logger.LogInformation("数据库就绪");
-
     }
     catch (Exception ex)
     {
@@ -203,8 +260,13 @@ try
 
     RegisterPlcValidators(app.Services, logger);
 
+    app.UseMiddleware<TransportTraceContextMiddleware>();
+    if (transportObservability.EnablePrometheusEndpoint)
+        app.UseOpenTelemetryPrometheusScrapingEndpoint();
+
     app.MapHub<WcsHub>("/wcs");
     app.MapControllers();
+    Wcs.Host.Mcp.WcsMcpHosting.MapWcsMcp(app);
     app.MapHealthChecks("/health/ready", new() { Predicate = r => r.Name == "readiness" });
     app.MapHealthChecks("/health/live", new() { Predicate = r => r.Name == "liveness" });
     app.MapHealthChecks("/health");
@@ -232,9 +294,9 @@ static void RegisterPlcValidators(IServiceProvider services, Microsoft.Extension
         // detector.RegisterValidator(new StationInterlockValidator());
 
         // === 标签验证器 ===
-        //detector.RegisterValidator(new TagStationInterlockValidator());
-        //detector.RegisterValidator(new TagBarcodeDbValidator());
-        
+        // detector.RegisterValidator(new TagStationInterlockValidator());
+        // detector.RegisterValidator(new TagBarcodeDbValidator());
+
         // === Modbus / OPC UA ===
         // detector.RegisterValidator(new ModbusConveyorValidator());
 

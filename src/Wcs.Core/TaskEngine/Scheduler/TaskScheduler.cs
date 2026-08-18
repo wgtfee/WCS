@@ -37,7 +37,8 @@ public class TaskScheduler : ITaskScheduler
     private readonly ITaskQueueStore? _queueStore;
     private readonly object _queueLock = new();
 
-    private const int DefaultConcurrencyLimit = 3;
+    // 一个物理设备默认只能执行一个命令流。确需并行的虚拟设备可显式调高。
+    private const int DefaultConcurrencyLimit = 1;
 
     public TaskScheduler(ITaskQueueStore? queueStore = null)
     {
@@ -88,29 +89,30 @@ public class TaskScheduler : ITaskScheduler
 
         lock (_queueLock)
         {
-            while (_queue.Count > 0)
-            {
-                if (_queue.TryDequeue(out var task, out _))
-                {
-                    var deviceId = task.DeviceId;
-                    var limit = _deviceConcurrencyLimit.GetOrAdd(deviceId, _ => DefaultConcurrencyLimit);
-                    var currentCount = _deviceTaskCount.GetOrAdd(deviceId, _ => 0);
+            // 不能因为最高优先级任务的设备正忙就直接返回，否则其他空闲设备
+            // 会被队头任务阻塞。最多扫描当前队列一轮，并原样放回被跳过项。
+            var itemsToInspect = _queue.Count;
+            var blocked = new List<(TaskContext Task, int Priority)>(itemsToInspect);
 
-                    if (currentCount < limit)
-                    {
-                        _deviceTaskCount.AddOrUpdate(deviceId, 1, (_, count) => count + 1);
-                        task.Status = TaskStatusEnum.Running;
-                        dequeued = task;
-                        break;
-                    }
-                    else
-                    {
-                        var weight = ComputeSortWeight(task);
-                        _queue.Enqueue(task, -weight);
-                        return null;
-                    }
+            while (itemsToInspect-- > 0 && _queue.TryDequeue(out var task, out var priority))
+            {
+                var deviceId = task.DeviceId;
+                var limit = _deviceConcurrencyLimit.GetOrAdd(deviceId, _ => DefaultConcurrencyLimit);
+                var currentCount = _deviceTaskCount.GetOrAdd(deviceId, _ => 0);
+
+                if (currentCount < limit)
+                {
+                    _deviceTaskCount.AddOrUpdate(deviceId, 1, (_, count) => count + 1);
+                    task.Status = TaskStatusEnum.Running;
+                    dequeued = task;
+                    break;
                 }
+
+                blocked.Add((task, priority));
             }
+
+            foreach (var item in blocked)
+                _queue.Enqueue(item.Task, item.Priority);
         }
 
         // V8: 从持久化队列移除
@@ -131,6 +133,7 @@ public class TaskScheduler : ITaskScheduler
 
             task.Status = TaskStatusEnum.Created;
             _taskCache.TryAdd(task.TaskId, task);
+            _deviceConcurrencyLimit.GetOrAdd(task.DeviceId, _ => DefaultConcurrencyLimit);
 
             lock (_queueLock)
             {

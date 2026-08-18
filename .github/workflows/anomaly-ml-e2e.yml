@@ -1,0 +1,292 @@
+name: WCS PLC Anomaly ML E2E
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/anomaly-ml-e2e.yml"
+      - "src/Wcs.Core/AnomalyDetection/MachineLearning/**"
+      - "src/Wcs.Core/AnomalyDetection/PlcAnomalyModels.cs"
+      - "src/Wcs.Infrastructure/AnomalyDetection/MachineLearning/**"
+      - "src/Wcs.Infrastructure/DependencyInjection.cs"
+      - "src/Wcs.Host/BackgroundServices/PlcAnomaly*.cs"
+      - "src/Wcs.Host/Controllers/PlcMl*.cs"
+      - "src/Wcs.Host/appsettings.MlLoadTest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wcs-plc-anomaly-ml-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  train-restart-infer:
+    name: train, restart, infer, and verify SQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Wcs_MlTest!2026"
+        ports:
+          - 1433:1433
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      ASPNETCORE_ENVIRONMENT: "MlLoadTest"
+      DOTNET_ENVIRONMENT: "MlLoadTest"
+      ASPNETCORE_URLS: "http://127.0.0.1:5090"
+      ConnectionStrings__WcsDb: "Server=127.0.0.1,1433;Database=WCS_AnomalyMl;User Id=sa;Password=Wcs_MlTest!2026;Encrypt=False;TrustServerCertificate=True;"
+      Simulator__Enabled: "true"
+      SIMULATOR_CHANGE_PROBABILITY: "0"
+      Storage__Telemetry__Provider: "Disabled"
+      AnomalyDetection__MachineLearning__ModelDirectory: "${{ github.workspace }}/artifacts/plc-ml-models"
+      AnomalyDetection__MachineLearning__TrainingDirectory: "${{ github.workspace }}/artifacts/plc-ml-training"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build ML Host
+        run: |
+          mkdir -p artifacts
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj
+          dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore
+
+      - name: Prepare SQL Server
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          for attempt in {1..60}; do
+            if docker exec "$sql_container" bash -lc '
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1"
+            ' >/dev/null 2>&1; then break; fi
+            if [[ "$attempt" -eq 60 ]]; then docker logs "$sql_container"; exit 1; fi
+            sleep 2
+          done
+          docker exec "$sql_container" bash -lc '
+            sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            if [[ ! -x "$sqlcmd" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+            "$sqlcmd" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d master -Q "CREATE DATABASE [WCS_AnomalyMl]"
+          '
+
+      - name: Start training Host
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0
+          nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/ml-training-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/ml-host.pid"
+          popd
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/ml-initial-status.json
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/ml-host.pid)" 2>/dev/null; then
+              cat artifacts/ml-training-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/ml-training-host.log
+          exit 1
+
+      - name: Collect normal windows and train
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"training","devices":200,"windows":20,"deviceOffset":0,"startOffsetSeconds":0,"concurrency":32}' \
+            --max-time 600 | tee artifacts/ml-training-load.json
+
+          [[ "$(jq -r '.completedWindowDelta' artifacts/ml-training-load.json)" == "4000" ]]
+          [[ "$(jq -r '.droppedWindowDelta' artifacts/ml-training-load.json)" == "0" ]]
+          [[ "$(jq -r '.trainingWindowDelta' artifacts/ml-training-load.json)" == "4000" ]]
+          [[ "$(jq -r '.predictionDelta' artifacts/ml-training-load.json)" == "0" ]]
+          [[ "$(jq -r '.raisedDelta' artifacts/ml-training-load.json)" == "0" ]]
+          [[ "$(jq -r '.failureDelta' artifacts/ml-training-load.json)" == "0" ]]
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/train/ML-CV-CURRENT" \
+            --max-time 600 | tee artifacts/ml-training-result.json
+
+          [[ "$(jq -r '.trainingSampleCount' artifacts/ml-training-result.json)" == "4000" ]]
+          [[ "$(jq -r '.treeCount' artifacts/ml-training-result.json)" == "120" ]]
+          jq -e '.decisionThreshold > 0 and .decisionThreshold < 1' artifacts/ml-training-result.json >/dev/null
+          jq -r '.modelVersion' artifacts/ml-training-result.json > artifacts/ml-model-version.txt
+
+          model_path="artifacts/plc-ml-models/ML-CV-CURRENT/active.json"
+          test -s "$model_path"
+          jq -e '.profileId == "ML-CV-CURRENT"' "$model_path" >/dev/null
+          jq -e '.trainingSampleCount == 4000' "$model_path" >/dev/null
+          jq -e '.calibrationSampleCount == 800' "$model_path" >/dev/null
+          jq -e '.subsampleSize == 256' "$model_path" >/dev/null
+          jq -e '.featureNames | length == 8' "$model_path" >/dev/null
+          jq -e '.trees | length == 120' "$model_path" >/dev/null
+          sha256sum "$model_path" | tee artifacts/ml-active-model.sha256
+          test -s artifacts/plc-ml-training/ML-CV-CURRENT/features.jsonl
+          [[ "$(wc -l < artifacts/plc-ml-training/ML-CV-CURRENT/features.jsonl)" == "4000" ]]
+
+      - name: Stop training Host
+        shell: bash
+        run: |
+          pid="$(cat artifacts/ml-host.pid)"
+          kill "$pid" 2>/dev/null || true
+          for attempt in {1..30}; do
+            if ! kill -0 "$pid" 2>/dev/null; then exit 0; fi
+            sleep 1
+          done
+          kill -9 "$pid" 2>/dev/null || true
+
+      - name: Start inference Host and verify model reload
+        shell: bash
+        run: |
+          pushd src/Wcs.Host/bin/Release/net8.0
+          env AnomalyDetection__MachineLearning__Profiles__0__CollectTrainingData=false \
+            nohup dotnet Wcs.Host.dll > "$GITHUB_WORKSPACE/artifacts/ml-inference-host.log" 2>&1 &
+          echo "$!" > "$GITHUB_WORKSPACE/artifacts/ml-host.pid"
+          popd
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 3 "$ASPNETCORE_URLS/health/live" >/dev/null; then
+              curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/ml-reloaded-status.json
+              expected="$(cat artifacts/ml-model-version.txt)"
+              actual="$(jq -r '.[0].activeModelVersion' artifacts/ml-reloaded-status.json)"
+              [[ "$actual" == "$expected" ]]
+              [[ "$(jq -r '.[0].trainingWindowCount' artifacts/ml-reloaded-status.json)" == "4000" ]]
+              [[ "$(jq -r '.[0].failures' artifacts/ml-reloaded-status.json)" == "0" ]]
+              ps -o rss= -p "$(cat artifacts/ml-host.pid)" | tr -d ' ' > artifacts/ml-initial-rss-kb.txt
+              exit 0
+            fi
+            if ! kill -0 "$(cat artifacts/ml-host.pid)" 2>/dev/null; then
+              cat artifacts/ml-inference-host.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/ml-inference-host.log
+          exit 1
+
+      - name: Run held-out normal, anomaly, and recovery windows
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"normal","devices":100,"windows":10,"deviceOffset":10000,"startOffsetSeconds":1000,"concurrency":16}' \
+            --max-time 600 | tee artifacts/ml-normal-load.json
+          [[ "$(jq -r '.completedWindowDelta' artifacts/ml-normal-load.json)" == "1000" ]]
+          [[ "$(jq -r '.predictionDelta' artifacts/ml-normal-load.json)" == "1000" ]]
+          [[ "$(jq -r '.trainingWindowDelta' artifacts/ml-normal-load.json)" == "0" ]]
+          [[ "$(jq -r '.failureDelta' artifacts/ml-normal-load.json)" == "0" ]]
+          normal_raised="$(jq -r '.raisedDelta' artifacts/ml-normal-load.json)"
+          (( normal_raised <= 5 ))
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"anomaly","devices":100,"windows":3,"deviceOffset":20000,"startOffsetSeconds":2000,"concurrency":16}' \
+            --max-time 600 | tee artifacts/ml-anomaly-load.json
+          [[ "$(jq -r '.completedWindowDelta' artifacts/ml-anomaly-load.json)" == "300" ]]
+          [[ "$(jq -r '.predictionDelta' artifacts/ml-anomaly-load.json)" == "300" ]]
+          [[ "$(jq -r '.raisedDelta' artifacts/ml-anomaly-load.json)" == "100" ]]
+          [[ "$(jq -r '.failureDelta' artifacts/ml-anomaly-load.json)" == "0" ]]
+
+          curl --fail --silent --show-error \
+            --request POST "$ASPNETCORE_URLS/api/anomaly/ml/load" \
+            --header 'content-type: application/json' \
+            --data '{"mode":"recovery","devices":100,"windows":3,"deviceOffset":20000,"startOffsetSeconds":2003,"concurrency":16}' \
+            --max-time 600 | tee artifacts/ml-recovery-load.json
+          [[ "$(jq -r '.completedWindowDelta' artifacts/ml-recovery-load.json)" == "300" ]]
+          [[ "$(jq -r '.predictionDelta' artifacts/ml-recovery-load.json)" == "300" ]]
+          [[ "$(jq -r '.recoveredDelta' artifacts/ml-recovery-load.json)" == "100" ]]
+          [[ "$(jq -r '.failureDelta' artifacts/ml-recovery-load.json)" == "0" ]]
+
+      - name: Verify ML lifecycle rows and false positives
+        shell: bash
+        run: |
+          sql_container="${{ job.services.sqlserver.id }}"
+          query_sql() {
+            docker exec "$sql_container" bash -lc "
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+              if [[ ! -x \"\$sqlcmd\" ]]; then sqlcmd=/opt/mssql-tools/bin/sqlcmd; fi
+              \"\$sqlcmd\" -S localhost -U sa -P \"\$MSSQL_SA_PASSWORD\" -C -d WCS_AnomalyMl -h -1 -W -Q \"$1\"
+            " | grep -E '^[[:space:]]*[0-9]+[[:space:]]*$' | tr -d ' ' | tail -n1
+          }
+
+          for attempt in {1..120}; do
+            anomaly_rows="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE 'MLCV02%'")"
+            recovered_rows="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE 'MLCV02%' AND Status = 1")"
+            active_rows="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE 'MLCV02%' AND Status = 0")"
+            if [[ "$anomaly_rows" == "100" && "$recovered_rows" == "100" && "$active_rows" == "0" ]]; then break; fi
+            if [[ "$attempt" -eq 120 ]]; then exit 1; fi
+            sleep 1
+          done
+
+          duplicates="$(query_sql "SELECT COUNT_BIG(*) FROM (SELECT AnomalyKey FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE 'MLCV02%' GROUP BY AnomalyKey HAVING COUNT_BIG(*) > 1) d")"
+          normal_rows="$(query_sql "SELECT COUNT_BIG(*) FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE 'MLCV01%'")"
+          model_versions="$(query_sql "SELECT COUNT_BIG(*) FROM (SELECT DISTINCT ModelVersion FROM Wcs_PlcAnomaly WHERE Type = 5 AND DeviceId LIKE 'MLCV02%') d")"
+          printf 'anomaly_rows=%s\nrecovered_rows=%s\nactive_rows=%s\nduplicates=%s\nnormal_false_positive_rows=%s\nmodel_versions=%s\n' \
+            "$anomaly_rows" "$recovered_rows" "$active_rows" "$duplicates" "$normal_rows" "$model_versions" \
+            | tee artifacts/ml-physical-count.txt
+          [[ "$duplicates" == "0" ]]
+          (( normal_rows <= 5 ))
+          [[ "$model_versions" == "1" ]]
+
+          curl --fail --silent "$ASPNETCORE_URLS/api/anomaly/ml/status" | tee artifacts/ml-final-status.json
+          [[ "$(jq -r '.[0].activeAnomalies' artifacts/ml-final-status.json)" == "0" ]]
+          [[ "$(jq -r '.[0].failures' artifacts/ml-final-status.json)" == "0" ]]
+          ps -o rss= -p "$(cat artifacts/ml-host.pid)" | tr -d ' ' > artifacts/ml-final-rss-kb.txt
+
+      - name: Validate memory, model, and logs
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/ml-initial-rss-kb.txt && -f artifacts/ml-final-rss-kb.txt ]]; then
+            initial="$(cat artifacts/ml-initial-rss-kb.txt)"
+            final="$(cat artifacts/ml-final-rss-kb.txt)"
+            growth_mb="$(( (final-initial) / 1024 ))"
+            printf 'initial_rss_kb=%s\nfinal_rss_kb=%s\ngrowth_mb=%s\n' "$initial" "$final" "$growth_mb" \
+              | tee artifacts/ml-memory.txt
+            (( growth_mb <= 350 ))
+          fi
+
+          for log in artifacts/ml-training-host.log artifacts/ml-inference-host.log; do
+            test -s "$log"
+            if grep -Eqi 'OutOfMemory|Unhandled exception|PLC anomaly persistence failed after retries|duplicate key|Stack overflow|failed to load.*model' "$log"; then
+              grep -Eni -C 5 'OutOfMemory|Unhandled exception|PLC anomaly persistence failed after retries|duplicate key|Stack overflow|failed to load.*model' "$log"
+              exit 1
+            fi
+          done
+
+      - name: Stop inference Host
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/ml-host.pid ]]; then
+            pid="$(cat artifacts/ml-host.pid)"
+            kill "$pid" 2>/dev/null || true
+            for attempt in {1..20}; do
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+          fi
+
+      - name: Upload ML E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-plc-anomaly-ml-e2e-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 14

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Wcs.Simulator\Wcs.Simulator.csproj" />
+    <ProjectReference Include="..\Wcs.Host\Wcs.Host.csproj" />
+    <ProjectReference Include="..\Wcs.Infrastructure\Wcs.Infrastructure.csproj" />
+    <ProjectReference Include="..\Wcs.IndustrialIntelligence\Wcs.IndustrialIntelligence.csproj" />
+    <ProjectReference Include="..\Wcs.ModelOps\Wcs.ModelOps.csproj" />
+    <ProjectReference Include="..\Wcs.FeatureCenter\Wcs.FeatureCenter.csproj" />
+    <ProjectReference Include="..\Wcs.DecisionIntelligence\Wcs.DecisionIntelligence.csproj" />
+    <ProjectReference Include="..\Wcs.MaintenanceLearning\Wcs.MaintenanceLearning.csproj" />
+    <ProjectReference Include="..\Wcs.Optimization\Wcs.Optimization.csproj" />
+  </ItemGroup>
+
+</Project>

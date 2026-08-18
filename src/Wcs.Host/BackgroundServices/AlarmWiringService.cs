@@ -91,7 +91,7 @@ public class AlarmWiringService : BackgroundService
                 using var db = CreateDb();
                 await db.Insertable(new DeviceStateLogEntity
                 {
-                    Id = DateTime.UtcNow.Ticks + Random.Shared.Next(0, 9999),
+                    Id = SnowFlakeSingle.Instance.NextId(),
                     DeviceId = evt.AlarmCode,
                     FieldName = $"Alarm_{evt.AlarmCode}",
                     NewValue = "raised",

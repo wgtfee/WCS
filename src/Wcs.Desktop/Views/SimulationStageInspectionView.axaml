@@ -1,0 +1,246 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Wcs.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net"
+             x:Class="Wcs.Desktop.Views.SimulationStageInspectionView"
+             x:DataType="vm:SimulationVerificationViewModel">
+    <atom:TabControl>
+        <atom:TabItem Header="设备操作面板">
+            <ScrollViewer>
+                <StackPanel Spacing="14" Margin="0,4,0,10">
+                    <atom:Card Header="S2/S3 受治理设备操作" StyleVariant="Outlined">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="这里不是直接设备控制：所有操作先转换成现有 S2/S3 Scenario DSL，再经过 S0 Manifest + SHA-256 与 S1 Run 隔离。Production、真实 PLC/RGV/HIL 不在此控制面。" TextWrapping="Wrap" />
+                            <TextBlock Classes="wcs-toolbar-status" Text="{Binding DevicePanelStatusText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </atom:Card>
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                        <atom:Card Header="S2 · PLC DB / Fault Injection" StyleVariant="Outlined">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="真实 S2 actions：plc.block.define / write / read / plc.fault.apply / clear。" TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                    <StackPanel Spacing="4"><TextBlock Text="Block Key"/><atom:LineEdit Text="{Binding DevicePlcBlockKey}" Watermark="PLC1.DB100" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Block Size"/><atom:LineEdit Text="{Binding DevicePlcBlockSizeText}" Watermark="16" /></StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="Initial Base64"/><atom:LineEdit Text="{Binding DevicePlcInitialBase64}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="Write Offset"/><atom:LineEdit Text="{Binding DevicePlcWriteOffsetText}" Watermark="0" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="Write Base64"/><atom:LineEdit Text="{Binding DevicePlcWriteBase64}" Watermark="AQIDBA==" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="Read Offset"/><atom:LineEdit Text="{Binding DevicePlcReadOffsetText}" Watermark="0" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="Read Count"/><atom:LineEdit Text="{Binding DevicePlcReadCountText}" Watermark="4" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="Fault Id"/><atom:LineEdit Text="{Binding DevicePlcFaultId}" Watermark="F-PLC-1" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="2" Spacing="4"><TextBlock Text="Fault Kind"/><atom:LineEdit Text="{Binding DevicePlcFaultKind}" Watermark="BitFlip" /></StackPanel>
+                                </Grid>
+
+                                <TextBlock Classes="wcs-toolbar-status" Text="{Binding PlcFaultKindsText}" TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                    <StackPanel Spacing="4"><TextBlock Text="Fault Start(ms)"/><atom:LineEdit Text="{Binding DevicePlcFaultStartMsText}" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Fault End(ms)"/><atom:LineEdit Text="{Binding DevicePlcFaultEndMsText}" /></StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="Offset"/><atom:LineEdit Text="{Binding DevicePlcFaultOffsetText}" /></StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="4"><TextBlock Text="Length"/><atom:LineEdit Text="{Binding DevicePlcFaultLengthText}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="BitIndex"/><atom:LineEdit Text="{Binding DevicePlcFaultBitIndexText}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="Jitter Min"/><atom:LineEdit Text="{Binding DevicePlcJitterMinimumText}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="Jitter Max"/><atom:LineEdit Text="{Binding DevicePlcJitterMaximumText}" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="3" Spacing="4"><TextBlock Text="Replacement Base64"/><atom:LineEdit Text="{Binding DevicePlcReplacementBase64}" /></StackPanel>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <atom:Button Content="生成 PLC DSL" Command="{Binding GenerateDevicePlcScenarioCommand}" />
+                                    <atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterDevicePlcScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </atom:Card>
+
+                        <atom:Card Grid.Column="1" Header="S3 · RGV Route / Motion / Online / Load" StyleVariant="Outlined">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="真实 S3 actions：segment/vehicle define、route.assign、vehicle.advance、vehicle.online.set、load/unload。" TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                    <StackPanel Spacing="4"><TextBlock Text="VehicleId"/><atom:LineEdit Text="{Binding DeviceRgvVehicleId}" Watermark="RGV1" /></StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Source"/><atom:LineEdit Text="{Binding DeviceRgvSourceNodeId}" Watermark="N1" /></StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="Middle"/><atom:LineEdit Text="{Binding DeviceRgvMiddleNodeId}" Watermark="N2" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="Destination"/><atom:LineEdit Text="{Binding DeviceRgvDestinationNodeId}" Watermark="N3" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="Segment A"/><atom:LineEdit Text="{Binding DeviceRgvSegmentA}" Watermark="S1" /></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4"><TextBlock Text="Segment B"/><atom:LineEdit Text="{Binding DeviceRgvSegmentB}" Watermark="S2" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="Length(mm)"/><atom:LineEdit Text="{Binding DeviceRgvSegmentLengthMmText}" Watermark="1000" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="Speed(mm/s)"/><atom:LineEdit Text="{Binding DeviceRgvSpeedMmPerSecondText}" Watermark="1000" /></StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="2" Spacing="4"><TextBlock Text="Battery %"/><atom:LineEdit Text="{Binding DeviceRgvBatteryPercentText}" Watermark="100" /></StackPanel>
+                                    <StackPanel Grid.Row="3" Spacing="4"><TextBlock Text="LoadId（空=不装载）"/><atom:LineEdit Text="{Binding DeviceRgvLoadId}" Watermark="LOAD1" /></StackPanel>
+                                    <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4"><TextBlock Text="Offline Duration(ms)"/><atom:LineEdit Text="{Binding DeviceRgvOfflineDurationMsText}" Watermark="500" /></StackPanel>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <atom:Button Content="生成 RGV DSL" Command="{Binding GenerateDeviceRgvScenarioCommand}" />
+                                    <atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterDeviceRgvScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </atom:Card>
+                    </Grid>
+
+                    <atom:Card Header="当前设备场景输出" StyleVariant="Outlined">
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+                            <TextBlock Text="Scenario" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="1" Text="{Binding ScenarioId}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="1" Text="File" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioFile}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="2" Text="Summary" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CheckpointStateText}" TextWrapping="Wrap" />
+                        </Grid>
+                    </atom:Card>
+                </StackPanel>
+            </ScrollViewer>
+        </atom:TabItem>
+
+        <atom:TabItem Header="可视化场景编辑">
+            <ScrollViewer>
+                <StackPanel Spacing="14" Margin="0,4,0,10">
+                    <atom:Card Header="可重复场景公共参数" StyleVariant="Outlined">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="所有可视化场景最终仍生成严格 Scenario DSL，并经过 S0 Manifest + Content SHA-256 治理；不会直接调用生产 PLC/RGV/Traffic/HIL。" TextWrapping="Wrap" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                <StackPanel Spacing="4"><TextBlock Text="Seed（非 0 Int64）"/><atom:LineEdit Text="{Binding VisualScenarioSeedText}" Watermark="20260811" /></StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="StartTimeUtc"/><atom:LineEdit Text="{Binding VisualScenarioStartUtcText}" Watermark="2026-08-11T00:00:00+00:00" /></StackPanel>
+                            </Grid>
+                            <TextBlock Classes="wcs-toolbar-status" Text="{Binding VisualEditorStatusText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </atom:Card>
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                        <StackPanel Spacing="14">
+                            <atom:Card Header="S2 · PLC 断线 / 自动恢复" StyleVariant="Outlined">
+                                <StackPanel Spacing="10">
+                                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                                        <StackPanel Spacing="4"><TextBlock Text="PLC Id"/><atom:LineEdit Text="{Binding VisualPlcId}" Watermark="PLC1" /></StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="断线时间(ms)"/><atom:LineEdit Text="{Binding VisualPlcDisconnectAtMsText}" /></StackPanel>
+                                        <StackPanel Grid.Column="2" Spacing="4"><TextBlock Text="持续时间(ms)"/><atom:LineEdit Text="{Binding VisualPlcOutageDurationMsText}" /></StackPanel>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="生成 DSL" Command="{Binding GenerateVisualPlcScenarioCommand}"/><atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterVisualPlcScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}"/></StackPanel>
+                                </StackPanel>
+                            </atom:Card>
+                            <atom:Card Header="S3/S4 · 双 RGV 路权死锁" StyleVariant="Outlined">
+                                <StackPanel Spacing="10">
+                                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                        <StackPanel Spacing="4"><TextBlock Text="车辆 A"/><atom:LineEdit Text="{Binding VisualTrafficVehicleA}" /></StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="车辆 B"/><atom:LineEdit Text="{Binding VisualTrafficVehicleB}" /></StackPanel>
+                                        <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="区段 A"/><atom:LineEdit Text="{Binding VisualTrafficSegmentA}" /></StackPanel>
+                                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="区段 B"/><atom:LineEdit Text="{Binding VisualTrafficSegmentB}" /></StackPanel>
+                                        <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="路权租约(ms)"/><atom:LineEdit Text="{Binding VisualTrafficLeaseMsText}" /></StackPanel>
+                                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="死锁检测时间(ms)"/><atom:LineEdit Text="{Binding VisualTrafficDetectAtMsText}" /></StackPanel>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="生成 DSL" Command="{Binding GenerateVisualTrafficScenarioCommand}"/><atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterVisualTrafficScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}"/></StackPanel>
+                                </StackPanel>
+                            </atom:Card>
+                            <atom:Card Header="S5 · MES / 外部接口超时恢复" StyleVariant="Outlined">
+                                <StackPanel Spacing="10">
+                                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                        <StackPanel Spacing="4"><TextBlock Text="Endpoint"/><atom:LineEdit Text="{Binding VisualExternalEndpointId}" /></StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Operation"/><atom:LineEdit Text="{Binding VisualExternalOperation}" /></StackPanel>
+                                        <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="故障窗口(ms)"/><atom:LineEdit Text="{Binding VisualExternalFaultDurationMsText}" /></StackPanel>
+                                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="Timeout(ms)"/><atom:LineEdit Text="{Binding VisualExternalTimeoutMsText}" /></StackPanel>
+                                        <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="Retry Delay(ms)"/><atom:LineEdit Text="{Binding VisualExternalRetryDelayMsText}" /></StackPanel>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="生成 DSL" Command="{Binding GenerateVisualExternalScenarioCommand}"/><atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterVisualExternalScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}"/></StackPanel>
+                                </StackPanel>
+                            </atom:Card>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Spacing="14">
+                            <atom:Card Header="S6 · 电机/设备 Health + RUL 退化" StyleVariant="Outlined">
+                                <StackPanel Spacing="10">
+                                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                        <StackPanel Spacing="4"><TextBlock Text="Asset Id"/><atom:LineEdit Text="{Binding VisualHealthAssetId}" /></StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="退化时长(h)"/><atom:LineEdit Text="{Binding VisualHealthDurationHoursText}" /></StackPanel>
+                                        <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="目标 Health Score"/><atom:LineEdit Text="{Binding VisualHealthTargetScoreText}" /></StackPanel>
+                                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="目标 Fusion Risk"/><atom:LineEdit Text="{Binding VisualHealthTargetRiskText}" /></StackPanel>
+                                        <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="目标 RUL Median(h)"/><atom:LineEdit Text="{Binding VisualHealthRulMedianHoursText}" /></StackPanel>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="生成 DSL" Command="{Binding GenerateVisualHealthScenarioCommand}"/><atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterVisualHealthScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}"/></StackPanel>
+                                </StackPanel>
+                            </atom:Card>
+                            <atom:Card Header="S7 · 全链任务恢复 / 幂等" StyleVariant="Outlined">
+                                <StackPanel Spacing="10">
+                                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                        <StackPanel Spacing="4"><TextBlock Text="MissionId"/><atom:LineEdit Text="{Binding VisualRecoveryMissionId}" /></StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="PLC Block"/><atom:LineEdit Text="{Binding VisualRecoveryPlcBlockKey}" /></StackPanel>
+                                        <StackPanel Grid.Row="1" Spacing="4"><TextBlock Text="VehicleId"/><atom:LineEdit Text="{Binding VisualRecoveryVehicleId}" /></StackPanel>
+                                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"><TextBlock Text="LoadId"/><atom:LineEdit Text="{Binding VisualRecoveryLoadId}" /></StackPanel>
+                                        <StackPanel Grid.Row="2" Spacing="4"><TextBlock Text="Source Node"/><atom:LineEdit Text="{Binding VisualRecoverySourceNodeId}" /></StackPanel>
+                                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4"><TextBlock Text="Middle Node"/><atom:LineEdit Text="{Binding VisualRecoveryMiddleNodeId}" /></StackPanel>
+                                        <StackPanel Grid.Row="3" Spacing="4"><TextBlock Text="Destination Node"/><atom:LineEdit Text="{Binding VisualRecoveryDestinationNodeId}" /></StackPanel>
+                                        <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4"><TextBlock Text="External Endpoint"/><atom:LineEdit Text="{Binding VisualRecoveryExternalEndpointId}" /></StackPanel>
+                                        <StackPanel Grid.Row="4" Spacing="4"><TextBlock Text="Health Asset"/><atom:LineEdit Text="{Binding VisualRecoveryHealthAssetId}" /></StackPanel>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="生成 DSL" Command="{Binding GenerateVisualRecoveryScenarioCommand}"/><atom:Button Content="生成并注册" Command="{Binding GenerateAndRegisterVisualRecoveryScenarioCommand}" IsEnabled="{Binding CanExecuteSimulation}"/></StackPanel>
+                                </StackPanel>
+                            </atom:Card>
+                            <atom:Card Header="当前生成结果" StyleVariant="Outlined">
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+                                    <TextBlock Text="Scenario" FontWeight="SemiBold"/><TextBlock Grid.Column="1" Text="{Binding ScenarioId}" TextWrapping="Wrap"/>
+                                    <TextBlock Grid.Row="1" Text="File" FontWeight="SemiBold"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioFile}" TextWrapping="Wrap"/>
+                                    <TextBlock Grid.Row="2" Text="说明" FontWeight="SemiBold"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CheckpointStateText}" TextWrapping="Wrap"/>
+                                </Grid>
+                            </atom:Card>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+        </atom:TabItem>
+
+        <atom:TabItem Header="预置场景 / 分层检查">
+            <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
+                <atom:Card Grid.Row="0" Header="受治理预置场景库" StyleVariant="Outlined">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="无需手写 DSL：载入模板后仍必须通过场景治理注册。" TextWrapping="Wrap" />
+                            <TextBlock Classes="wcs-toolbar-status" Text="S8 继续保持 Capacity/HIL-readiness 只读证据层。" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <atom:Button Content="S2 PLC 断线恢复" Command="{Binding LoadPlcDisconnectPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Content="S3/S4 双 RGV 死锁" Command="{Binding LoadTrafficDeadlockPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Content="S5 外部超时恢复" Command="{Binding LoadExternalTimeoutPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Content="S6 Health/RUL 72h" Command="{Binding LoadHealthRulPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Content="S7 全链恢复/幂等" Command="{Binding LoadIntegratedRecoveryPresetCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                        </StackPanel>
+                    </Grid>
+                </atom:Card>
+
+                <Grid Grid.Row="1" ColumnDefinitions="2*,*" ColumnSpacing="12">
+                    <atom:Card Header="S2～S8 分层只读检查" StyleVariant="Outlined">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{Binding InspectionTitle}" FontSize="18" FontWeight="SemiBold" />
+                            <TextBlock Classes="wcs-toolbar-status" Text="{Binding InspectionStatusText}" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                                <atom:Button Content="读取状态" Command="{Binding InspectStatusCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                                <atom:Button Content="主要对象" Command="{Binding InspectPrimaryCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                                <atom:Button Content="异常 / 占用" Command="{Binding InspectSecondaryCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                                <atom:Button Content="审计" Command="{Binding InspectAuditCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </atom:Card>
+                    <atom:Card Grid.Column="1" Header="当前上下文" StyleVariant="Outlined">
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+                            <TextBlock Text="Stage" FontWeight="SemiBold"/><TextBlock Grid.Column="1" Text="{Binding SelectedStage.Id}"/>
+                            <TextBlock Grid.Row="1" Text="Run" FontWeight="SemiBold"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedRun.RunId}" TextWrapping="Wrap"/>
+                            <TextBlock Grid.Row="2" Text="Run Status" FontWeight="SemiBold"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedRun.StatusText}"/>
+                        </Grid>
+                    </atom:Card>
+                </Grid>
+
+                <UniformGrid Grid.Row="2" Columns="7" Rows="1">
+                    <atom:Card Margin="0,0,3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S2 PLC"/><TextBlock Classes="wcs-toolbar-status" Text="Blocks / Faults / Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+                    <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S3 RGV"/><TextBlock Classes="wcs-toolbar-status" Text="Vehicles / Occupancy / Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+                    <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S4 Traffic"/><TextBlock Classes="wcs-toolbar-status" Text="Reservations / Deadlocks / Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+                    <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S5 External"/><TextBlock Classes="wcs-toolbar-status" Text="Requests / Faults / Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+                    <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S6 Health"/><TextBlock Classes="wcs-toolbar-status" Text="Assets / Health Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+                    <atom:Card Margin="3,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S7 Recovery"/><TextBlock Classes="wcs-toolbar-status" Text="Missions / Recovery Audit" TextWrapping="Wrap"/></StackPanel></atom:Card>
+                    <atom:Card Margin="3,0,0,0" StyleVariant="Outlined"><StackPanel><TextBlock FontWeight="SemiBold" Text="S8 Capacity"/><TextBlock Classes="wcs-toolbar-status" Text="8h / 24h Readiness Status" TextWrapping="Wrap"/></StackPanel></atom:Card>
+                </UniformGrid>
+
+                <atom:Card Grid.Row="3" Header="Inspection JSON 扁平视图" StyleVariant="Outlined">
+                    <atom:DataGrid ItemsSource="{Binding InspectionItems}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
+                        <atom:DataGrid.Columns>
+                            <atom:DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="2*" />
+                            <atom:DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="3*" />
+                        </atom:DataGrid.Columns>
+                    </atom:DataGrid>
+                </atom:Card>
+            </Grid>
+        </atom:TabItem>
+    </atom:TabControl>
+</UserControl>

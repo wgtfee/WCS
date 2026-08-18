@@ -6,34 +6,28 @@ using Wcs.Desktop.ViewModels;
 
 namespace Wcs.Desktop;
 
-/// <summary>
-/// Wcs.Desktop DI 注册扩展方法
-/// </summary>
 public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddWcsDesktop(this IServiceCollection services)
     {
-        // 配置
-        var config = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false)
-            .Build();
-
+        var config = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory).AddJsonFile("appsettings.json", optional: false).Build();
         services.AddSingleton<IConfiguration>(config);
         services.Configure<WcsDesktopOptions>(config.GetSection("WcsDesktop"));
-
-        // HTTP 客户端
         services.AddHttpClient<IWcsApiService, WcsApiService>();
-
-        // SignalR 实时服务
+        services.AddHttpClient<ITransportResilienceApiService, TransportResilienceApiService>();
+        services.AddHttpClient<ITransportSimulationApiService, TransportSimulationApiService>();
+        services.AddHttpClient<ISimulationVerificationApiService, SimulationVerificationApiService>();
+        services.AddHttpClient<ISimulationInspectionApiService, SimulationInspectionApiService>();
+        services.AddHttpClient<IModelOpsApiService, ModelOpsApiService>();
+        services.AddHttpClient<IFeatureCenterApiService, FeatureCenterApiService>();
+        services.AddHttpClient<IShadowDecisionApiService, ShadowDecisionApiService>();
+        services.AddHttpClient<IMaintenanceLearningApiService, MaintenanceLearningApiService>();
+        services.AddHttpClient<IDigitalTwinOptimizerApiService, DigitalTwinOptimizerApiService>();
+        services.AddHttpClient<IBoundedAutomationReadinessApiService, BoundedAutomationReadinessApiService>();
+        services.AddHttpClient<IIndustrialIntelligenceOverviewApiService, IndustrialIntelligenceOverviewApiService>();
+        services.AddHttpClient<IAssetIntelligenceApiService, AssetIntelligenceApiService>();
         services.AddSingleton<IWcsRealtimeService, WcsRealtimeService>();
-
-        // 数据提供者
-        services.AddSingleton<Wcs.Desktop.Interface.IDataProvider, ApiDataProvider>();
-
-        // 主题服务由 AtomUI 管理
-
-        // ViewModels
+        services.AddSingleton<IDataProvider, ApiDataProvider>();
         services.AddTransient<LoginViewModel>();
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<DashboardViewModel>();
@@ -45,7 +39,25 @@ public static class ServiceCollectionExtensions
         services.AddTransient<TrackingLogViewModel>();
         services.AddTransient<AuditLogViewModel>();
         services.AddTransient<SysLogViewModel>();
-
+        services.AddTransient<TransportSchedulingViewModel>();
+        services.AddTransient<TransportTrafficViewModel>();
+        services.AddTransient<TransportOptimizationViewModel>();
+        services.AddTransient<TransportAdministrationViewModel>();
+        services.AddTransient<TransportDriverDiagnosticsViewModel>();
+        services.AddTransient<TransportCommissioningViewModel>();
+        services.AddTransient<TransportProductionViewModel>();
+        services.AddTransient<TransportObservabilityViewModel>();
+        services.AddTransient<TransportResilienceViewModel>();
+        services.AddTransient<TransportSimulationViewModel>();
+        services.AddTransient<SimulationVerificationViewModel>();
+        services.AddTransient<AssetIntelligenceViewModel>();
+        services.AddTransient<IndustrialIntelligenceOverviewViewModel>();
+        services.AddTransient<ModelOpsViewModel>();
+        services.AddTransient<FeatureCenterViewModel>();
+        services.AddTransient<ShadowDecisionViewModel>();
+        services.AddTransient<MaintenanceLearningViewModel>();
+        services.AddTransient<DigitalTwinOptimizerViewModel>();
+        services.AddTransient<BoundedAutomationReadinessViewModel>();
         return services;
     }
 }

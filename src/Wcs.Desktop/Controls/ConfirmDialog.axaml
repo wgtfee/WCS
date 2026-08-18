@@ -1,28 +1,28 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:atom="https://atomui.net"
         x:Class="Wcs.Desktop.Controls.ConfirmDialog"
         Title="确认"
-        Width="360" Height="180"
-        Background="#2A2A2A"
-        Foreground="White"
+        Width="380" Height="190"
+        Background="{DynamicResource BgPrimary}"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
         ShowInTaskbar="False">
-    <Grid RowDefinitions="*,Auto" Margin="20">
-        <TextBlock x:Name="MessageText"
-                   Text="确认此操作？"
-                   FontSize="15"
-                   VerticalAlignment="Center"
-                   HorizontalAlignment="Center"
-                   TextWrapping="Wrap"
-                   Foreground="White"/>
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="16">
-            <Button Content="确认" Width="90" Height="32"
-                    Classes="Danger"
-                    Click="OnYesClick"/>
-            <Button Content="取消" Width="90" Height="32"
-                    Classes="Secondary"
-                    Click="OnNoClick"/>
-        </StackPanel>
+    <Grid Margin="20">
+        <atom:Card Header="操作确认" StyleVariant="Outlined">
+            <Grid RowDefinitions="*,Auto" RowSpacing="16">
+                <TextBlock x:Name="MessageText"
+                           Text="确认此操作？"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextPrimary}"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12">
+                    <atom:Button Content="确认" Width="90" Height="34" Click="OnYesClick"/>
+                    <atom:Button Content="取消" Width="90" Height="34" Click="OnNoClick"/>
+                </StackPanel>
+            </Grid>
+        </atom:Card>
     </Grid>
 </Window>

@@ -39,6 +39,14 @@ public class EventDetector
     }
 
     public void Detect(string blockKey, object current, string plcName = "", int dbBlock = 0)
+        => DetectAsync(blockKey, current, plcName, dbBlock).GetAwaiter().GetResult();
+
+    public async Task DetectAsync(
+        string blockKey,
+        object current,
+        string plcName = "",
+        int dbBlock = 0,
+        CancellationToken cancellationToken = default)
     {
         var snapshot = _snapshotCenter.Get(blockKey);
         var previous = snapshot?.Previous;
@@ -84,11 +92,12 @@ public class EventDetector
             if (!rejected)
             {
                 rawSignal.ValidatorPassed = true;
-                var domainEvent = CreateDomainEvent(meta, newVal,oldVal, edge);
+                var domainEvent = CreateDomainEvent(meta, newVal, oldVal, edge);
                 if (domainEvent != null)
                 {
                     rawSignal.DomainEventType = domainEvent.GetType().Name;
-                    _eventBus.PublishAsync(domainEvent).GetAwaiter().GetResult();
+                    await _eventBus.PublishAsync(domainEvent, cancellationToken)
+                        .ConfigureAwait(false);
                 }
 
                 // 验证通过 + 有命令 → 发布命令请求事件，自动写入 PLC
@@ -100,17 +109,19 @@ public class EventDetector
                         CommandType = commandResult.CommandType ?? meta.FieldName,
                         DeviceId = commandResult.TargetDeviceId ?? meta.DeviceId ?? "",
                     };
-                    _eventBus.PublishAsync(cmdEvent).GetAwaiter().GetResult();
+                    await _eventBus.PublishAsync(cmdEvent, cancellationToken)
+                        .ConfigureAwait(false);
                     _logger?.LogInformation("[Detector] ⚡ {Field} 验证通过 → 发命令 {Cmd}",
                         meta.FieldName, commandResult.CommandType);
                 }
             }
             //验证成功的数据进行推送
-            _eventBus.PublishAsync(rawSignal).GetAwaiter().GetResult();
+            await _eventBus.PublishAsync(rawSignal, cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
-    private IEvent? CreateDomainEvent(FieldMetadata meta, object? newVal,object? oldVal, EdgeType edge)
+    private IEvent? CreateDomainEvent(FieldMetadata meta, object? newVal, object? oldVal, EdgeType edge)
     {
         foreach (var rule in _extraRules)
         {
@@ -119,13 +130,20 @@ public class EventDetector
             return CreateEventFromRule(rule, meta);
         }
         if (!EnableNamingConvention) return null;
-        //if (newVal is not bool boolVal || edge != EdgeType.Rising || !boolVal) return null;
-        if (newVal is not bool newBool || oldVal is not bool oldBool)  return null;
+        if (newVal is not bool newBool || oldVal is not bool oldBool) return null;
         if (meta.DeviceId == null) return null;
 
         var suffix = meta.Suffix;
+
+        // 到货/出库请求只在 0→1 上升沿创建一次业务任务。
+        // 原实现下降沿也发布 PalletArrivedEvent，使一个脉冲被重复计成两次任务。
         if (suffix is "_ARRIVED" or "_REQUESTOUT")
-            return new PalletArrivedEvent { DeviceId = meta.DeviceId };
+        {
+            if (edge == EdgeType.Rising && newBool)
+                return new PalletArrivedEvent { DeviceId = meta.DeviceId };
+            return null;
+        }
+
         if (suffix is "_FAULT" or "_ARALM")
         {
             // 上升沿：报警
@@ -137,7 +155,7 @@ public class EventDetector
                     FaultCode = meta.FieldName
                 };
             }
-        
+
             // 下降沿：恢复
             if (oldBool && !newBool)
             {
@@ -150,14 +168,14 @@ public class EventDetector
         }
 
         if (suffix == "_READY")
-            return new ConveyorReadyChangedEvent { DeviceId = meta.DeviceId, Ready = true };
+            return new ConveyorReadyChangedEvent { DeviceId = meta.DeviceId, Ready = newBool };
         return null;
     }
 
     private IEvent? CreateEventFromRule(EventDetectionRule rule, FieldMetadata meta)
     {
         if (string.IsNullOrEmpty(rule.TargetEventType))
-            return CreateDomainEvent(meta, true,null, EdgeType.Rising);
+            return CreateDomainEvent(meta, true, null, EdgeType.Rising);
         var eventType = Type.GetType(rule.TargetEventType);
         if (eventType == null || !typeof(IEvent).IsAssignableFrom(eventType)) return null;
         try

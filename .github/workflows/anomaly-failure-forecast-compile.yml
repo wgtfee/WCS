@@ -1,0 +1,68 @@
+name: WCS Asset Failure Forecast Compile
+
+on:
+  pull_request:
+    branches: [ develop ]
+    paths:
+      - 'src/Wcs.Core/AnomalyDetection/Forecasting/**'
+      - 'src/Wcs.Core.Tests/AssetFailureForecastTests.cs'
+      - 'src/Wcs.Infrastructure/AnomalyDetection/Forecasting/**'
+      - 'src/Wcs.Host/Controllers/AnomalyForecastController.cs'
+      - 'src/Wcs.Infrastructure/Persistence/DatabaseInitializer.cs'
+      - 'src/Wcs.Host/appsettings*.json'
+      - '.github/workflows/anomaly-failure-forecast*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    name: compile forecast contracts, tests, infrastructure, and Host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Verify current forecast compile contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f src/Wcs.Core.Tests/Wcs.Core.Tests.csproj
+          test -f src/Wcs.Host/Wcs.Host.csproj
+          test ! -e src/Wcs.AssetHealth/Wcs.AssetHealth.csproj
+          dotnet --info
+      - name: Remove previous outputs
+        shell: bash
+        run: |
+          rm -rf src/Wcs.Core.Tests/bin src/Wcs.Core.Tests/obj
+          rm -rf src/Wcs.Host/bin src/Wcs.Host/obj
+          rm -rf src/Wcs.Infrastructure/bin src/Wcs.Infrastructure/obj
+      - name: Restore affected projects for a clean workflow_dispatch
+        run: |
+          dotnet restore src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --ignore-failed-sources 2>&1 | tee failure-forecast-restore.log
+          dotnet restore src/Wcs.Host/Wcs.Host.csproj --ignore-failed-sources 2>&1 | tee -a failure-forecast-restore.log
+      - name: Build Core tests
+        run: dotnet build src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-restore 2>&1 | tee failure-forecast-core-build.log
+      - name: Run forecast contract tests
+        run: dotnet test src/Wcs.Core.Tests/Wcs.Core.Tests.csproj --configuration Release --no-build --filter 'FullyQualifiedName~AssetFailureForecastTests' --logger 'trx;LogFileName=failure-forecast-tests.trx' --results-directory TestResults 2>&1 | tee failure-forecast-tests.log
+      - name: Build Host
+        run: dotnet build src/Wcs.Host/Wcs.Host.csproj --configuration Release --no-restore 2>&1 | tee failure-forecast-host-build.log
+      - name: Upload compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcs-asset-failure-forecast-compile-${{ github.run_number }}
+          path: |
+            failure-forecast-*.log
+            TestResults/**
+          if-no-files-found: warn
+          retention-days: 14
