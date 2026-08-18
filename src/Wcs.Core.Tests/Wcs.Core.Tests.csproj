@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Wcs.Core\Wcs.Core.csproj" />
+    <ProjectReference Include="..\Wcs.Host\Wcs.Host.csproj" />
   </ItemGroup>
 
 </Project>
