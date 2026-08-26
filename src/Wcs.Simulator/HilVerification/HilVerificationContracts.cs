@@ -18,7 +18,18 @@ public sealed class HilVerificationOptions
     public int MaximumSessionDurationMinutes { get; set; } = 480;
     public bool RequireDualApproval { get; set; } = true;
     public bool RequireSelfHostedHilRunner { get; set; } = true;
-    public string[] AllowedEnvironments { get; set; } = ["HIL", "TrialRun"];
+    // 与 SimulationGovernanceOptions 相同的绑定安全约束：数组属性禁止非空默认值，
+    // 否则配置绑定时默认值与配置值叠加翻倍，触发 Validate 判重失败。
+    // 未配置时通过 <see cref="EffectiveAllowedEnvironments"/> 回退到标准白名单。
+    public string[] AllowedEnvironments { get; set; } = [];
+
+    internal static readonly string[] StandardAllowedEnvironments = ["HIL", "TrialRun"];
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string[] EffectiveAllowedEnvironments =>
+        AllowedEnvironments is { Length: > 0 }
+            ? AllowedEnvironments
+            : StandardAllowedEnvironments;
 
     public void Validate()
     {
@@ -36,12 +47,13 @@ public sealed class HilVerificationOptions
             throw new InvalidOperationException("HilVerification.MaximumEvidenceValueCharacters must be between 64 and 1,000,000.");
         if (MaximumSessionDurationMinutes is < 1 or > 10_080)
             throw new InvalidOperationException("HilVerification.MaximumSessionDurationMinutes must be between 1 minute and 7 days.");
-        if (AllowedEnvironments is null || AllowedEnvironments.Length is < 1 or > 8 ||
-            AllowedEnvironments.Any(string.IsNullOrWhiteSpace))
+        var allowed = EffectiveAllowedEnvironments;
+        if (allowed.Length is < 1 or > 8 ||
+            allowed.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("HilVerification.AllowedEnvironments must contain between 1 and 8 non-empty environment names.");
-        if (AllowedEnvironments.Any(name => string.Equals(name.Trim(), "Production", StringComparison.OrdinalIgnoreCase)))
+        if (allowed.Any(name => string.Equals(name.Trim(), "Production", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("HilVerification.AllowedEnvironments must never include Production.");
-        if (AllowedEnvironments.Select(name => name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != AllowedEnvironments.Length)
+        if (allowed.Select(name => name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != allowed.Length)
             throw new InvalidOperationException("HilVerification.AllowedEnvironments must not contain duplicates.");
     }
 }

@@ -26,7 +26,7 @@ public static class HilEnvironmentBoundaryGuard
             return new(false, "Host environment name is missing.");
         if (string.Equals(environmentName, "Production", StringComparison.OrdinalIgnoreCase))
             return new(false, "Production is fail-closed for S9 verification APIs.");
-        if (!options.AllowedEnvironments.Contains(environmentName, StringComparer.OrdinalIgnoreCase))
+        if (!options.EffectiveAllowedEnvironments.Contains(environmentName, StringComparer.OrdinalIgnoreCase))
             return new(false, $"Environment '{environmentName}' is not approved for S9 verification APIs.");
 
         return new(true, "S9 read-only verification surface is enabled for the approved non-production environment.");

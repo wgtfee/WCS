@@ -248,7 +248,9 @@ public sealed class SimulationRunRegistry
         entry.Gate.Wait();
         try
         {
-            entry.EnsureRunnable();
+            // Checkpoint 是只读快照（时钟/随机数/状态/断言结果），
+            // 终态 Run 同样允许读取——这是查看最终断言明细与终态证据的唯一入口，
+            // 不涉及任何推进或恢复语义，因此不走 EnsureRunnable。
             return entry.Session.CreateCheckpoint();
         }
         finally

@@ -19,7 +19,20 @@ public sealed class SimulationGovernanceOptions
     public int MaximumRegisteredScenarioVersions { get; set; } = 10_000;
     public int MaximumEvidenceRecords { get; set; } = 10_000;
     public int MaximumEvidenceValueCharacters { get; set; } = 4_096;
-    public string[] AllowedEnvironments { get; set; } = ["Simulation", "SimulationLoadTest"];
+    // 注意：不要给数组属性赋非空默认值。
+    // .NET 配置绑定时会把子键写入现有实例，非空默认值会导致
+    // “默认 + 配置”翻倍（Validate 判重失败，所有仿真 API 返回 500）。
+    // 未配置时通过 <see cref="EffectiveAllowedEnvironments"/> 回退到标准白名单。
+    public string[] AllowedEnvironments { get; set; } = [];
+
+    /// <summary>标准仿真环境白名单（仅在配置未提供 AllowedEnvironments 时生效）。</summary>
+    internal static readonly string[] StandardAllowedEnvironments = ["Simulation", "SimulationLoadTest"];
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string[] EffectiveAllowedEnvironments =>
+        AllowedEnvironments is { Length: > 0 }
+            ? AllowedEnvironments
+            : StandardAllowedEnvironments;
 
     public void Validate()
     {
@@ -33,16 +46,16 @@ public sealed class SimulationGovernanceOptions
             throw new InvalidOperationException("SimulationGovernance.MaximumEvidenceValueCharacters must be between 1 and 1,048,576.");
         if (string.IsNullOrWhiteSpace(ScenarioDirectory) || ScenarioDirectory.Length > 1_024)
             throw new InvalidOperationException("SimulationGovernance.ScenarioDirectory is required and cannot exceed 1,024 characters.");
-        if (AllowedEnvironments is null || AllowedEnvironments.Length == 0)
-            throw new InvalidOperationException("SimulationGovernance.AllowedEnvironments cannot be empty.");
-        if (AllowedEnvironments.Any(static environment =>
+
+        var allowed = EffectiveAllowedEnvironments;
+        if (allowed.Any(static environment =>
                 string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Production can never be an allowed simulation environment.");
-        if (AllowedEnvironments.Any(string.IsNullOrWhiteSpace))
+        if (allowed.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("SimulationGovernance.AllowedEnvironments cannot contain empty values.");
-        if (AllowedEnvironments.Any(static environment => environment.Length > 128))
+        if (allowed.Any(static environment => environment.Length > 128))
             throw new InvalidOperationException("SimulationGovernance.AllowedEnvironments values cannot exceed 128 characters.");
-        if (AllowedEnvironments.Distinct(StringComparer.OrdinalIgnoreCase).Count() != AllowedEnvironments.Length)
+        if (allowed.Distinct(StringComparer.OrdinalIgnoreCase).Count() != allowed.Length)
             throw new InvalidOperationException("SimulationGovernance.AllowedEnvironments must be unique.");
     }
 }
@@ -90,8 +103,7 @@ public static class SimulationBoundaryGuard
             return new(false, "simulator-disabled", "Simulator.Enabled is false.");
         if (!options.Enabled)
             return new(false, "governance-disabled", "SimulationGovernance.Enabled is false.");
-        if (options.AllowedEnvironments is null ||
-            !options.AllowedEnvironments.Contains(environmentName, StringComparer.OrdinalIgnoreCase))
+        if (!options.EffectiveAllowedEnvironments.Contains(environmentName, StringComparer.OrdinalIgnoreCase))
             return new(false, "environment-denied", $"Environment '{environmentName}' is not approved for simulation.");
 
         options.Validate();

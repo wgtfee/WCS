@@ -356,7 +356,7 @@ public sealed partial class HilVerificationRuntime
         var session = RequiredSession(sessionId);
         return new HilSoftwareReadinessReport(
             GovernanceEnabled: _options.Enabled,
-            ProductionFailClosed: !_options.AllowedEnvironments.Contains("Production", StringComparer.OrdinalIgnoreCase),
+            ProductionFailClosed: !_options.EffectiveAllowedEnvironments.Contains("Production", StringComparer.OrdinalIgnoreCase),
             SelfHostedRunnerRequired: _options.RequireSelfHostedHilRunner,
             DualApprovalRequired: _options.RequireDualApproval,
             RecoveryFlowSupported: true,
