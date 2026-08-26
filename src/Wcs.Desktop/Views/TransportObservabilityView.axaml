@@ -48,7 +48,7 @@
                         <atom:DataGridTextColumn Header="实体号" Binding="{Binding EntityId}" Width="160" />
                         <atom:DataGridTextColumn Header="内存" Binding="{Binding RuntimeValue}" Width="180" />
                         <atom:DataGridTextColumn Header="数据库" Binding="{Binding PersistedValue}" Width="180" />
-                        <atom:DataGridTextColumn Header="PLC" Binding="{Binding PlcValue}" Width="180" />
+                        <atom:DataGridTextColumn Header="PLC 名称" Binding="{Binding PlcValue}" Width="180" />
                         <atom:DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="2*" />
                         <atom:DataGridTextColumn Header="时间" Binding="{Binding DetectedAtUtc}" Width="190" />
                     </atom:DataGrid.Columns>
@@ -57,7 +57,7 @@
             <atom:TabItem Header="链路追踪">
                 <atom:DataGrid ItemsSource="{Binding Traces}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
                     <atom:DataGrid.Columns>
-                        <atom:DataGridTextColumn Header="TraceId" Binding="{Binding TraceId}" Width="250" />
+                        <atom:DataGridTextColumn Header="链路追踪ID" Binding="{Binding TraceId}" Width="250" />
                         <atom:DataGridTextColumn Header="类型" Binding="{Binding Kind}" Width="150" />
                         <atom:DataGridTextColumn Header="操作" Binding="{Binding OperationName}" Width="220" />
                         <atom:DataGridTextColumn Header="任务" Binding="{Binding RequestId}" Width="180" />

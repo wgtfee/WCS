@@ -6,33 +6,33 @@
              x:DataType="vm:MaintenanceLearningViewModel">
   <ScrollViewer>
     <StackPanel Margin="24" Spacing="16">
-      <StackPanel Spacing="4"><TextBlock Classes="wcs-page-title" Text="IDI-P4 Maintenance Learning"/><TextBlock Classes="wcs-page-subtitle" Text="维修干预、结果、MES Outbox 与学习证据的治理视图。"/></StackPanel>
+      <StackPanel Spacing="4"><TextBlock Classes="wcs-page-title" Text="维修闭环学习"/><TextBlock Classes="wcs-page-subtitle" Text="维修干预、结果、MES Outbox 与学习证据的治理视图。"/></StackPanel>
       <Border Classes="wcs-boundary-strip"><TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}"/></Border>
 
       <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
-        <atom:Card Grid.Column="0" Header="Environment" StyleVariant="Outlined"><TextBlock Text="{Binding Environment}" FontSize="18" FontWeight="SemiBold"/></atom:Card>
-        <atom:Card Grid.Column="1" Header="Mode" StyleVariant="Outlined"><TextBlock Text="{Binding ModeText}" TextWrapping="Wrap"/></atom:Card>
-        <atom:Card Grid.Column="2" Header="Recovery" StyleVariant="Outlined"><TextBlock Text="{Binding RecoveryText}" TextWrapping="Wrap"/></atom:Card>
+        <atom:Card Grid.Column="0" Header="环境" StyleVariant="Outlined"><TextBlock Text="{Binding Environment}" FontSize="18" FontWeight="SemiBold"/></atom:Card>
+        <atom:Card Grid.Column="1" Header="模式" StyleVariant="Outlined"><TextBlock Text="{Binding ModeText}" TextWrapping="Wrap"/></atom:Card>
+        <atom:Card Grid.Column="2" Header="已恢复" StyleVariant="Outlined"><TextBlock Text="{Binding RecoveryText}" TextWrapping="Wrap"/></atom:Card>
       </Grid>
 
       <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="刷新" Command="{Binding RefreshCommand}"/><TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}"/></StackPanel>
 
-      <atom:Card Header="Intervention 查询" StyleVariant="Outlined">
+      <atom:Card Header="维修干预查询" StyleVariant="Outlined">
         <StackPanel Spacing="8">
           <StackPanel Orientation="Horizontal" Spacing="8"><atom:LineEdit Width="280" Watermark="InterventionId" Text="{Binding InterventionId}"/><atom:Button Content="查询" Command="{Binding FindInterventionCommand}"/></StackPanel>
           <TextBlock Text="{Binding InterventionText}" TextWrapping="Wrap"/>
         </StackPanel>
       </atom:Card>
 
-      <atom:Card Header="Pending MES Outbox" StyleVariant="Outlined">
+      <atom:Card Header="待发送 MES 发件箱" StyleVariant="Outlined">
         <StackPanel Spacing="8">
-          <atom:Statistic Header="Pending" Value="{Binding PendingOutbox.Count}" ContentFontSize="24"/>
+          <atom:Statistic Header="待发送" Value="{Binding PendingOutbox.Count}" ContentFontSize="24"/>
           <atom:DataGrid ItemsSource="{Binding PendingOutbox}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
             <atom:DataGrid.Columns>
-              <atom:DataGridTextColumn Header="OutboxId" Binding="{Binding OutboxId}" Width="180"/>
-              <atom:DataGridTextColumn Header="InterventionId" Binding="{Binding InterventionId}" Width="180"/>
-              <atom:DataGridTextColumn Header="Attempts" Binding="{Binding AttemptCount}" Width="90"/>
-              <atom:DataGridTextColumn Header="Last Error" Binding="{Binding LastError}" Width="*"/>
+              <atom:DataGridTextColumn Header="发件箱ID" Binding="{Binding OutboxId}" Width="180"/>
+              <atom:DataGridTextColumn Header="干预ID" Binding="{Binding InterventionId}" Width="180"/>
+              <atom:DataGridTextColumn Header="尝试次数" Binding="{Binding AttemptCount}" Width="90"/>
+              <atom:DataGridTextColumn Header="最近错误" Binding="{Binding LastError}" Width="*"/>
             </atom:DataGrid.Columns>
           </atom:DataGrid>
         </StackPanel>

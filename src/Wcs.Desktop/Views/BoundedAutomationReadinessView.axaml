@@ -6,12 +6,12 @@
              x:DataType="vm:BoundedAutomationReadinessViewModel">
   <ScrollViewer>
     <StackPanel Margin="24" Spacing="16">
-      <StackPanel Spacing="4"><TextBlock Classes="wcs-page-title" Text="IDI-P6 Bounded Automation Readiness"/><TextBlock Classes="wcs-page-subtitle" Text="软件侧自动化就绪度与永久禁止项的只读治理视图。"/></StackPanel>
+      <StackPanel Spacing="4"><TextBlock Classes="wcs-page-title" Text="自动化就绪评估"/><TextBlock Classes="wcs-page-subtitle" Text="软件侧自动化就绪度与永久禁止项的只读治理视图。"/></StackPanel>
       <Border Classes="wcs-boundary-strip"><TextBlock Classes="wcs-page-subtitle" Text="{Binding SafetyText}"/></Border>
       <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
-        <atom:Card Header="Environment" StyleVariant="Outlined"><TextBlock Text="{Binding Environment}" FontSize="18" FontWeight="SemiBold"/></atom:Card>
-        <atom:Card Grid.Column="1" Header="Mode / Boundary" StyleVariant="Outlined"><TextBlock Text="{Binding ModeText}" TextWrapping="Wrap"/></atom:Card>
-        <atom:Card Grid.Column="2" Header="Final Claim" StyleVariant="Outlined"><TextBlock Text="{Binding ClaimText}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/></atom:Card>
+        <atom:Card Header="环境" StyleVariant="Outlined"><TextBlock Text="{Binding Environment}" FontSize="18" FontWeight="SemiBold"/></atom:Card>
+        <atom:Card Grid.Column="1" Header="模式 / 边界" StyleVariant="Outlined"><TextBlock Text="{Binding ModeText}" TextWrapping="Wrap"/></atom:Card>
+        <atom:Card Grid.Column="2" Header="最终结论" StyleVariant="Outlined"><TextBlock Text="{Binding ClaimText}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/></atom:Card>
       </Grid>
       <StackPanel Orientation="Horizontal" Spacing="8"><atom:Button Content="刷新只读 Evidence" Command="{Binding RefreshCommand}"/><TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}"/></StackPanel>
 
@@ -20,9 +20,9 @@
       </atom:Card>
 
       <atom:Card Header="最近 Readiness Evidence" StyleVariant="Outlined">
-        <StackPanel Spacing="8"><atom:Statistic Header="Evidence" Value="{Binding Evidence.Count}" ContentFontSize="24"/>
+        <StackPanel Spacing="8"><atom:Statistic Header="证据" Value="{Binding Evidence.Count}" ContentFontSize="24"/>
           <atom:DataGrid ItemsSource="{Binding Evidence}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None">
-            <atom:DataGrid.Columns><atom:DataGridTextColumn Header="EvaluationId" Binding="{Binding EvaluationId}" Width="180"/><atom:DataGridTextColumn Header="Requested Level" Binding="{Binding RequestedLevel}" Width="100"/><atom:DataGridCheckBoxColumn Header="Software Ready" Binding="{Binding SoftwareSideReady}" Width="110"/><atom:DataGridCheckBoxColumn Header="Production Allowed" Binding="{Binding ProductionEnablementAllowed}" Width="130"/><atom:DataGridTextColumn Header="DecisionHash" Binding="{Binding DecisionHash}" Width="*"/><atom:DataGridTextColumn Header="Evaluated" Binding="{Binding EvaluatedAtUtc}" Width="180"/></atom:DataGrid.Columns>
+            <atom:DataGrid.Columns><atom:DataGridTextColumn Header="评估ID" Binding="{Binding EvaluationId}" Width="180"/><atom:DataGridTextColumn Header="请求自动化等级" Binding="{Binding RequestedLevel}" Width="100"/><atom:DataGridCheckBoxColumn Header="软件就绪" Binding="{Binding SoftwareSideReady}" Width="110"/><atom:DataGridCheckBoxColumn Header="允许生产控制" Binding="{Binding ProductionEnablementAllowed}" Width="130"/><atom:DataGridTextColumn Header="决策哈希" Binding="{Binding DecisionHash}" Width="*"/><atom:DataGridTextColumn Header="评估时间" Binding="{Binding EvaluatedAtUtc}" Width="180"/></atom:DataGrid.Columns>
           </atom:DataGrid>
         </StackPanel>
       </atom:Card>

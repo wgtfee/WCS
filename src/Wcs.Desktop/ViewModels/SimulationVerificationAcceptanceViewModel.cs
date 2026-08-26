@@ -43,6 +43,9 @@ public partial class SimulationVerificationViewModel
             return;
         }
 
+        // 以场景 JSON 为唯一事实来源回填并校验元数据
+        if (!TryEnsureScenarioMetadataReady())
+            return;
         if (!long.TryParse(ScenarioSeedText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seed) || seed == 0)
         {
             StatusText = "随机种子必须是非零整数。";

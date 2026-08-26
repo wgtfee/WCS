@@ -18,19 +18,19 @@
 
     <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*,*" ColumnSpacing="10">
       <atom:Card Grid.Column="0" StyleVariant="Outlined" IsHoverable="True">
-        <atom:Statistic Header="Assets" Value="{Binding TrackedAssetCount}" ContentFontSize="26" />
+        <atom:Statistic Header="资产健康总览" Value="{Binding TrackedAssetCount}" ContentFontSize="26" />
       </atom:Card>
       <atom:Card Grid.Column="1" StyleVariant="Outlined" IsHoverable="True">
-        <atom:Statistic Header="Degraded &lt; 70" Value="{Binding DegradedAssetCount}" ContentFontSize="26" />
+        <atom:Statistic Header="退化(&lt;70分)" Value="{Binding DegradedAssetCount}" ContentFontSize="26" />
       </atom:Card>
       <atom:Card Grid.Column="2" StyleVariant="Outlined" IsHoverable="True">
-        <atom:Statistic Header="Root Cause" Value="{Binding RootCauseCount}" ContentFontSize="26" />
+        <atom:Statistic Header="根因" Value="{Binding RootCauseCount}" ContentFontSize="26" />
       </atom:Card>
       <atom:Card Grid.Column="3" StyleVariant="Outlined" IsHoverable="True">
-        <atom:Statistic Header="Maintenance" Value="{Binding MaintenanceCount}" ContentFontSize="26" />
+        <atom:Statistic Header="维修动作" Value="{Binding MaintenanceCount}" ContentFontSize="26" />
       </atom:Card>
       <atom:Card Grid.Column="4" StyleVariant="Outlined" IsHoverable="True">
-        <atom:Statistic Header="Forecast" Value="{Binding ForecastCount}" ContentFontSize="26" />
+        <atom:Statistic Header="预测结果" Value="{Binding ForecastCount}" ContentFontSize="26" />
       </atom:Card>
     </Grid>
 
@@ -41,7 +41,7 @@
 
     <atom:Card Grid.Row="3" StyleVariant="Outlined">
       <atom:TabControl>
-        <atom:TabItem Header="Health">
+        <atom:TabItem Header="健康分">
           <atom:DataGrid ItemsSource="{Binding HealthAssets}"
                          AutoGenerateColumns="False"
                          IsReadOnly="True"
@@ -50,18 +50,18 @@
                          IsFrameBorderVisible="True"
                          PaginationVisibility="None">
             <atom:DataGrid.Columns>
-              <atom:DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="160" />
-              <atom:DataGridTextColumn Header="Health" Binding="{Binding HealthScore}" Width="90" />
-              <atom:DataGridTextColumn Header="Grade" Binding="{Binding Grade}" Width="100" />
-              <atom:DataGridTextColumn Header="Fusion Risk" Binding="{Binding FusionRiskScore}" Width="100" />
-              <atom:DataGridTextColumn Header="Sources" Binding="{Binding IndependentSourceCount}" Width="80" />
-              <atom:DataGridTextColumn Header="Summary" Binding="{Binding Summary}" Width="*" />
-              <atom:DataGridTextColumn Header="Calculated" Binding="{Binding CalculatedAtUtc}" Width="180" />
+              <atom:DataGridTextColumn Header="资产" Binding="{Binding AssetId}" Width="160" />
+              <atom:DataGridTextColumn Header="健康分" Binding="{Binding HealthScore}" Width="90" />
+              <atom:DataGridTextColumn Header="等级" Binding="{Binding Grade}" Width="100" />
+              <atom:DataGridTextColumn Header="融合风险" Binding="{Binding FusionRiskScore}" Width="100" />
+              <atom:DataGridTextColumn Header="证据来源" Binding="{Binding IndependentSourceCount}" Width="80" />
+              <atom:DataGridTextColumn Header="摘要" Binding="{Binding Summary}" Width="*" />
+              <atom:DataGridTextColumn Header="计算时间" Binding="{Binding CalculatedAtUtc}" Width="180" />
             </atom:DataGrid.Columns>
           </atom:DataGrid>
         </atom:TabItem>
 
-        <atom:TabItem Header="Root Cause">
+        <atom:TabItem Header="根因">
           <atom:DataGrid ItemsSource="{Binding RootCauses}"
                          AutoGenerateColumns="False"
                          IsReadOnly="True"
@@ -70,16 +70,16 @@
                          IsFrameBorderVisible="True"
                          PaginationVisibility="None">
             <atom:DataGrid.Columns>
-              <atom:DataGridTextColumn Header="Analysis" Binding="{Binding AnalysisId}" Width="190" />
-              <atom:DataGridTextColumn Header="Trigger Event" Binding="{Binding TriggerEventId}" Width="190" />
-              <atom:DataGridTextColumn Header="Primary Cause" Binding="{Binding PrimaryNodeId}" Width="170" />
-              <atom:DataGridTextColumn Header="Review" Binding="{Binding ReviewDecision}" Width="100" />
-              <atom:DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="*" />
+              <atom:DataGridTextColumn Header="分析结论" Binding="{Binding AnalysisId}" Width="190" />
+              <atom:DataGridTextColumn Header="触发事件" Binding="{Binding TriggerEventId}" Width="190" />
+              <atom:DataGridTextColumn Header="主因" Binding="{Binding PrimaryNodeId}" Width="170" />
+              <atom:DataGridTextColumn Header="人工复核" Binding="{Binding ReviewDecision}" Width="100" />
+              <atom:DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="*" />
             </atom:DataGrid.Columns>
           </atom:DataGrid>
         </atom:TabItem>
 
-        <atom:TabItem Header="Maintenance">
+        <atom:TabItem Header="维修动作">
           <atom:DataGrid ItemsSource="{Binding Maintenance}"
                          AutoGenerateColumns="False"
                          IsReadOnly="True"
@@ -88,17 +88,17 @@
                          IsFrameBorderVisible="True"
                          PaginationVisibility="None">
             <atom:DataGrid.Columns>
-              <atom:DataGridTextColumn Header="Recommendation" Binding="{Binding RecommendationId}" Width="200" />
-              <atom:DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="140" />
-              <atom:DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
-              <atom:DataGridTextColumn Header="Summary" Binding="{Binding Summary}" Width="*" />
-              <atom:DataGridTextColumn Header="MES WorkOrder" Binding="{Binding MesWorkOrderNo}" Width="150" />
-              <atom:DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="180" />
+              <atom:DataGridTextColumn Header="维修建议" Binding="{Binding RecommendationId}" Width="200" />
+              <atom:DataGridTextColumn Header="资产" Binding="{Binding AssetId}" Width="140" />
+              <atom:DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="100" />
+              <atom:DataGridTextColumn Header="摘要" Binding="{Binding Summary}" Width="*" />
+              <atom:DataGridTextColumn Header="MES 工单" Binding="{Binding MesWorkOrderNo}" Width="150" />
+              <atom:DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="180" />
             </atom:DataGrid.Columns>
           </atom:DataGrid>
         </atom:TabItem>
 
-        <atom:TabItem Header="Failure Forecast / RUL">
+        <atom:TabItem Header="故障预测 / 剩余寿命">
           <atom:DataGrid ItemsSource="{Binding Forecasts}"
                          AutoGenerateColumns="False"
                          IsReadOnly="True"
@@ -107,14 +107,14 @@
                          IsFrameBorderVisible="True"
                          PaginationVisibility="None">
             <atom:DataGrid.Columns>
-              <atom:DataGridTextColumn Header="Forecast" Binding="{Binding ForecastId}" Width="190" />
-              <atom:DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="140" />
-              <atom:DataGridTextColumn Header="P24" Binding="{Binding P24}" Width="90" />
-              <atom:DataGridTextColumn Header="P72" Binding="{Binding P72}" Width="90" />
-              <atom:DataGridTextColumn Header="P168" Binding="{Binding P168}" Width="90" />
-              <atom:DataGridTextColumn Header="RUL median(h)" Binding="{Binding RulMedianHours}" Width="110" />
-              <atom:DataGridTextColumn Header="Model" Binding="{Binding ModelVersion}" Width="120" />
-              <atom:DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="*" />
+              <atom:DataGridTextColumn Header="预测结果" Binding="{Binding ForecastId}" Width="190" />
+              <atom:DataGridTextColumn Header="资产" Binding="{Binding AssetId}" Width="140" />
+              <atom:DataGridTextColumn Header="24小时预测" Binding="{Binding P24}" Width="90" />
+              <atom:DataGridTextColumn Header="72小时预测" Binding="{Binding P72}" Width="90" />
+              <atom:DataGridTextColumn Header="168小时预测" Binding="{Binding P168}" Width="90" />
+              <atom:DataGridTextColumn Header="剩余寿命中位数(小时)" Binding="{Binding RulMedianHours}" Width="110" />
+              <atom:DataGridTextColumn Header="模型" Binding="{Binding ModelVersion}" Width="120" />
+              <atom:DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="*" />
             </atom:DataGrid.Columns>
           </atom:DataGrid>
         </atom:TabItem>

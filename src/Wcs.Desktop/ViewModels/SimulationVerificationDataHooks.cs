@@ -17,7 +17,7 @@ public partial class SimulationVerificationViewModel
         CheckpointStateText = value is null
             ? "尚未选择 Run"
             : value.IsTerminal
-                ? "终态 Run 不开放运行中 Checkpoint；Scenario 数据和终态 Evidence 仍可查看。"
+                ? "终态 Run：点击「读取检查点」可查看最终断言结果与终态状态数据。"
                 : "已选择 Run；点击读取 Checkpoint 后显示完整状态数据。";
     }
 

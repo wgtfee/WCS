@@ -42,7 +42,7 @@
             </atom:TabItem>
             <atom:TabItem Header="运行日志">
                 <atom:DataGrid ItemsSource="{Binding Journal}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None"><atom:DataGrid.Columns>
-                    <atom:DataGridTextColumn Header="类别" Binding="{Binding Category}" Width="160" /><atom:DataGridTextColumn Header="记录号" Binding="{Binding RecordId}" Width="*" /><atom:DataGridTextColumn Header="业务时间" Binding="{Binding OccurredAtUtc}" Width="190" /><atom:DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" /><atom:DataGridTextColumn Header="JSON" Binding="{Binding PayloadJson}" Width="3*" />
+                    <atom:DataGridTextColumn Header="类别" Binding="{Binding Category}" Width="160" /><atom:DataGridTextColumn Header="记录号" Binding="{Binding RecordId}" Width="*" /><atom:DataGridTextColumn Header="业务时间" Binding="{Binding OccurredAtUtc}" Width="190" /><atom:DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedAtUtc}" Width="190" /><atom:DataGridTextColumn Header="JSON 内容" Binding="{Binding PayloadJson}" Width="3*" />
                 </atom:DataGrid.Columns></atom:DataGrid>
             </atom:TabItem>
         </atom:TabControl>

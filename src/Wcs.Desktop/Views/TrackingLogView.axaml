@@ -30,12 +30,12 @@
         <atom:Card Grid.Row="2" Header="埋点记录" StyleVariant="Outlined">
             <atom:DataGrid ItemsSource="{Binding PagedItems}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None" CanUserSortColumns="True" CanUserResizeColumns="True">
                 <atom:DataGrid.Columns>
-                    <atom:DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="90" />
+                    <atom:DataGridTextColumn Header="编号" Binding="{Binding Id}" Width="90" />
                     <atom:DataGridTextColumn Header="事件名称" Binding="{Binding EventName}" Width="160" />
                     <atom:DataGridTextColumn Header="事件类型" Binding="{Binding EventType}" Width="120" />
                     <atom:DataGridTextColumn Header="页面路径" Binding="{Binding PageUrl}" Width="2*" />
                     <atom:DataGridTextColumn Header="用户" Binding="{Binding UserName}" Width="120" />
-                    <atom:DataGridTextColumn Header="IP" Binding="{Binding UserIP}" Width="130" />
+                    <atom:DataGridTextColumn Header="IP 地址" Binding="{Binding UserIP}" Width="130" />
                     <atom:DataGridTextColumn Header="浏览器" Binding="{Binding Browser}" Width="140" />
                     <atom:DataGridTextColumn Header="操作系统" Binding="{Binding OS}" Width="140" />
                     <atom:DataGridTextColumn Header="事件时间" Binding="{Binding EventTime}" Width="180" />

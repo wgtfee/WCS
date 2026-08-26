@@ -85,16 +85,22 @@ public class WcsRealtimeService : IWcsRealtimeService, IAsyncDisposable
     {
         if (_connection is null) return;
 
-        _connection.On<DeviceStateChangedMessage>("DeviceStateChanged", msg =>
-            Dispatch(() => DeviceStateChanged?.Invoke(msg)));
+        // 服务端只广播一份（DeviceStateBroadcast / AlarmBroadcast），
+        // 客户端在此同时触发对应的"定向"事件，保持既有订阅者契约不变。
         _connection.On<DeviceStateChangedMessage>("DeviceStateBroadcast", msg =>
-            Dispatch(() => DeviceStateBroadcast?.Invoke(msg)));
+            Dispatch(() =>
+            {
+                DeviceStateChanged?.Invoke(msg);
+                DeviceStateBroadcast?.Invoke(msg);
+            }));
         _connection.On<TaskStateChangedMessage>("TaskStateChanged", msg =>
             Dispatch(() => TaskStateChanged?.Invoke(msg)));
-        _connection.On<AlarmEventMessage>("AlarmEvent", msg =>
-            Dispatch(() => AlarmEvent?.Invoke(msg)));
         _connection.On<AlarmEventMessage>("AlarmBroadcast", msg =>
-            Dispatch(() => AlarmBroadcast?.Invoke(msg)));
+            Dispatch(() =>
+            {
+                AlarmEvent?.Invoke(msg);
+                AlarmBroadcast?.Invoke(msg);
+            }));
         _connection.On<ObjectMovedMessage>("ObjectMoved", msg =>
             Dispatch(() => ObjectMoved?.Invoke(msg)));
     }

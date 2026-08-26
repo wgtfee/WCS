@@ -7,7 +7,7 @@
   <ScrollViewer>
     <StackPanel Margin="24" Spacing="16">
       <StackPanel Spacing="4">
-        <TextBlock Classes="wcs-page-title" Text="IDI-P3 Shadow Decision Center" />
+        <TextBlock Classes="wcs-page-title" Text="影子决策建议中心" />
         <TextBlock Classes="wcs-page-subtitle"
                    Text="Proposal、Constraint、Explanation、人工治理与 Outcome 的统一审查入口。" />
       </StackPanel>
@@ -18,16 +18,16 @@
 
       <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
         <atom:Card Grid.Column="0" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Proposals" Value="{Binding ProposalCount}" ContentFontSize="28" />
+          <atom:Statistic Header="建议总数" Value="{Binding ProposalCount}" ContentFontSize="28" />
         </atom:Card>
         <atom:Card Grid.Column="1" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Pending" Value="{Binding PendingCount}" ContentFontSize="28" />
+          <atom:Statistic Header="待审批" Value="{Binding PendingCount}" ContentFontSize="28" />
         </atom:Card>
         <atom:Card Grid.Column="2" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Blocked" Value="{Binding BlockedCount}" ContentFontSize="28" />
+          <atom:Statistic Header="已拦截" Value="{Binding BlockedCount}" ContentFontSize="28" />
         </atom:Card>
         <atom:Card Grid.Column="3" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Approved" Value="{Binding ApprovedCount}" ContentFontSize="28" />
+          <atom:Statistic Header="已批准" Value="{Binding ApprovedCount}" ContentFontSize="28" />
         </atom:Card>
       </Grid>
 
@@ -37,7 +37,7 @@
         <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
       </StackPanel>
 
-      <atom:Card Header="Decision Proposals" StyleVariant="Outlined">
+      <atom:Card Header="影子决策建议" StyleVariant="Outlined">
         <atom:DataGrid ItemsSource="{Binding Proposals}"
                        SelectedItem="{Binding SelectedProposal}"
                        SelectionMode="Single"
@@ -50,18 +50,18 @@
                        PaginationVisibility="None"
                        Height="300">
           <atom:DataGrid.Columns>
-            <atom:DataGridTextColumn Header="ProposalId" Binding="{Binding ProposalId}" Width="210" />
-            <atom:DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="180" />
-            <atom:DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
-            <atom:DataGridTextColumn Header="Action" Binding="{Binding Candidate.Action}" Width="180" />
-            <atom:DataGridTextColumn Header="Score" Binding="{Binding Candidate.Score}" Width="90" />
-            <atom:DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="180" />
-            <atom:DataGridTextColumn Header="Expires" Binding="{Binding ExpiresAtUtc}" Width="*" />
+            <atom:DataGridTextColumn Header="建议ID" Binding="{Binding ProposalId}" Width="210" />
+            <atom:DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="180" />
+            <atom:DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="120" />
+            <atom:DataGridTextColumn Header="建议动作" Binding="{Binding Candidate.Action}" Width="180" />
+            <atom:DataGridTextColumn Header="得分" Binding="{Binding Candidate.Score}" Width="90" />
+<atom:DataGridTextColumn Header="创建时间" Binding="{Binding CreatedAtUtc}" Width="180" />
+                            <atom:DataGridTextColumn Header="过期时间" Binding="{Binding ExpiresAtUtc}" Width="*" />
           </atom:DataGrid.Columns>
         </atom:DataGrid>
       </atom:Card>
 
-      <atom:Card Header="Proposal Evidence / Explanation" StyleVariant="Outlined">
+      <atom:Card Header="建议证据 / 说明" StyleVariant="Outlined">
         <StackPanel Spacing="10">
           <TextBlock Classes="wcs-page-subtitle" Text="{Binding DetailText}" />
           <atom:DataGrid ItemsSource="{Binding Constraints}"
@@ -72,10 +72,10 @@
                          PaginationVisibility="None"
                          Height="160">
             <atom:DataGrid.Columns>
-              <atom:DataGridTextColumn Header="Constraint" Binding="{Binding Code}" Width="160" />
-              <atom:DataGridCheckBoxColumn Header="Passed" Binding="{Binding Passed}" Width="80" />
-              <atom:DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*" />
-              <atom:DataGridTextColumn Header="Evidence" Binding="{Binding EvidenceHash}" Width="220" />
+<atom:DataGridTextColumn Header="约束条件" Binding="{Binding Code}" Width="160" />
+                                    <atom:DataGridCheckBoxColumn Header="是否通过" Binding="{Binding Passed}" Width="80" />
+                                    <atom:DataGridTextColumn Header="原因" Binding="{Binding Reason}" Width="*" />
+                                    <atom:DataGridTextColumn Header="证据哈希" Binding="{Binding EvidenceHash}" Width="220" />
             </atom:DataGrid.Columns>
           </atom:DataGrid>
         </StackPanel>
@@ -84,28 +84,28 @@
       <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
         <atom:Card Grid.Column="0" Header="人工治理动作" StyleVariant="Outlined">
           <StackPanel Spacing="10">
-            <atom:LineEdit PlaceholderText="Actor" Text="{Binding Actor}" />
+            <atom:LineEdit PlaceholderText="操作人" Text="{Binding Actor}" />
             <atom:LineEdit PlaceholderText="Reason（必填）"
                            Text="{Binding Reason}"
                            AcceptsReturn="True"
                            MinHeight="70" />
-            <atom:LineEdit PlaceholderText="CorrelationId" Text="{Binding CorrelationId}" />
+            <atom:LineEdit PlaceholderText="关联ID" Text="{Binding CorrelationId}" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <atom:Button ButtonType="Primary"
-                           Content="Approve（仅治理状态）"
+                           Content="批准（仅治理状态）"
                            Command="{Binding ApproveCommand}" />
-              <atom:Button Content="Reject" Command="{Binding RejectCommand}" />
+              <atom:Button Content="驳回" Command="{Binding RejectCommand}" />
             </StackPanel>
           </StackPanel>
         </atom:Card>
 
         <atom:Card Grid.Column="1" Header="实际 Outcome 回填" StyleVariant="Outlined">
           <StackPanel Spacing="10">
-            <atom:LineEdit PlaceholderText="OutcomeType" Text="{Binding OutcomeType}" />
-            <atom:LineEdit PlaceholderText="ActualReference / 工单 / 任务 / 现场记录"
+            <atom:LineEdit PlaceholderText="结果类型" Text="{Binding OutcomeType}" />
+            <atom:LineEdit PlaceholderText="实际参考（工单 / 任务 / 现场记录）"
                            Text="{Binding ActualReference}" />
-            <atom:LineEdit PlaceholderText="ActualBenefit（可选）" Text="{Binding ActualBenefit}" />
-            <atom:LineEdit PlaceholderText="Evidence SHA-256" Text="{Binding OutcomeEvidenceHash}" />
+            <atom:LineEdit PlaceholderText="实际收益（可选）" Text="{Binding ActualBenefit}" />
+            <atom:LineEdit PlaceholderText="证据 SHA-256" Text="{Binding OutcomeEvidenceHash}" />
             <atom:Button ButtonType="Primary"
                          Content="记录 Outcome（不反向控制）"
                          Command="{Binding RecordOutcomeCommand}" />
@@ -123,12 +123,12 @@
                        PaginationVisibility="None"
                        Height="180">
           <atom:DataGrid.Columns>
-            <atom:DataGridTextColumn Header="From" Binding="{Binding FromStatus}" Width="100" />
-            <atom:DataGridTextColumn Header="To" Binding="{Binding ToStatus}" Width="100" />
-            <atom:DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="120" />
-            <atom:DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*" />
-            <atom:DataGridTextColumn Header="UTC" Binding="{Binding Utc}" Width="180" />
-            <atom:DataGridTextColumn Header="Correlation" Binding="{Binding CorrelationId}" Width="180" />
+<atom:DataGridTextColumn Header="原状态" Binding="{Binding FromStatus}" Width="100" />
+                                <atom:DataGridTextColumn Header="新状态" Binding="{Binding ToStatus}" Width="100" />
+                                <atom:DataGridTextColumn Header="操作人" Binding="{Binding Actor}" Width="120" />
+                                <atom:DataGridTextColumn Header="原因" Binding="{Binding Reason}" Width="*" />
+                                <atom:DataGridTextColumn Header="UTC 时间" Binding="{Binding Utc}" Width="180" />
+                                <atom:DataGridTextColumn Header="关联ID" Binding="{Binding CorrelationId}" Width="180" />
           </atom:DataGrid.Columns>
         </atom:DataGrid>
       </atom:Card>

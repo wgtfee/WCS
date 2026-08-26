@@ -18,6 +18,8 @@ namespace Wcs.Entity;
         public string Url { get; set; } = string.Empty;      // 对应的路由或 View 标识
         public int ParentId { get; set; }
         public string Icon { get; set; } = string.Empty;
+        /// <summary>页面用途的一句话说明，展示在页签顶部说明栏。</summary>
+        public string Description { get; set; } = string.Empty;
         public int Enable { get; set; }
         public string TableName { get; set; }
         public object Permission { get; set; }

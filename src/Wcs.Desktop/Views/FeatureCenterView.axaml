@@ -7,7 +7,7 @@
   <ScrollViewer>
     <StackPanel Margin="24" Spacing="16">
       <StackPanel Spacing="4">
-        <TextBlock Classes="wcs-page-title" Text="IDI-P2 Feature Center" />
+        <TextBlock Classes="wcs-page-title" Text="特征数据中心" />
         <TextBlock Classes="wcs-page-subtitle"
                    Text="特征定义、Schema、Snapshot 与 Point-in-Time Dataset 的统一追踪入口。" />
       </StackPanel>
@@ -18,17 +18,17 @@
 
       <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
         <atom:Card Grid.Column="0" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Feature Definitions"
+          <atom:Statistic Header="特征定义列表"
                           Value="{Binding FeatureCount}"
                           ContentFontSize="28" />
         </atom:Card>
         <atom:Card Grid.Column="1" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Entity Types"
+          <atom:Statistic Header="实体类型"
                           Value="{Binding EntityTypeCount}"
                           ContentFontSize="28" />
         </atom:Card>
         <atom:Card Grid.Column="2" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Sources"
+          <atom:Statistic Header="来源"
                           Value="{Binding SourceCount}"
                           ContentFontSize="28" />
         </atom:Card>
@@ -41,7 +41,7 @@
         <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
       </StackPanel>
 
-      <atom:Card Header="Feature Definitions" StyleVariant="Outlined">
+      <atom:Card Header="特征定义列表" StyleVariant="Outlined">
         <atom:DataGrid ItemsSource="{Binding Features}"
                        AutoGenerateColumns="False"
                        IsReadOnly="True"
@@ -51,21 +51,21 @@
                        PaginationVisibility="None"
                        Height="330">
           <atom:DataGrid.Columns>
-            <atom:DataGridTextColumn Header="FeatureId" Binding="{Binding FeatureId}" Width="180" />
-            <atom:DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
-            <atom:DataGridTextColumn Header="Entity" Binding="{Binding EntityType}" Width="120" />
-            <atom:DataGridTextColumn Header="Type" Binding="{Binding DataType}" Width="100" />
-            <atom:DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="180" />
-            <atom:DataGridTextColumn Header="Aggregation" Binding="{Binding Aggregation}" Width="120" />
-            <atom:DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="90" />
-            <atom:DataGridTextColumn Header="Owner" Binding="{Binding Owner}" Width="120" />
-            <atom:DataGridTextColumn Header="DefinitionHash" Binding="{Binding DefinitionHash}" Width="*" />
+            <atom:DataGridTextColumn Header="特征ID" Binding="{Binding FeatureId}" Width="180" />
+            <atom:DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="180" />
+            <atom:DataGridTextColumn Header="实体" Binding="{Binding EntityType}" Width="120" />
+            <atom:DataGridTextColumn Header="类型" Binding="{Binding DataType}" Width="100" />
+            <atom:DataGridTextColumn Header="来源" Binding="{Binding Source}" Width="180" />
+            <atom:DataGridTextColumn Header="聚合方式" Binding="{Binding Aggregation}" Width="120" />
+            <atom:DataGridTextColumn Header="版本" Binding="{Binding Version}" Width="90" />
+            <atom:DataGridTextColumn Header="负责人" Binding="{Binding Owner}" Width="120" />
+            <atom:DataGridTextColumn Header="定义哈希" Binding="{Binding DefinitionHash}" Width="*" />
           </atom:DataGrid.Columns>
         </atom:DataGrid>
       </atom:Card>
 
       <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
-        <atom:Card Grid.Column="0" Header="Schema 查询" StyleVariant="Outlined">
+        <atom:Card Grid.Column="0" Header="特征 Schema 查询" StyleVariant="Outlined">
           <StackPanel Spacing="10">
             <StackPanel Orientation="Horizontal" Spacing="8">
               <atom:LineEdit Width="180" PlaceholderText="SchemaId" Text="{Binding SchemaId}" />
@@ -76,7 +76,7 @@
           </StackPanel>
         </atom:Card>
 
-        <atom:Card Grid.Column="1" Header="Snapshot 查询" StyleVariant="Outlined">
+        <atom:Card Grid.Column="1" Header="特征快照查询" StyleVariant="Outlined">
           <StackPanel Spacing="10">
             <StackPanel Orientation="Horizontal" Spacing="8">
               <atom:LineEdit Width="300" PlaceholderText="SnapshotId" Text="{Binding SnapshotId}" />
@@ -87,7 +87,7 @@
         </atom:Card>
       </Grid>
 
-      <atom:Card Header="Point-in-Time Dataset 查询" StyleVariant="Outlined">
+      <atom:Card Header="时间点数据集查询" StyleVariant="Outlined">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <atom:LineEdit Width="220" PlaceholderText="DatasetId" Text="{Binding DatasetId}" />

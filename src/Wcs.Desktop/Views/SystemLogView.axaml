@@ -10,7 +10,7 @@
             <TextBlock Classes="wcs-page-title" Text="系统日志" />
             <TextBlock Classes="wcs-page-subtitle" Text="操作系统与服务运行日志。" />
         </StackPanel>
-        <atom:Card Header="System Log" StyleVariant="Outlined">
+        <atom:Card Header="系统日志" StyleVariant="Outlined">
             <TextBlock Classes="wcs-page-subtitle" Text="页面数据能力尚未接入；本次仅统一表现层，不虚构系统日志数据源。" TextWrapping="Wrap" />
         </atom:Card>
     </StackPanel>

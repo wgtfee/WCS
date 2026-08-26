@@ -10,7 +10,7 @@
             <TextBlock Classes="wcs-page-title" Text="审计日志" />
             <TextBlock Classes="wcs-page-subtitle" Text="安全审计与操作记录。" />
         </StackPanel>
-        <atom:Card Header="Audit Journal" StyleVariant="Outlined">
+        <atom:Card Header="审计日志" StyleVariant="Outlined">
             <TextBlock Classes="wcs-page-subtitle" Text="页面数据能力尚未接入；本次仅统一表现层，不虚构审计数据源。" TextWrapping="Wrap" />
         </atom:Card>
     </StackPanel>

@@ -9,7 +9,24 @@
     xmlns:atom="https://atomui.net"
     mc:Ignorable="d">
 
-    <Grid RowDefinitions="44,*" Background="{DynamicResource BgPrimary}">
+    <UserControl.Styles>
+        <!-- 页签关闭按钮：原生 Button 保证字形可见，悬停高亮提示可点击 -->
+        <Style Selector="Button.tab-close">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="Button.tab-close:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentBlue}"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="44,Auto,*" Background="{DynamicResource BgPrimary}">
         <Border Grid.Row="0"
                 Background="{DynamicResource BgSecondary}"
                 BorderThickness="0,0,0,1"
@@ -56,12 +73,13 @@
                                                    FontSize="12"
                                                    FontWeight="SemiBold"
                                                    VerticalAlignment="Center"/>
-                                        <atom:Button Grid.Column="1"
-                                                     Width="24" Height="22"
-                                                     Content="×"
-                                                     FontSize="13"
-                                                     IsVisible="{Binding CanClose}"
-                                                     Click="OnCloseButtonClick" />
+                                        <Button Grid.Column="1"
+                                                Classes="tab-close"
+                                                Width="22" Height="20"
+                                                Content="✕"
+                                                IsVisible="{Binding CanClose}"
+                                                ToolTip.Tip="关闭此页面"
+                                                Click="OnCloseButtonClick" />
                                     </Grid>
                                 </Border>
 
@@ -77,7 +95,21 @@
             </ScrollViewer>
         </Border>
 
-        <Border Grid.Row="1" Background="{DynamicResource BgPrimary}">
+        <!-- 页面用途说明栏：随选中页签切换，帮助用户理解当前页面职责 -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource BgSecondary}"
+                BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource BorderColor}"
+                Padding="14,5,10,5"
+                IsVisible="{Binding SelectedTab.Description, ElementName=PART_Root, Converter={StaticResource NullToBool}}">
+            <TextBlock Text="{Binding SelectedTab.Description, ElementName=PART_Root}"
+                       Foreground="{DynamicResource TextSecondary}"
+                       FontSize="11.5"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center"/>
+        </Border>
+
+        <Border Grid.Row="2" Background="{DynamicResource BgPrimary}">
             <ContentPresenter Content="{Binding SelectedTab.Content, ElementName=PART_Root}" />
         </Border>
     </Grid>

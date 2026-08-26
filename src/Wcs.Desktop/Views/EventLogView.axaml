@@ -8,10 +8,10 @@
     <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Spacing="4">
-                <TextBlock Classes="wcs-page-title" Text="Event Log" />
+                <TextBlock Classes="wcs-page-title" Text="实时事件日志" />
                 <TextBlock Classes="wcs-page-subtitle" Text="运行事件、分类与时间序列的统一只读追踪视图。" />
             </StackPanel>
-            <CheckBox Grid.Column="1" IsChecked="{Binding AutoScroll}" Content="Auto-scroll" VerticalAlignment="Center" />
+            <CheckBox Grid.Column="1" IsChecked="{Binding AutoScroll}" Content="自动滚动" VerticalAlignment="Center" />
         </Grid>
 
         <UniformGrid Grid.Row="1" Columns="1" Rows="1">

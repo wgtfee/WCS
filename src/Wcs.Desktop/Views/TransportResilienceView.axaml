@@ -21,9 +21,9 @@
 
         <UniformGrid Grid.Row="1" Columns="8" Rows="1">
             <atom:Card Margin="0,0,5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="就绪状态" Value="{Binding ReadinessState}" ContentFontSize="20" /></atom:Card>
-            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Critical" Value="{Binding CriticalCount}" ContentFontSize="20" /></atom:Card>
-            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Error" Value="{Binding ErrorCount}" ContentFontSize="20" /></atom:Card>
-            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="Warning" Value="{Binding WarningCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="严重" Value="{Binding CriticalCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="错误" Value="{Binding ErrorCount}" ContentFontSize="20" /></atom:Card>
+            <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="警告" Value="{Binding WarningCount}" ContentFontSize="20" /></atom:Card>
             <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="备份数量" Value="{Binding BackupCount}" ContentFontSize="20" /></atom:Card>
             <atom:Card Margin="5,0" StyleVariant="Outlined" IsHoverable="True"><atom:Statistic Header="演练数量" Value="{Binding DrillCount}" ContentFontSize="20" /></atom:Card>
             <atom:Card Margin="5,0" StyleVariant="Outlined"><StackPanel><TextBlock Classes="wcs-page-subtitle" Text="最近备份"/><TextBlock Text="{Binding LastBackupText}" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel></atom:Card>
@@ -64,7 +64,7 @@
                         <atom:DataGrid.Columns>
                             <atom:DataGridTextColumn Header="备份号" Binding="{Binding BackupId}" Width="240" />
                             <atom:DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="150" />
-                            <atom:DataGridTextColumn Header="SHA-256" Binding="{Binding Sha256}" Width="280" />
+                            <atom:DataGridTextColumn Header="SHA-256 校验值" Binding="{Binding Sha256}" Width="280" />
                             <atom:DataGridTextColumn Header="大小" Binding="{Binding SizeBytes}" Width="100" />
                             <atom:DataGridCheckBoxColumn Header="就绪" Binding="{Binding PreflightReady}" Width="80" />
                             <atom:DataGridTextColumn Header="车辆" Binding="{Binding VehicleCount}" Width="80" />

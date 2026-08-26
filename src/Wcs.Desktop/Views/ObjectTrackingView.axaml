@@ -20,16 +20,16 @@
         </Grid>
 
         <atom:Card Grid.Row="1" StyleVariant="Outlined" IsHoverable="True">
-            <atom:Statistic Header="Tracked Objects" Value="{Binding Objects.Count}" ContentFontSize="26" />
+            <atom:Statistic Header="追踪对象列表" Value="{Binding Objects.Count}" ContentFontSize="26" />
         </atom:Card>
 
         <atom:Card Grid.Row="2" Header="对象列表" StyleVariant="Outlined">
             <atom:DataGrid ItemsSource="{Binding Objects}" AutoGenerateColumns="False" IsReadOnly="True" PaginationVisibility="None" CanUserSortColumns="True" CanUserResizeColumns="True">
                 <atom:DataGrid.Columns>
-                    <atom:DataGridTextColumn Header="Object ID" Binding="{Binding ObjectId}" Width="2*" />
-                    <atom:DataGridTextColumn Header="Current Pos" Binding="{Binding CurrentPosition}" Width="*" />
-                    <atom:DataGridTextColumn Header="Target Pos" Binding="{Binding TargetPosition}" Width="*" />
-                    <atom:DataGridTemplateColumn Header="Status" SortMemberPath="Status" Width="120">
+                    <atom:DataGridTextColumn Header="对象ID" Binding="{Binding ObjectId}" Width="2*" />
+                    <atom:DataGridTextColumn Header="当前位置" Binding="{Binding CurrentPosition}" Width="*" />
+                    <atom:DataGridTextColumn Header="目标位置" Binding="{Binding TargetPosition}" Width="*" />
+                    <atom:DataGridTemplateColumn Header="状态" SortMemberPath="Status" Width="120">
                         <atom:DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
@@ -39,7 +39,7 @@
                             </DataTemplate>
                         </atom:DataGridTemplateColumn.CellTemplate>
                     </atom:DataGridTemplateColumn>
-                    <atom:DataGridTextColumn Header="Last Update" Binding="{Binding UpdateTime}" Width="180" />
+                    <atom:DataGridTextColumn Header="最后更新" Binding="{Binding UpdateTime}" Width="180" />
                 </atom:DataGrid.Columns>
             </atom:DataGrid>
         </atom:Card>

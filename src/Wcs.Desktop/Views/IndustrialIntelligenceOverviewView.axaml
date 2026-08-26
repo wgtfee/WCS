@@ -18,12 +18,12 @@
 
       <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
         <atom:Card Grid.Column="0" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Available stages"
+          <atom:Statistic Header="可用阶段"
                           Value="{Binding AvailableStageCount}"
                           ContentFontSize="28" />
         </atom:Card>
         <atom:Card Grid.Column="1" StyleVariant="Outlined" IsHoverable="True">
-          <atom:Statistic Header="Fail-closed / unavailable"
+          <atom:Statistic Header="失效关闭 / 不可用"
                           Value="{Binding FailClosedStageCount}"
                           ContentFontSize="28" />
         </atom:Card>
@@ -34,7 +34,7 @@
         <TextBlock Classes="wcs-toolbar-status" Text="{Binding StatusText}" />
       </StackPanel>
 
-      <atom:Card Header="P0-P6 Capability Matrix" StyleVariant="Outlined">
+      <atom:Card Header="P0–P6 能力矩阵" StyleVariant="Outlined">
         <atom:DataGrid ItemsSource="{Binding Stages}"
                        AutoGenerateColumns="False"
                        IsReadOnly="True"
@@ -44,14 +44,14 @@
                        PaginationVisibility="None"
                        Height="380">
           <atom:DataGrid.Columns>
-            <atom:DataGridTextColumn Header="Stage" Binding="{Binding Stage}" Width="70" />
-            <atom:DataGridTextColumn Header="Capability" Binding="{Binding Name}" Width="220" />
-            <atom:DataGridCheckBoxColumn Header="Available" Binding="{Binding Available}" Width="90" />
-            <atom:DataGridTextColumn Header="Environment" Binding="{Binding Environment}" Width="120" />
-            <atom:DataGridTextColumn Header="Max Level" Binding="{Binding MaximumAutomationLevel}" Width="100" />
-            <atom:DataGridCheckBoxColumn Header="Control Write" Binding="{Binding ControlWriteAllowed}" Width="100" />
-            <atom:DataGridTextColumn Header="Items" Binding="{Binding ItemCount}" Width="70" />
-            <atom:DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="*" />
+            <atom:DataGridTextColumn Header="阶段" Binding="{Binding Stage}" Width="70" />
+            <atom:DataGridTextColumn Header="能力" Binding="{Binding Name}" Width="220" />
+            <atom:DataGridCheckBoxColumn Header="可用" Binding="{Binding Available}" Width="90" />
+            <atom:DataGridTextColumn Header="环境" Binding="{Binding Environment}" Width="120" />
+            <atom:DataGridTextColumn Header="最高等级" Binding="{Binding MaximumAutomationLevel}" Width="100" />
+            <atom:DataGridCheckBoxColumn Header="控制写入权" Binding="{Binding ControlWriteAllowed}" Width="100" />
+            <atom:DataGridTextColumn Header="条目数" Binding="{Binding ItemCount}" Width="70" />
+            <atom:DataGridTextColumn Header="说明" Binding="{Binding Detail}" Width="*" />
           </atom:DataGrid.Columns>
         </atom:DataGrid>
       </atom:Card>

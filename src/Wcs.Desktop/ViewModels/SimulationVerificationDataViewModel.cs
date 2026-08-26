@@ -19,7 +19,8 @@ public partial class SimulationVerificationViewModel
     [ObservableProperty] private string _checkpointStateJson = "{}";
     [ObservableProperty] private int _checkpointStateEntryCount;
 
-    partial void OnScenarioJsonChanged(string value) => RebuildScenarioDataPreview(value);
+    // 注意：OnScenarioJsonChanged 的 partial 实现统一收敛在主文件中，
+    // 这里仅暴露数据预览重建方法供其调用。
 
     private void RebuildScenarioDataPreview(string? json)
     {

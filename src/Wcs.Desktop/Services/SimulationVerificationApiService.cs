@@ -154,7 +154,11 @@ public sealed class SimulationVerificationApiService : ISimulationVerificationAp
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new InvalidOperationException("当前环境未开放受治理仿真 API。请确认 Simulator.Enabled、SimulationGovernance.Enabled 和 Simulation/SimulationLoadTest 环境边界。");
+            throw new InvalidOperationException(
+                "当前环境未开放受治理仿真 API。启用步骤（Host 端 appsettings.json）："
+                + "① 配置 \"Simulator\": { \"Enabled\": true }；"
+                + "② 配置 \"SimulationGovernance\": { \"Enabled\": true }；"
+                + "③ 将 ASPNETCORE_ENVIRONMENT 设为 SimulationGovernance:AllowedEnvironments 之一（默认仅 Simulation/SimulationLoadTest，Production 永远禁用）。");
 
         if (!string.IsNullOrWhiteSpace(body))
         {

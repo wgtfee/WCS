@@ -10,30 +10,38 @@ namespace Wcs.Desktop.ViewModels;
 /// <summary>
 /// 物体追踪 ViewModel
 /// </summary>
-public partial class ObjectsViewModel : ViewModelBase
-{
-    private readonly IWcsApiService _api;
-    private readonly IWcsRealtimeService _realtime;
-
-    public ObservableCollection<ObjectItem> Objects { get; } = new();
-
-    [ObservableProperty] private bool _isLoading;
-
-    public ObjectsViewModel(IWcsApiService api, IWcsRealtimeService realtime)
+    public partial class ObjectsViewModel : ViewModelBase
     {
-        _api = api;
-        _realtime = realtime;
+        private readonly IWcsApiService _api;
+        private readonly IWcsRealtimeService _realtime;
+        private readonly Action<ObjectMovedMessage> _onObjectMoved;
 
-        _realtime.ObjectMoved += msg =>
+        public ObservableCollection<ObjectItem> Objects { get; } = new();
+
+        [ObservableProperty] private bool _isLoading;
+
+        public ObjectsViewModel(IWcsApiService api, IWcsRealtimeService realtime)
         {
-            var existing = Objects.FirstOrDefault(o => o.ObjectId == msg.ObjectId);
-            if (existing is not null)
+            _api = api;
+            _realtime = realtime;
+
+            _onObjectMoved = msg =>
             {
-                existing.CurrentPosition = msg.NewPos;
-                existing.UpdateTime = DateTime.UtcNow;
-            }
-        };
-    }
+                var existing = Objects.FirstOrDefault(o => o.ObjectId == msg.ObjectId);
+                if (existing is not null)
+                {
+                    existing.CurrentPosition = msg.NewPos;
+                    existing.UpdateTime = DateTime.UtcNow;
+                }
+            };
+            _realtime.ObjectMoved += _onObjectMoved;
+        }
+
+        protected override void OnDispose()
+        {
+            _realtime.ObjectMoved -= _onObjectMoved;
+            base.OnDispose();
+        }
 
     protected override async Task OnInitializeAsync()
     {

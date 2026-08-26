@@ -142,7 +142,7 @@
                             <atom:LineEdit Grid.Column="1" Text="{Binding SpeedFactorText}" Watermark="1" />
                             <atom:Button Grid.Column="2" Content="创建暂停运行" Command="{Binding CreateRunCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
                             <atom:Button Grid.Column="3" Content="单步" Command="{Binding StepCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
-                            <atom:Button Grid.Column="4" Content="继续" Command="{Binding ResumeCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
+                            <atom:Button Grid.Column="4" Content="继续并跑完" Command="{Binding ResumeCommand}" ToolTip.Tip="从暂停处继续执行直到场景结束（引擎按需推进，单独恢复不会前进）" IsEnabled="{Binding CanExecuteSimulation}" />
                             <atom:Button Grid.Column="5" Content="暂停" Command="{Binding PauseCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
                             <atom:Button Grid.Column="6" Content="推进十秒" Command="{Binding Advance10SecondsCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
                             <atom:Button Grid.Column="7" Content="设置速度" Command="{Binding SetSpeedCommand}" IsEnabled="{Binding CanExecuteSimulation}" />
