@@ -53,28 +53,28 @@ public class PlcPollingBackgroundService : BackgroundService
                 if (!_options.CurrentValue.PlcPolling.Enabled)
                     continue;
 
-                foreach (var block in _pollingService.GetAllConnectionStatuses())
+                // 注意：diff 与连接状态列表无关。
+                // 原实现把块遍历嵌在 foreach(连接) 内，N 台 PLC 时每个块的
+                // 变更事件会被重复发布 N 次；这里提升为单层循环。
+                var cachedBlocks = _diffEngine.GetCachedBlocks();
+                foreach (var cachedBlock in cachedBlocks)
                 {
-                    var cachedBlocks = _diffEngine.GetCachedBlocks();
-                    foreach (var cachedBlock in cachedBlocks)
+                    var lastBlock = _diffEngine.GetLastBlock(cachedBlock.PlcName, cachedBlock.BlockNumber);
+                    if (lastBlock != null)
                     {
-                        var lastBlock = _diffEngine.GetLastBlock(cachedBlock.PlcName, cachedBlock.BlockNumber);
-                        if (lastBlock != null)
+                        var diff = _diffEngine.ComparePlcBlocks(lastBlock, cachedBlock);
+                        if (diff.HasChanges)
                         {
-                            var diff = _diffEngine.ComparePlcBlocks(lastBlock, cachedBlock);
-                            if (diff.HasChanges)
+                            await _eventBus.PublishAsync(new PlcBlockChangedEvent
                             {
-                                await _eventBus.PublishAsync(new PlcBlockChangedEvent
-                                {
-                                    BlockName = diff.PlcName,
-                                    OldValues = new Dictionary<string, object> { ["Data"] = diff.OldData },
-                                    NewValues = new Dictionary<string, object> { ["Data"] = diff.NewData },
-                                    ChangedFields = diff.Changes.Select(c => $"Offset_{c.Offset}").ToList()
-                                }, stoppingToken);
-                            }
+                                BlockName = diff.PlcName,
+                                OldValues = new Dictionary<string, object> { ["Data"] = diff.OldData },
+                                NewValues = new Dictionary<string, object> { ["Data"] = diff.NewData },
+                                ChangedFields = diff.Changes.Select(c => $"Offset_{c.Offset}").ToList()
+                            }, stoppingToken);
                         }
-                        _diffEngine.SetLastBlock(cachedBlock);
                     }
+                    _diffEngine.SetLastBlock(cachedBlock);
                 }
             }
         }

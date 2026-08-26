@@ -10,14 +10,17 @@ public interface ITransportReassignmentExecutionControl
 
 /// <summary>
 /// 为现有内存执行引擎增加跨方法串行化边界。
-/// 普通位置反馈、装载确认和故障换车准备都经过同一把锁，
+/// 普通位置反馈、装载确认和故障换车准备都经过同一把内层门禁，
 /// 从而避免“检查尚未取货后，车辆恰好进入装载状态”的竞态。
+///
+/// 性能说明：InMemoryTransportExecutionEngine 内部已对所有操作串行化，
+/// 这里不再叠加外层锁；需要多步一致性的复合操作通过 ExecuteUnderGate
+/// 在内层门禁下原子执行，避免嵌套双锁。
 /// </summary>
 public sealed class CoordinatedTransportExecutionEngine :
     ITransportExecutionEngine,
     ITransportReassignmentExecutionControl
 {
-    private readonly object _sync = new();
     private readonly InMemoryTransportExecutionEngine _inner;
     private readonly ITransportVehicleRegistry _vehicles;
 
@@ -29,69 +32,41 @@ public sealed class CoordinatedTransportExecutionEngine :
         _vehicles = vehicles ?? throw new ArgumentNullException(nameof(vehicles));
     }
 
-    public TransportExecutionResult Create(string requestId)
-    {
-        lock (_sync) return _inner.Create(requestId);
-    }
+    public TransportExecutionResult Create(string requestId) => _inner.Create(requestId);
 
-    public TransportExecutionResult Start(string requestId)
-    {
-        lock (_sync) return _inner.Start(requestId);
-    }
+    public TransportExecutionResult Start(string requestId) => _inner.Start(requestId);
 
-    public TransportExecutionResult ApplyPositionFeedback(TransportPositionFeedback feedback)
-    {
-        lock (_sync) return _inner.ApplyPositionFeedback(feedback);
-    }
+    public TransportExecutionResult ApplyPositionFeedback(TransportPositionFeedback feedback) =>
+        _inner.ApplyPositionFeedback(feedback);
 
-    public TransportExecutionResult ConfirmLoaded(string requestId)
-    {
-        lock (_sync) return _inner.ConfirmLoaded(requestId);
-    }
+    public TransportExecutionResult ConfirmLoaded(string requestId) => _inner.ConfirmLoaded(requestId);
 
-    public TransportExecutionResult ConfirmUnloaded(string requestId)
-    {
-        lock (_sync) return _inner.ConfirmUnloaded(requestId);
-    }
+    public TransportExecutionResult ConfirmUnloaded(string requestId) => _inner.ConfirmUnloaded(requestId);
 
-    public TransportExecutionResult Pause(string requestId)
-    {
-        lock (_sync) return _inner.Pause(requestId);
-    }
+    public TransportExecutionResult Pause(string requestId) => _inner.Pause(requestId);
 
-    public TransportExecutionResult Resume(string requestId)
-    {
-        lock (_sync) return _inner.Resume(requestId);
-    }
+    public TransportExecutionResult Resume(string requestId) => _inner.Resume(requestId);
 
-    public TransportExecutionResult Fault(string requestId, string reason)
-    {
-        lock (_sync) return _inner.Fault(requestId, reason);
-    }
+    public TransportExecutionResult Fault(string requestId, string reason) => _inner.Fault(requestId, reason);
 
-    public TransportExecutionResult Cancel(string requestId, string? reason = null)
-    {
-        lock (_sync) return _inner.Cancel(requestId, reason);
-    }
+    public TransportExecutionResult Cancel(string requestId, string? reason = null) =>
+        _inner.Cancel(requestId, reason);
 
-    public bool TryGet(string requestId, out TransportExecutionSnapshot? snapshot)
-    {
-        lock (_sync) return _inner.TryGet(requestId, out snapshot);
-    }
+    public bool TryGet(string requestId, out TransportExecutionSnapshot? snapshot) =>
+        _inner.TryGet(requestId, out snapshot);
 
-    public IReadOnlyList<TransportExecutionSnapshot> GetAll()
-    {
-        lock (_sync) return _inner.GetAll();
-    }
+    /// <summary>按车辆查询当前活动执行任务（O(1) 索引查找）。</summary>
+    public bool TryGetActiveByVehicle(string vehicleId, out TransportExecutionSnapshot? snapshot) =>
+        _inner.TryGetActiveByVehicle(vehicleId, out snapshot);
 
-    public IReadOnlyList<TransportExecutionCommand> DequeueCommands(string vehicleId, int maxCount = 20)
-    {
-        lock (_sync) return _inner.DequeueCommands(vehicleId, maxCount);
-    }
+    public IReadOnlyList<TransportExecutionSnapshot> GetAll() => _inner.GetAll();
+
+    public IReadOnlyList<TransportExecutionCommand> DequeueCommands(string vehicleId, int maxCount = 20) =>
+        _inner.DequeueCommands(vehicleId, maxCount);
 
     public TransportExecutionResult FaultAndPrepareForReassignment(string requestId, string reason)
     {
-        lock (_sync)
+        return _inner.ExecuteUnderGate(() =>
         {
             if (!_inner.TryGet(requestId, out var current) || current is null)
                 return TransportExecutionResult.Failed("执行任务不存在");
@@ -124,7 +99,7 @@ public sealed class CoordinatedTransportExecutionEngine :
             return TransportExecutionResult.Failed(
                 "任务已经到达取货点或载荷已绑定，原任务已停止，必须人工恢复",
                 faulted.Snapshot ?? current);
-        }
+        });
     }
 
     private static bool CanAutomaticallyReassign(TransportExecutionSnapshot execution) =>

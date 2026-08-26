@@ -38,6 +38,11 @@ public class EventDetector
         _extraRules.Add(rule);
     }
 
+    /// <summary>
+    /// 同步包装，仅供测试与遗留代码使用。
+    /// 生产轮询链路必须直接 await <see cref="DetectAsync"/>，
+    /// 避免在线程池线程上阻塞等待异步管线。
+    /// </summary>
     public void Detect(string blockKey, object current, string plcName = "", int dbBlock = 0)
         => DetectAsync(blockKey, current, plcName, dbBlock).GetAwaiter().GetResult();
 

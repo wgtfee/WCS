@@ -201,20 +201,26 @@ public class TaskExecutionWorker : BackgroundService
             // Keep the whole archive operation on one job-local client.
             var db = _db.CopyNew();
 
-            // Wcs_TaskHistory
-            await db.Insertable(new TaskHistoryEntity
+            // Wcs_TaskHistory / Wcs_TransportHistory：仿真器种子固定时
+            // 重跑会产生相同任务 ID，历史表按"首次写入为准"做幂等。
+            if (!await db.Queryable<TaskHistoryEntity>()
+                    .AnyAsync(x => x.TaskId == task.TaskId))
             {
-                TaskId = task.TaskId,
-                RouteId = task.RouteId,
-                Priority = task.Priority,
-                StartTime = task.StartTime,
-                EndTime = task.EndTime ?? now,
-                Success = success,
-                ErrorMessage = success ? null : task.ErrorMessage
-            }).ExecuteCommandAsync();
+                await db.Insertable(new TaskHistoryEntity
+                {
+                    TaskId = task.TaskId,
+                    RouteId = task.RouteId,
+                    Priority = task.Priority,
+                    StartTime = task.StartTime,
+                    EndTime = task.EndTime ?? now,
+                    Success = success,
+                    ErrorMessage = success ? null : task.ErrorMessage
+                }).ExecuteCommandAsync();
+            }
 
-            // Wcs_TaskRun
-            await db.Insertable(new TaskRunEntity
+            // Wcs_TaskRun — 归档与 PersistBackgroundService 写同一张表，
+            // 必须先 UPDATE（未命中再 INSERT），否则与持久化快照互相主键冲突。
+            var archive = new TaskRunEntity
             {
                 TaskId = task.TaskId,
                 DeviceId = task.DeviceId, RouteId = task.RouteId, PalletId = palletId,
@@ -222,18 +228,27 @@ public class TaskExecutionWorker : BackgroundService
                 Priority = task.Priority, CreatedTime = task.CreatedTime,
                 StartTime = task.StartTime, EndTime = task.EndTime ?? now,
                 ErrorMessage = success ? null : task.ErrorMessage, RetryCount = task.RetryCount
-            }).ExecuteCommandAsync();
+            };
+            var updated = await db.Updateable(archive)
+                .WhereColumns(x => x.TaskId)
+                .ExecuteCommandAsync();
+            if (updated == 0)
+                await db.Insertable(archive).ExecuteCommandAsync();
 
-            // Wcs_TransportHistory
-            await db.Insertable(new TransportHistoryEntity
+            // Wcs_TransportHistory（幂等：同任务重复归档时跳过）
+            if (!await db.Queryable<TransportHistoryEntity>()
+                    .AnyAsync(x => x.TaskId == task.TaskId))
             {
-                TaskId = task.TaskId, PalletId = palletId,
-                SourceNode = fromNode, TargetNode = toNode, Route = task.RouteId,
-                StartTime = task.StartTime ?? now, EndTime = task.EndTime ?? now,
-                Success = success, FailureReason = success ? null : task.ErrorMessage,
-                TotalDurationMs = task.StartTime.HasValue
-                    ? (long)(now - task.StartTime.Value).TotalMilliseconds : 0
-            }).ExecuteCommandAsync();
+                await db.Insertable(new TransportHistoryEntity
+                {
+                    TaskId = task.TaskId, PalletId = palletId,
+                    SourceNode = fromNode, TargetNode = toNode, Route = task.RouteId,
+                    StartTime = task.StartTime ?? now, EndTime = task.EndTime ?? now,
+                    Success = success, FailureReason = success ? null : task.ErrorMessage,
+                    TotalDurationMs = task.StartTime.HasValue
+                        ? (long)(now - task.StartTime.Value).TotalMilliseconds : 0
+                }).ExecuteCommandAsync();
+            }
         }
         catch (Exception ex) { _logger.LogWarning(ex, "归档失败"); }
     }

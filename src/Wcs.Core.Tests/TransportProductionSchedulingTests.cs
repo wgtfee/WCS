@@ -426,6 +426,16 @@ public class TransportProductionSchedulingTests
             snapshot = string.Equals(requestId, _snapshot.RequestId, StringComparison.Ordinal) ? _snapshot : null;
             return snapshot is not null;
         }
+        public bool TryGetActiveByVehicle(string vehicleId, out TransportExecutionSnapshot? snapshot)
+        {
+            if (_snapshot.IsTerminal || !string.Equals(vehicleId, _snapshot.VehicleId, StringComparison.Ordinal))
+            {
+                snapshot = null;
+                return false;
+            }
+            snapshot = _snapshot;
+            return true;
+        }
         public IReadOnlyList<TransportExecutionSnapshot> GetAll() => new[] { _snapshot };
         public IReadOnlyList<TransportExecutionCommand> DequeueCommands(string vehicleId, int maxCount = 20) => Array.Empty<TransportExecutionCommand>();
     }

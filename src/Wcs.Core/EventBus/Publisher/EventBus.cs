@@ -1,6 +1,8 @@
 namespace Wcs.Core.EventBus.Publisher;
 
 using System.Collections.Concurrent;
+using System.Linq.Expressions;
+using System.Reflection;
 using Wcs.Core.EventBus.Events;
 using Wcs.Core.EventBus.Handlers;
 using Wcs.Core.EventBus.Persistence;
@@ -8,11 +10,17 @@ using Wcs.Core.EventBus.Persistence;
 /// <summary>
 /// 内存事件总线实现 — 可选 IEventStore 持久化集成
 /// IEventStore 自身负责缓冲和批量刷盘；发布端只等待事件进入内存缓冲。
+///
+/// 并发设计：
+/// - 订阅表为"写时复制"的不可变数组，发布路径无锁读取（ConcurrentDictionary.TryGetValue）；
+/// - 非泛型 PublishAsync(IEvent) 通过表达式树按事件类型缓存分发委托，
+///   首次之后零反射调用（替代每次 MakeGenericMethod + Invoke）。
 /// </summary>
 public class EventBus : IEventBus
 {
-    private readonly ConcurrentDictionary<Type, List<object>> _subscribers = new();
-    private readonly ConcurrentDictionary<Type, List<Delegate>> _delegateHandlers = new();
+    private readonly ConcurrentDictionary<Type, object[]> _subscribers = new();
+    private readonly ConcurrentDictionary<Type, Delegate[]> _delegateHandlers = new();
+    private readonly ConcurrentDictionary<Type, Func<IEvent, CancellationToken, Task>> _typedPublishers = new();
     private readonly object _subscribeLock = new();
     private readonly IEventStore? _eventStore;
 
@@ -28,17 +36,17 @@ public class EventBus : IEventBus
         var eventType = typeof(TEvent);
         lock (_subscribeLock)
         {
-            _subscribers
-                .AddOrUpdate(eventType, 
-                    _ => new List<object> { handler },
-                    (_, list) =>
-                    {
-                        if (!list.Contains(handler))
-                        {
-                            list.Add(handler);
-                        }
-                        return list;
-                    });
+            _subscribers.AddOrUpdate(eventType,
+                _ => new object[] { handler },
+                (_, existing) =>
+                {
+                    if (Array.IndexOf(existing, handler) >= 0)
+                        return existing;
+                    var next = new object[existing.Length + 1];
+                    Array.Copy(existing, next, existing.Length);
+                    next[^1] = handler;
+                    return next;
+                });
         }
     }
 
@@ -49,17 +57,17 @@ public class EventBus : IEventBus
         var eventType = typeof(TEvent);
         lock (_subscribeLock)
         {
-            _delegateHandlers
-                .AddOrUpdate(eventType,
-                    _ => new List<Delegate> { handler },
-                    (_, list) =>
-                    {
-                        if (!list.Contains(handler))
-                        {
-                            list.Add(handler);
-                        }
-                        return list;
-                    });
+            _delegateHandlers.AddOrUpdate(eventType,
+                _ => new Delegate[] { handler },
+                (_, existing) =>
+                {
+                    if (Array.IndexOf(existing, handler) >= 0)
+                        return existing;
+                    var next = new Delegate[existing.Length + 1];
+                    Array.Copy(existing, next, existing.Length);
+                    next[^1] = handler;
+                    return next;
+                });
         }
     }
 
@@ -70,9 +78,16 @@ public class EventBus : IEventBus
         var eventType = typeof(TEvent);
         lock (_subscribeLock)
         {
-            if (_subscribers.TryGetValue(eventType, out var handlers))
+            if (_subscribers.TryGetValue(eventType, out var existing))
             {
-                handlers.Remove(handler);
+                var index = Array.IndexOf(existing, handler);
+                if (index >= 0)
+                {
+                    if (existing.Length == 1)
+                        _subscribers.TryRemove(eventType, out _);
+                    else
+                        _subscribers[eventType] = RemoveAt(existing, index);
+                }
             }
         }
     }
@@ -83,41 +98,40 @@ public class EventBus : IEventBus
 
         var eventType = typeof(TEvent);
 
-        // Get handlers
-        List<object>? handlers = null;
-        List<Delegate>? delegateHandlers = null;
+        // 无锁快照读取：数组不可变，遍历期间不会被修改。
+        var handlers = _subscribers.GetValueOrDefault(eventType);
+        var delegateHandlers = _delegateHandlers.GetValueOrDefault(eventType);
 
-        lock (_subscribeLock)
+        switch (handlers is { Length: > 0 }, delegateHandlers is { Length: > 0 })
         {
-            _subscribers.TryGetValue(eventType, out handlers);
-            _delegateHandlers.TryGetValue(eventType, out delegateHandlers);
-        }
-
-        var tasks = new List<Task>();
-
-        // Execute object handlers
-        if (handlers != null && handlers.Count > 0)
-        {
-            foreach (var handler in handlers.ToList())
+            case (true, true):
             {
-                var task = ExecuteHandlerAsync((IEventHandler<TEvent>)handler, @event, cancellationToken);
-                tasks.Add(task);
+                var tasks = new Task[handlers!.Length + delegateHandlers!.Length];
+                for (var i = 0; i < handlers.Length; i++)
+                    tasks[i] = ExecuteHandlerAsync((IEventHandler<TEvent>)handlers[i], @event, cancellationToken);
+                for (var i = 0; i < delegateHandlers.Length; i++)
+                    tasks[handlers.Length + i] = SafelyExecuteDelegateAsync(
+                        (EventHandlerDelegate<TEvent>)(object)delegateHandlers[i], @event, cancellationToken);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+                break;
             }
-        }
-
-        // Execute delegate handlers
-        if (delegateHandlers != null && delegateHandlers.Count > 0)
-        {
-            foreach (var handler in delegateHandlers.ToList())
+            case (true, false):
             {
-                var delegateTask = SafelyExecuteDelegateAsync((EventHandlerDelegate<TEvent>)(object)handler, @event, cancellationToken);
-                tasks.Add(delegateTask);
+                var tasks = new Task[handlers!.Length];
+                for (var i = 0; i < handlers.Length; i++)
+                    tasks[i] = ExecuteHandlerAsync((IEventHandler<TEvent>)handlers[i], @event, cancellationToken);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+                break;
             }
-        }
-
-        if (tasks.Count > 0)
-        {
-            await Task.WhenAll(tasks).ConfigureAwait(false);
+            case (false, true):
+            {
+                var tasks = new Task[delegateHandlers!.Length];
+                for (var i = 0; i < delegateHandlers.Length; i++)
+                    tasks[i] = SafelyExecuteDelegateAsync(
+                        (EventHandlerDelegate<TEvent>)(object)delegateHandlers[i], @event, cancellationToken);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+                break;
+            }
         }
 
         // The event store owns buffering and batched disk writes. Awaiting the
@@ -140,17 +154,34 @@ public class EventBus : IEventBus
     {
         ArgumentNullException.ThrowIfNull(@event);
 
-        var eventType = @event.GetType();
-        var method = typeof(EventBus)
-            .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+        var publisher = _typedPublishers.GetOrAdd(
+            @event.GetType(),
+            static (eventType, bus) => BuildTypedPublisher(eventType, bus),
+            this);
+
+        return publisher(@event, cancellationToken);
+    }
+
+    private static Func<IEvent, CancellationToken, Task> BuildTypedPublisher(Type eventType, EventBus bus)
+    {
+        var genericMethod = typeof(EventBus)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .First(m => m.Name == nameof(PublishAsync)
                      && m.IsGenericMethodDefinition
                      && m.GetGenericArguments().Length == 1
-                     && m.GetParameters().Length == 2);
+                     && m.GetParameters().Length == 2)
+            .MakeGenericMethod(eventType);
 
-        var genericMethod = method.MakeGenericMethod(eventType);
-        var task = (Task)genericMethod.Invoke(this, new object[] { @event, cancellationToken })!;
-        return task;
+        // (bus, IEvent e, CancellationToken ct) => bus.PublishAsync<TE>((TE)e, ct)
+        var evtParameter = Expression.Parameter(typeof(IEvent), "e");
+        var ctParameter = Expression.Parameter(typeof(CancellationToken), "ct");
+        var body = Expression.Call(
+            Expression.Constant(bus),
+            genericMethod,
+            Expression.Convert(evtParameter, eventType),
+            ctParameter);
+
+        return Expression.Lambda<Func<IEvent, CancellationToken, Task>>(body, evtParameter, ctParameter).Compile();
     }
 
     public IEnumerable<Type> GetSubscribedEvents()
@@ -165,20 +196,10 @@ public class EventBus : IEventBus
 
     public int GetHandlerCount<TEvent>() where TEvent : IEvent
     {
-        var eventType = typeof(TEvent);
-        lock (_subscribeLock)
-        {
-            var count = 0;
-            if (_subscribers.TryGetValue(eventType, out var handlers))
-            {
-                count += handlers.Count;
-            }
-            if (_delegateHandlers.TryGetValue(eventType, out var delegateHandlers))
-            {
-                count += delegateHandlers.Count;
-            }
-            return count;
-        }
+        var count = 0;
+        count += _subscribers.GetValueOrDefault(typeof(TEvent))?.Length ?? 0;
+        count += _delegateHandlers.GetValueOrDefault(typeof(TEvent))?.Length ?? 0;
+        return count;
     }
 
     public void ClearAllSubscriptions()
@@ -188,6 +209,14 @@ public class EventBus : IEventBus
             _subscribers.Clear();
             _delegateHandlers.Clear();
         }
+    }
+
+    private static object[] RemoveAt(object[] source, int index)
+    {
+        var next = new object[source.Length - 1];
+        Array.Copy(source, 0, next, 0, index);
+        Array.Copy(source, index + 1, next, index, source.Length - index - 1);
+        return next;
     }
 
     private static async Task ExecuteHandlerAsync<TEvent>(IEventHandler<TEvent> handler, TEvent @event, CancellationToken cancellationToken)

@@ -119,6 +119,13 @@ public class TransportProductionSafetyTests
         }
         public bool TryGet(string requestId, out TransportExecutionSnapshot? snapshot) =>
             _items.TryGetValue(requestId, out snapshot);
+        public bool TryGetActiveByVehicle(string vehicleId, out TransportExecutionSnapshot? snapshot)
+        {
+            var found = _items.Values.FirstOrDefault(x =>
+                !x.IsTerminal && string.Equals(x.VehicleId, vehicleId, StringComparison.Ordinal));
+            snapshot = found;
+            return found is not null;
+        }
         public IReadOnlyList<TransportExecutionSnapshot> GetAll() => _items.Values.ToArray();
         public IReadOnlyList<TransportExecutionCommand> DequeueCommands(string vehicleId, int maxCount = 20) =>
             Array.Empty<TransportExecutionCommand>();

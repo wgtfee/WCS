@@ -57,85 +57,58 @@ public class PersistBackgroundService : BackgroundService
 
                 using var db = CreateDb();
 
-                // 设备状态逐条 upsert
+                // 设备状态 upsert：先 UPDATE 未命中再 INSERT（避免与归档/其他写入方主键冲突）
                 foreach (var (deviceId, device) in snapshot.DeviceStates)
                 {
-                    var exists = await db.Queryable<DeviceRuntimeEntity>()
-                        .Where(e => e.DeviceId == deviceId).AnyAsync(stoppingToken);
-                    if (exists)
-                        await db.Updateable(new DeviceRuntimeEntity
-                        {
-                            DeviceId = deviceId,
-                            Status = device.Status.ToString(),
-                            LastUpdateTime = device.LastUpdateTime,
-                            Properties = device.Properties.Count > 0 ? JsonSerializer.Serialize(device.Properties, JsonOpts) : null
-                        }).ExecuteCommandAsync(stoppingToken);
-                    else
-                        await db.Insertable(new DeviceRuntimeEntity
-                        {
-                            DeviceId = deviceId,
-                            Status = device.Status.ToString(),
-                            LastUpdateTime = device.LastUpdateTime,
-                            Properties = device.Properties.Count > 0 ? JsonSerializer.Serialize(device.Properties, JsonOpts) : null
-                        }).ExecuteCommandAsync(stoppingToken);
+                    var entity = new DeviceRuntimeEntity
+                    {
+                        DeviceId = deviceId,
+                        Status = device.Status.ToString(),
+                        LastUpdateTime = device.LastUpdateTime,
+                        Properties = device.Properties.Count > 0 ? JsonSerializer.Serialize(device.Properties, JsonOpts) : null
+                    };
+                    var updated = await db.Updateable(entity)
+                        .WhereColumns(x => x.DeviceId).ExecuteCommandAsync(stoppingToken);
+                    if (updated == 0)
+                        await db.Insertable(entity).ExecuteCommandAsync(stoppingToken);
                 }
 
-                // 任务状态逐条 upsert
+                // 任务状态 upsert
                 foreach (var (taskId, task) in snapshot.TaskRuntimes)
                 {
-                    var exists = await db.Queryable<TaskRuntimeEntity>()
-                        .Where(e => e.TaskId == taskId).AnyAsync(stoppingToken);
-                    if (exists)
-                        await db.Updateable(new TaskRuntimeEntity
-                        {
-                            TaskId = taskId,
-                            Status = task.Status.ToString(),
-                            Priority = task.Priority,
-                            RouteId = task.RouteId,
-                            StartTime = task.StartTime,
-                            EndTime = task.EndTime,
-                            Parameters = task.Parameters.Count > 0 ? JsonSerializer.Serialize(task.Parameters, JsonOpts) : null
-                        }).ExecuteCommandAsync(stoppingToken);
-                    else
-                        await db.Insertable(new TaskRuntimeEntity
-                        {
-                            TaskId = taskId,
-                            Status = task.Status.ToString(),
-                            Priority = task.Priority,
-                            RouteId = task.RouteId,
-                            StartTime = task.StartTime,
-                            EndTime = task.EndTime,
-                            Parameters = task.Parameters.Count > 0 ? JsonSerializer.Serialize(task.Parameters, JsonOpts) : null
-                        }).ExecuteCommandAsync(stoppingToken);
+                    var entity = new TaskRuntimeEntity
+                    {
+                        TaskId = taskId,
+                        Status = task.Status.ToString(),
+                        Priority = task.Priority,
+                        RouteId = task.RouteId,
+                        StartTime = task.StartTime,
+                        EndTime = task.EndTime,
+                        Parameters = task.Parameters.Count > 0 ? JsonSerializer.Serialize(task.Parameters, JsonOpts) : null
+                    };
+                    var updated = await db.Updateable(entity)
+                        .WhereColumns(x => x.TaskId).ExecuteCommandAsync(stoppingToken);
+                    if (updated == 0)
+                        await db.Insertable(entity).ExecuteCommandAsync(stoppingToken);
                 }
 
-                // 报警状态逐条 upsert
+                // 报警状态 upsert
                 foreach (var (alarmId, alarm) in snapshot.AlarmStates)
                 {
-                    var exists = await db.Queryable<AlarmRuntimeEntity>()
-                        .Where(e => e.AlarmId == alarmId).AnyAsync(stoppingToken);
-                    if (exists)
-                        await db.Updateable(new AlarmRuntimeEntity
-                        {
-                            AlarmId = alarmId,
-                            AlarmCode = alarm.AlarmCode,
-                            Status = alarm.Status.ToString(),
-                            Level = alarm.Level.ToString(),
-                            Message = alarm.Message,
-                            OccurTime = alarm.OccurTime,
-                            RecoverTime = alarm.RecoverTime
-                        }).ExecuteCommandAsync(stoppingToken);
-                    else
-                        await db.Insertable(new AlarmRuntimeEntity
-                        {
-                            AlarmId = alarmId,
-                            AlarmCode = alarm.AlarmCode,
-                            Status = alarm.Status.ToString(),
-                            Level = alarm.Level.ToString(),
-                            Message = alarm.Message,
-                            OccurTime = alarm.OccurTime,
-                            RecoverTime = alarm.RecoverTime
-                        }).ExecuteCommandAsync(stoppingToken);
+                    var entity = new AlarmRuntimeEntity
+                    {
+                        AlarmId = alarmId,
+                        AlarmCode = alarm.AlarmCode,
+                        Status = alarm.Status.ToString(),
+                        Level = alarm.Level.ToString(),
+                        Message = alarm.Message,
+                        OccurTime = alarm.OccurTime,
+                        RecoverTime = alarm.RecoverTime
+                    };
+                    var updated = await db.Updateable(entity)
+                        .WhereColumns(x => x.AlarmId).ExecuteCommandAsync(stoppingToken);
+                    if (updated == 0)
+                        await db.Insertable(entity).ExecuteCommandAsync(stoppingToken);
                 }
 
                 var total = snapshot.DeviceStates.Count + snapshot.TaskRuntimes.Count + snapshot.AlarmStates.Count;

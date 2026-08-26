@@ -79,6 +79,9 @@ public sealed class ObservedTransportExecutionEngine :
     public bool TryGet(string requestId, out TransportExecutionSnapshot? snapshot) =>
         _inner.TryGet(requestId, out snapshot);
 
+    public bool TryGetActiveByVehicle(string vehicleId, out TransportExecutionSnapshot? snapshot) =>
+        _inner.TryGetActiveByVehicle(vehicleId, out snapshot);
+
     public IReadOnlyList<TransportExecutionSnapshot> GetAll() => _inner.GetAll();
 
     public IReadOnlyList<TransportExecutionCommand> DequeueCommands(string vehicleId, int maxCount = 20) =>
@@ -110,16 +113,14 @@ public sealed class ObservedTransportExecutionEngine :
         _analysis.Observe(before, after, operation, result.Success);
     }
 
-    private TransportExecutionSnapshot? FindActiveByVehicle(string vehicleId) =>
-        _inner.GetAll()
-            .Where(snapshot =>
-                string.Equals(snapshot.VehicleId, vehicleId, StringComparison.Ordinal) &&
-                snapshot.State is not (
-                    TransportExecutionState.Completed or
-                    TransportExecutionState.Cancelled or
-                    TransportExecutionState.Faulted))
-            .OrderByDescending(static snapshot => snapshot.UpdatedAtUtc)
-            .FirstOrDefault();
+    private TransportExecutionSnapshot? FindActiveByVehicle(string vehicleId)
+    {
+        // O(1) 索引查询，替代原先的 GetAll() 全量排序快照。
+        if (_inner.TryGetActiveByVehicle(vehicleId, out var snapshot) && snapshot is not null)
+            return snapshot;
+
+        return null;
+    }
 
     private static bool SnapshotsEquivalent(
         TransportExecutionSnapshot left,

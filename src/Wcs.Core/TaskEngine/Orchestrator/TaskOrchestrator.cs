@@ -57,10 +57,14 @@ public interface ITaskOrchestrator
 /// </summary>
 public class TaskOrchestrator : ITaskOrchestrator
 {
+    /// <summary>终态任务归档上限：只保留最近完成的任务供查询，防止 _tasks 无界增长。</summary>
+    private const int MaxArchivedTasks = 1000;
+
     private readonly IStateCenter _stateCenter;
     private readonly ITaskScheduler _scheduler;
     private readonly ConcurrentDictionary<string, TaskContext> _tasks = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<TaskContext>> _completionSources = new();
+    private readonly ConcurrentQueue<TaskContext> _archivedTasks = new();
 
     public TaskOrchestrator(IStateCenter stateCenter, ITaskScheduler scheduler)
     {
@@ -141,6 +145,8 @@ public class TaskOrchestrator : ITaskOrchestrator
             completionSource.SetResult(task);
         }
 
+        ArchiveTerminal(task);
+
         await Task.CompletedTask;
     }
 
@@ -177,6 +183,8 @@ public class TaskOrchestrator : ITaskOrchestrator
         {
             completionSource.SetCanceled();
         }
+
+        ArchiveTerminal(task);
 
         await Task.CompletedTask;
         return true;
@@ -233,7 +241,23 @@ public class TaskOrchestrator : ITaskOrchestrator
 
     public TaskContext? GetTaskInfo(string taskId)
     {
-        _tasks.TryGetValue(taskId, out var task);
-        return task;
+        if (_tasks.TryGetValue(taskId, out var task))
+            return task;
+
+        // 终态任务从 _tasks 移除后，回退到归档队列中查找（诊断路径，量级有限）。
+        // 注意：ConcurrentQueue 无随机访问，此处线性扫描可接受。
+        return _archivedTasks.FirstOrDefault(t => string.Equals(t.TaskId, taskId, StringComparison.Ordinal));
+    }
+
+    /// <summary>终态任务移出活跃表并进入有界归档队列。</summary>
+    private void ArchiveTerminal(TaskContext task)
+    {
+        _tasks.TryRemove(task.TaskId, out _);
+        _archivedTasks.Enqueue(task);
+
+        while (_archivedTasks.Count > MaxArchivedTasks)
+        {
+            _archivedTasks.TryDequeue(out _);
+        }
     }
 }

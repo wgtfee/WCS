@@ -14,6 +14,8 @@ public interface ITransportExecutionEngine
     TransportExecutionResult Fault(string requestId, string reason);
     TransportExecutionResult Cancel(string requestId, string? reason = null);
     bool TryGet(string requestId, out TransportExecutionSnapshot? snapshot);
+    /// <summary>按车辆查询当前活动（非终态）执行任务。高性能实现应接近 O(1)。</summary>
+    bool TryGetActiveByVehicle(string vehicleId, out TransportExecutionSnapshot? snapshot);
     IReadOnlyList<TransportExecutionSnapshot> GetAll();
     IReadOnlyList<TransportExecutionCommand> DequeueCommands(string vehicleId, int maxCount = 20);
 }
@@ -34,7 +36,9 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
     private readonly IRouteReservationManager _reservationManager;
     private readonly ConcurrentDictionary<string, TransportExecutionSnapshot> _executions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ConcurrentQueue<TransportExecutionCommand>> _commands = new(StringComparer.Ordinal);
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    /// <summary>车辆 → 当前活动执行任务的二级索引，避免位置反馈等高频路径全表扫描。</summary>
+    private readonly ConcurrentDictionary<string, string> _activeByVehicle = new(StringComparer.Ordinal);
+    private readonly object _gateLock = new();
 
     public InMemoryTransportExecutionEngine(
         IUnifiedTransportDispatchEngine dispatchEngine,
@@ -54,8 +58,7 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
         if (_executions.TryGetValue(requestId, out var existing))
             return TransportExecutionResult.Succeeded(existing);
 
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
             if (_executions.TryGetValue(requestId, out existing))
                 return TransportExecutionResult.Succeeded(existing);
@@ -96,11 +99,8 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
             };
 
             _executions[requestId] = snapshot;
+            UpdateActiveIndex(snapshot);
             return TransportExecutionResult.Succeeded(snapshot);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
@@ -110,8 +110,7 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
         if (!created.Success || created.Snapshot is null)
             return created;
 
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
             var current = _executions[requestId];
             if (current.IsTerminal)
@@ -128,12 +127,9 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
             };
 
             _executions[requestId] = next;
+            UpdateActiveIndex(next);
             EnqueueNextCommand(next);
             return TransportExecutionResult.Succeeded(next);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
@@ -145,14 +141,9 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
         if (string.IsNullOrWhiteSpace(feedback.NodeId))
             return TransportExecutionResult.Failed("NodeId 不能为空");
 
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
-            var current = _executions.Values
-                .Where(x => string.Equals(x.VehicleId, feedback.VehicleId, StringComparison.Ordinal))
-                .Where(x => !x.IsTerminal)
-                .OrderByDescending(x => x.UpdatedAtUtc)
-                .FirstOrDefault();
+            var current = FindActiveByVehicleUnsafe(feedback.VehicleId);
 
             if (current is null)
                 return TransportExecutionResult.Failed("未找到该车辆的活动执行任务");
@@ -208,6 +199,7 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
             };
 
             _executions[current.RequestId] = next;
+            UpdateActiveIndex(next);
 
             if (extended)
                 EnqueueNextCommand(next);
@@ -215,10 +207,6 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
             return extended
                 ? TransportExecutionResult.Succeeded(next)
                 : TransportExecutionResult.Failed(next.LastError!, next);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
@@ -231,8 +219,7 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
 
     public TransportExecutionResult ConfirmUnloaded(string requestId)
     {
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
             if (!_executions.TryGetValue(requestId, out var current))
                 return TransportExecutionResult.Failed("执行任务不存在");
@@ -249,18 +236,14 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
                 UpdatedAtUtc = DateTime.UtcNow
             };
             _executions[requestId] = next;
+            UpdateActiveIndex(next);
             return TransportExecutionResult.Succeeded(next);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
     public TransportExecutionResult Pause(string requestId)
     {
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
             if (!_executions.TryGetValue(requestId, out var current))
                 return TransportExecutionResult.Failed("执行任务不存在");
@@ -273,19 +256,15 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
                 UpdatedAtUtc = DateTime.UtcNow
             };
             _executions[requestId] = next;
+            UpdateActiveIndex(next);
             EnqueueCommand(next, TransportExecutionCommandType.Stop);
             return TransportExecutionResult.Succeeded(next);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
     public TransportExecutionResult Resume(string requestId)
     {
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
             if (!_executions.TryGetValue(requestId, out var current))
                 return TransportExecutionResult.Failed("执行任务不存在");
@@ -311,6 +290,7 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
                     UpdatedAtUtc = DateTime.UtcNow
                 };
                 _executions[requestId] = waiting;
+                UpdateActiveIndex(waiting);
                 return TransportExecutionResult.Failed(waiting.LastError!, waiting);
             }
 
@@ -322,12 +302,9 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
                 UpdatedAtUtc = DateTime.UtcNow
             };
             _executions[requestId] = next;
+            UpdateActiveIndex(next);
             EnqueueNextCommand(next);
             return TransportExecutionResult.Succeeded(next);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
@@ -336,8 +313,7 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
         if (string.IsNullOrWhiteSpace(reason))
             reason = "车辆或执行层故障";
 
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
             if (!_executions.TryGetValue(requestId, out var current))
                 return TransportExecutionResult.Failed("执行任务不存在");
@@ -351,19 +327,15 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
                 UpdatedAtUtc = DateTime.UtcNow
             };
             _executions[requestId] = next;
+            UpdateActiveIndex(next);
             EnqueueCommand(next, TransportExecutionCommandType.Stop);
             return TransportExecutionResult.Succeeded(next);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
     public TransportExecutionResult Cancel(string requestId, string? reason = null)
     {
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
             if (!_executions.TryGetValue(requestId, out var current))
                 return TransportExecutionResult.Failed("执行任务不存在");
@@ -381,11 +353,8 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
                 UpdatedAtUtc = DateTime.UtcNow
             };
             _executions[requestId] = next;
+            UpdateActiveIndex(next);
             return TransportExecutionResult.Succeeded(next);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
@@ -426,8 +395,7 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
         TransportExecutionState target,
         string failureReason)
     {
-        _gate.Wait();
-        try
+        lock (_gateLock)
         {
             if (!_executions.TryGetValue(requestId, out var current))
                 return TransportExecutionResult.Failed("执行任务不存在");
@@ -441,12 +409,82 @@ public sealed class InMemoryTransportExecutionEngine : ITransportExecutionEngine
                 UpdatedAtUtc = DateTime.UtcNow
             };
             _executions[requestId] = next;
+            UpdateActiveIndex(next);
             EnqueueNextCommand(next);
             return TransportExecutionResult.Succeeded(next);
         }
-        finally
+    }
+
+    /// <summary>
+    /// 在执行引擎内部门禁下原子地执行复合操作。
+    /// 供 CoordinatedTransportExecutionEngine 等需要多步一致性的调用方使用，
+    /// 避免外层再加一把锁形成嵌套双锁。
+    /// </summary>
+    internal TResult ExecuteUnderGate<TResult>(Func<TResult> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        lock (_gateLock) return action();
+    }
+
+    /// <summary>
+    /// 按车辆查询当前活动（非终态）执行任务。O(1)，用于位置反馈等高频路径。
+    /// </summary>
+    public bool TryGetActiveByVehicle(string vehicleId, out TransportExecutionSnapshot? snapshot)
+    {
+        snapshot = null;
+        if (string.IsNullOrWhiteSpace(vehicleId))
+            return false;
+
+        lock (_gateLock)
         {
-            _gate.Release();
+            snapshot = FindActiveByVehicleUnsafe(vehicleId);
+            return snapshot is not null;
+        }
+    }
+
+    /// <summary>仅在持有 <see cref="_gateLock"/> 时调用。</summary>
+    private TransportExecutionSnapshot? FindActiveByVehicleUnsafe(string vehicleId)
+    {
+        if (_activeByVehicle.TryGetValue(vehicleId, out var requestId) &&
+            _executions.TryGetValue(requestId, out var indexed) &&
+            !indexed.IsTerminal)
+        {
+            return indexed;
+        }
+
+        // 索引缺失或失效时回退一次全表扫描并重建索引，保证与旧语义完全兼容。
+        TransportExecutionSnapshot? fallback = null;
+        foreach (var candidate in _executions.Values)
+        {
+            if (candidate.IsTerminal ||
+                !string.Equals(candidate.VehicleId, vehicleId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (fallback is null || candidate.UpdatedAtUtc > fallback.UpdatedAtUtc)
+                fallback = candidate;
+        }
+
+        if (fallback is not null)
+            _activeByVehicle[vehicleId] = fallback.RequestId;
+        else
+            _activeByVehicle.TryRemove(vehicleId, out _);
+
+        return fallback;
+    }
+
+    private void UpdateActiveIndex(TransportExecutionSnapshot snapshot)
+    {
+        if (snapshot.IsTerminal)
+        {
+            // 条件移除：仅当索引仍指向本任务时才清除，避免误删同车辆的新任务。
+            ((ICollection<KeyValuePair<string, string>>)_activeByVehicle).Remove(
+                new KeyValuePair<string, string>(snapshot.VehicleId, snapshot.RequestId));
+        }
+        else
+        {
+            _activeByVehicle[snapshot.VehicleId] = snapshot.RequestId;
         }
     }
 

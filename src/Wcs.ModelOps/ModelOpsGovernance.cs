@@ -157,6 +157,9 @@ public sealed class InMemoryModelDeploymentStore : IModelDeploymentStore
 
 public sealed class InMemoryModelOpsAuditJournal : IModelOpsAuditJournal
 {
+    /// <summary>内存审计条目上限：超限后淘汰最旧条目（7×24 运行下防止无界增长）。</summary>
+    private const int MaxEntries = 10_000;
+
     private readonly object _sync = new();
     private readonly List<AiModelAuditEntry> _entries = [];
     private readonly HashSet<string> _ids = new(StringComparer.OrdinalIgnoreCase);
@@ -172,8 +175,18 @@ public sealed class InMemoryModelOpsAuditJournal : IModelOpsAuditJournal
             if (!_ids.Add(entry.AuditId))
                 throw new InvalidOperationException($"AuditId '{entry.AuditId}' already exists. Audit journal is append-only.");
             _entries.Add(entry);
+            TrimUnsafe();
         }
         return Task.CompletedTask;
+    }
+
+    private void TrimUnsafe()
+    {
+        if (_entries.Count <= MaxEntries) return;
+        var overflow = _entries.Count - MaxEntries;
+        for (var i = 0; i < overflow; i++)
+            _ids.Remove(_entries[i].AuditId);
+        _entries.RemoveRange(0, overflow);
     }
 
     public Task<IReadOnlyList<AiModelAuditEntry>> ListAsync(
@@ -209,6 +222,9 @@ public sealed class InMemoryModelOpsAuditJournal : IModelOpsAuditJournal
 
 public sealed class InMemoryModelEvaluationStore : IModelEvaluationStore
 {
+    /// <summary>内存评估记录上限。</summary>
+    private const int MaxEntries = 10_000;
+
     private readonly object _sync = new();
     private readonly List<AiModelEvaluation> _items = [];
     private readonly HashSet<string> _ids = new(StringComparer.OrdinalIgnoreCase);
@@ -224,8 +240,18 @@ public sealed class InMemoryModelEvaluationStore : IModelEvaluationStore
             if (!_ids.Add(evaluation.EvaluationId))
                 throw new InvalidOperationException($"EvaluationId '{evaluation.EvaluationId}' already exists.");
             _items.Add(evaluation);
+            TrimUnsafe();
         }
         return Task.CompletedTask;
+    }
+
+    private void TrimUnsafe()
+    {
+        if (_items.Count <= MaxEntries) return;
+        var overflow = _items.Count - MaxEntries;
+        for (var i = 0; i < overflow; i++)
+            _ids.Remove(_items[i].EvaluationId);
+        _items.RemoveRange(0, overflow);
     }
 
     public Task<IReadOnlyList<AiModelEvaluation>> ListAsync(string modelId, int limit, CancellationToken ct)
@@ -245,6 +271,9 @@ public sealed class InMemoryModelEvaluationStore : IModelEvaluationStore
 
 public sealed class InMemoryModelDriftStore : IModelDriftStore
 {
+    /// <summary>内存漂移记录上限。</summary>
+    private const int MaxEntries = 10_000;
+
     private readonly object _sync = new();
     private readonly List<AiModelDriftEvent> _items = [];
     private readonly HashSet<string> _ids = new(StringComparer.OrdinalIgnoreCase);
@@ -260,8 +289,18 @@ public sealed class InMemoryModelDriftStore : IModelDriftStore
             if (!_ids.Add(driftEvent.DriftEventId))
                 throw new InvalidOperationException($"DriftEventId '{driftEvent.DriftEventId}' already exists.");
             _items.Add(driftEvent);
+            TrimUnsafe();
         }
         return Task.CompletedTask;
+    }
+
+    private void TrimUnsafe()
+    {
+        if (_items.Count <= MaxEntries) return;
+        var overflow = _items.Count - MaxEntries;
+        for (var i = 0; i < overflow; i++)
+            _ids.Remove(_items[i].DriftEventId);
+        _items.RemoveRange(0, overflow);
     }
 
     public Task<IReadOnlyList<AiModelDriftEvent>> ListAsync(string modelId, int limit, CancellationToken ct)
@@ -705,6 +744,9 @@ public interface IShadowInferenceJournal
 
 public sealed class InMemoryShadowInferenceJournal : IShadowInferenceJournal
 {
+    /// <summary>内存影子推理记录上限（高频推理下防止无界增长）。</summary>
+    private const int MaxEntries = 20_000;
+
     private readonly object _sync = new();
     private readonly List<ShadowInferenceRecord> _items = [];
 
@@ -717,7 +759,11 @@ public sealed class InMemoryShadowInferenceJournal : IShadowInferenceJournal
         if (!Hashing.IsSha256(record.EvidenceSha256))
             throw new ArgumentException("EvidenceSha256 must be SHA-256.", nameof(record));
         lock (_sync)
+        {
             _items.Add(record);
+            if (_items.Count > MaxEntries)
+                _items.RemoveRange(0, _items.Count - MaxEntries);
+        }
         return Task.CompletedTask;
     }
 

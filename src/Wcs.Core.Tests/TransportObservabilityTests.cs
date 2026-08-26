@@ -239,6 +239,7 @@ public class TransportObservabilityTests
         public TransportExecutionResult Fault(string requestId, string reason) => throw new NotSupportedException();
         public TransportExecutionResult Cancel(string requestId, string? reason = null) => throw new NotSupportedException();
         public bool TryGet(string requestId, out TransportExecutionSnapshot? snapshot) { snapshot = null; return false; }
+        public bool TryGetActiveByVehicle(string vehicleId, out TransportExecutionSnapshot? snapshot) { snapshot = null; return false; }
         public IReadOnlyList<TransportExecutionSnapshot> GetAll() => Array.Empty<TransportExecutionSnapshot>();
         public IReadOnlyList<TransportExecutionCommand> DequeueCommands(string vehicleId, int maxCount = 20) => Array.Empty<TransportExecutionCommand>();
     }

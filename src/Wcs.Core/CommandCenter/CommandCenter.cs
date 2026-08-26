@@ -13,6 +13,11 @@ namespace Wcs.Core.CommandCenter;
 
 public class CommandCenter : ICommandCenter, IDisposable
 {
+    /// <summary>终态命令在内存中的保留时长（供查询与审计）。</summary>
+    private const int TerminalRetentionMs = 10 * 60 * 1000;
+    /// <summary>命令记录硬上限，超出后优先淘汰最老终态记录。</summary>
+    private const int MaxRetainedCommands = 10_000;
+
     private readonly ConcurrentDictionary<string, DeviceCommandRecord> _commands = new();
     private readonly PlcWriter _plcWriter;
     private readonly IEnumerable<ITagSerializer> _tagSerializers;
@@ -200,15 +205,48 @@ public class CommandCenter : ICommandCenter, IDisposable
 
     public CommandCenterStats GetStats()
     {
-        var comp = _commands.Values.Where(c => c.Status == DeviceCommandStatus.Completed && c.CompletedTime.HasValue);
+        // 单趟聚合，避免对全表做 6 次枚举
+        var total = 0;
+        var completed = 0;
+        var failed = 0;
+        var timedOut = 0;
+        var pending = 0;
+        double totalCompletionMs = 0;
+        var completionCount = 0;
+
+        foreach (var c in _commands.Values)
+        {
+            total++;
+            switch (c.Status)
+            {
+                case DeviceCommandStatus.Completed:
+                    completed++;
+                    if (c.CompletedTime.HasValue)
+                    {
+                        totalCompletionMs += (c.CompletedTime.Value - c.CreatedTime).TotalMilliseconds;
+                        completionCount++;
+                    }
+                    break;
+                case DeviceCommandStatus.Failed:
+                    failed++;
+                    break;
+                case DeviceCommandStatus.Timeout:
+                    timedOut++;
+                    break;
+                case DeviceCommandStatus.Sent or DeviceCommandStatus.Acked or DeviceCommandStatus.Executing:
+                    pending++;
+                    break;
+            }
+        }
+
         return new CommandCenterStats
         {
-            TotalCommands = _commands.Count,
-            CompletedCommands = _commands.Values.Count(c => c.Status == DeviceCommandStatus.Completed),
-            FailedCommands = _commands.Values.Count(c => c.Status == DeviceCommandStatus.Failed),
-            TimeoutCommands = _commands.Values.Count(c => c.Status == DeviceCommandStatus.Timeout),
-            PendingCommands = GetPendingCommands().Count(),
-            AvgCompletionTimeMs = comp.Any() ? comp.Average(c => (c.CompletedTime!.Value - c.CreatedTime).TotalMilliseconds) : 0
+            TotalCommands = total,
+            CompletedCommands = completed,
+            FailedCommands = failed,
+            TimeoutCommands = timedOut,
+            PendingCommands = pending,
+            AvgCompletionTimeMs = completionCount > 0 ? totalCompletionMs / completionCount : 0
         };
     }
 
@@ -227,14 +265,66 @@ public class CommandCenter : ICommandCenter, IDisposable
 
     private void CheckTimeouts(object? state)
     {
-        var now = DateTime.UtcNow;
-        foreach (var r in _commands.Values)
+        try
         {
-            if (r.Status is DeviceCommandStatus.Completed or DeviceCommandStatus.Failed
-                or DeviceCommandStatus.Timeout or DeviceCommandStatus.Rejected or DeviceCommandStatus.Cancelled) continue;
-            if (!r.SentTime.HasValue) continue;
-            if ((now - r.SentTime.Value).TotalMilliseconds > r.TimeoutMs)
-            { r.Status = DeviceCommandStatus.Timeout; r.ErrorMessage = $"超时 {r.TimeoutMs}ms"; r.CompletedTime = now; }
+            var now = DateTime.UtcNow;
+            List<string>? toRemove = null;
+
+            foreach (var r in _commands.Values)
+            {
+                if (IsTerminal(r.Status))
+                {
+                    // 终态命令保留一段时间供查询/审计，之后从内存清除，防止无界增长。
+                    if (r.CompletedTime.HasValue &&
+                        (now - r.CompletedTime.Value).TotalMilliseconds >= TerminalRetentionMs)
+                    {
+                        (toRemove ??= new List<string>()).Add(r.CommandId);
+                    }
+                    continue;
+                }
+
+                if (!r.SentTime.HasValue) continue;
+                if ((now - r.SentTime.Value).TotalMilliseconds > r.TimeoutMs)
+                { r.Status = DeviceCommandStatus.Timeout; r.ErrorMessage = $"超时 {r.TimeoutMs}ms"; r.CompletedTime = now; }
+            }
+
+            if (toRemove != null)
+            {
+                foreach (var id in toRemove)
+                    _commands.TryRemove(id, out _);
+            }
+
+            EnforceCapacityCap();
+        }
+        catch (Exception ex)
+        {
+            // 清理定时器回调不允许抛出异常（Timer 会吞掉并可能影响后续触发）
+            _logger?.LogError(ex, "[Cmd] 命令清理失败");
         }
     }
+
+    /// <summary>超过硬上限时优先淘汰最老的终态记录。</summary>
+    private void EnforceCapacityCap()
+    {
+        if (_commands.Count <= MaxRetainedCommands)
+            return;
+
+        var removable = _commands.Values
+            .Where(c => IsTerminal(c.Status))
+            .OrderBy(c => c.CompletedTime ?? c.CreatedTime)
+            .Take(_commands.Count - MaxRetainedCommands)
+            .Select(c => c.CommandId)
+            .ToList();
+
+        foreach (var id in removable)
+            _commands.TryRemove(id, out _);
+
+        if (removable.Count > 0)
+            _logger?.LogDebug("[Cmd] 容量清理：移除 {Count} 条终态命令", removable.Count);
+    }
+
+    private static bool IsTerminal(DeviceCommandStatus status) =>
+        status is DeviceCommandStatus.Done or DeviceCommandStatus.Completed
+            or DeviceCommandStatus.Failed or DeviceCommandStatus.Timeout
+            or DeviceCommandStatus.Rejected or DeviceCommandStatus.Cancelled;
 }

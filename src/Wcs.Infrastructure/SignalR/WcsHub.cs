@@ -67,12 +67,13 @@ public class SignalRStatePublisher
     }
 
     /// <summary>
-    /// 推送设备状态变化
+    /// 推送设备状态变化。
+    /// 单次全体广播：原实现同时发组播 + 全体广播，组成员会收到重复消息；
+    /// 订阅语义由客户端事件层保证，线上只传一份。
     /// </summary>
     public async Task PushDeviceStateAsync(string deviceId, DeviceState state)
     {
         var msg = new DeviceStateChangedMessage(deviceId, state);
-        await _hubContext.Clients.Group($"device:{deviceId}").SendAsync("DeviceStateChanged", msg);
         await _hubContext.Clients.All.SendAsync("DeviceStateBroadcast", msg);
     }
 
@@ -86,12 +87,11 @@ public class SignalRStatePublisher
     }
 
     /// <summary>
-    /// 推送报警
+    /// 推送报警。单次全体广播，消除与 alarms 组播的重复下发。
     /// </summary>
     public async Task PushAlarmAsync(string action, object alarm)
     {
         var msg = new AlarmEventMessage(action, alarm);
-        await _hubContext.Clients.Group("alarms").SendAsync("AlarmEvent", msg);
         await _hubContext.Clients.All.SendAsync("AlarmBroadcast", msg);
     }
 

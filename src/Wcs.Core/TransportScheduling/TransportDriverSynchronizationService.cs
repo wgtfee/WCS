@@ -226,12 +226,8 @@ public sealed class TransportDriverSynchronizationService : ITransportDriverSync
         if (_executions is null)
             return;
 
-        var active = _executions.GetAll()
-            .Where(x => !x.IsTerminal)
-            .Where(x => string.Equals(x.VehicleId, state.VehicleId, StringComparison.Ordinal))
-            .OrderByDescending(x => x.UpdatedAtUtc)
-            .FirstOrDefault();
-        if (active is null)
+        // O(1) 车辆索引查询（原实现为每 tick 每车全表扫描排序）
+        if (!_executions.TryGetActiveByVehicle(state.VehicleId, out var active) || active is null)
             return;
 
         if ((state.FaultCode != 0 || state.OperatingState == TransportVehicleOperatingState.Faulted) &&

@@ -18,11 +18,21 @@ internal sealed class DisabledPlcTelemetryStore : IPlcTelemetryStore
 
 internal sealed class SqlServerPlcTelemetryStore : IPlcTelemetryStore
 {
-    private readonly string _connectionString;
+    /// <summary>存在性检查分片大小：避免生成上万参数的巨型 IN 子句。</summary>
+    private const int ExistenceQueryChunkSize = 1000;
+
+    // 单例客户端：IsAutoCloseConnection=true 时连接由池化管理，
+    // 复用客户端消除每批次的连接/配置构建开销。
+    private readonly SqlSugarClient _db;
 
     public SqlServerPlcTelemetryStore(string connectionString)
     {
-        _connectionString = connectionString;
+        _db = new SqlSugarClient(new ConnectionConfig
+        {
+            ConnectionString = connectionString,
+            DbType = DbType.SqlServer,
+            IsAutoCloseConnection = true
+        });
     }
 
     public string ProviderName => "SqlServer";
@@ -33,28 +43,36 @@ internal sealed class SqlServerPlcTelemetryStore : IPlcTelemetryStore
     {
         if (points.Count == 0) return;
 
-        using var db = new SqlSugarClient(new ConnectionConfig
-        {
-            ConnectionString = _connectionString,
-            DbType = DbType.SqlServer,
-            IsAutoCloseConnection = true
-        });
-
         var entities = points.Select(ToEntity).ToList();
-        var eventIds = entities.Select(static item => item.EventId).ToArray();
-        var existing = await db.Queryable<PlcTelemetryEntity>()
-            .Where(item => eventIds.Contains(item.EventId))
-            .Select(static item => item.EventId)
-            .ToListAsync();
 
-        if (existing.Count > 0)
+        // 批内去重（EventId 主键冲突保护）
+        var seen = new HashSet<string>(entities.Count, StringComparer.Ordinal);
+        entities.RemoveAll(item => !seen.Add(item.EventId));
+        if (entities.Count == 0) return;
+
+        // 跨批次去重：按分片查询已存在的 EventId，
+        // 避免单条 IN 子句参数超过 SQL Server 2100 个上限。
+        var eventIds = entities.Select(static item => item.EventId).ToList();
+        HashSet<string>? existingSet = null;
+
+        for (var offset = 0; offset < eventIds.Count; offset += ExistenceQueryChunkSize)
         {
-            var existingSet = existing.ToHashSet(StringComparer.Ordinal);
-            entities.RemoveAll(item => existingSet.Contains(item.EventId));
+            var chunk = eventIds.GetRange(offset, Math.Min(ExistenceQueryChunkSize, eventIds.Count - offset));
+            var found = await _db.Queryable<PlcTelemetryEntity>()
+                .Where(item => chunk.Contains(item.EventId))
+                .Select(static item => item.EventId)
+                .ToListAsync(cancellationToken);
+
+            if (found.Count == 0) continue;
+            existingSet ??= new HashSet<string>(StringComparer.Ordinal);
+            existingSet.UnionWith(found);
         }
 
+        if (existingSet is { Count: > 0 })
+            entities.RemoveAll(item => existingSet.Contains(item.EventId));
+
         if (entities.Count > 0)
-            await db.Insertable(entities).ExecuteCommandAsync(cancellationToken);
+            await _db.Insertable(entities).ExecuteCommandAsync(cancellationToken);
     }
 
     private static PlcTelemetryEntity ToEntity(PlcTelemetryPoint point) => new()

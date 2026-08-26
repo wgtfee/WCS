@@ -100,8 +100,14 @@ public interface IAlarmCenter
 /// </summary>
 public class AlarmCenter : IAlarmCenter, ISnapshotProvider
 {
+    /// <summary>已恢复报警的内存保留时长（超时后从内存清除，历史查询需依赖持久化层）。</summary>
+    private static readonly TimeSpan RecoveredRetention = TimeSpan.FromMinutes(60);
+    /// <summary>报警记录硬上限，超出后优先淘汰最老的已恢复记录。</summary>
+    private const int MaxRetainedAlarms = 5000;
+
     private readonly ConcurrentDictionary<string, AlarmState> _alarms = new();       // alarmId → state
     private readonly ConcurrentDictionary<string, AlarmRule> _rules = new();          // alarmCode → rule
+    private readonly Timer _cleanupTimer;
 
     // 记录当前信号状态（关键修复）
 private readonly ConcurrentDictionary<string, bool> _recoverSignals = new();
@@ -154,6 +160,10 @@ private readonly ConcurrentDictionary<string, bool> _raiseSignals = new();
             onCanceledRaise: OnDebounceCanceledRaise,
             onRebounce: OnDebounceRebounce
         );
+
+        // 定期清理已恢复报警，防止 7×24 运行下 _alarms 无界增长。
+        _cleanupTimer = new Timer(
+            CleanupRecoveredAlarms, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5));
     }
 
     // ==================== 规则管理 ====================
@@ -465,8 +475,53 @@ private readonly ConcurrentDictionary<string, bool> _raiseSignals = new();
 
     // ==================== 清理 ====================
 
+    private void CleanupRecoveredAlarms(object? state)
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow - RecoveredRetention;
+            List<string>? toRemove = null;
+
+            foreach (var a in _alarms.Values)
+            {
+                if (a.Status == AlarmStatusEnum.Recovered &&
+                    a.RecoverTime.HasValue &&
+                    a.RecoverTime.Value < cutoff)
+                {
+                    (toRemove ??= new List<string>()).Add(a.AlarmId);
+                }
+            }
+
+            if (toRemove != null)
+            {
+                foreach (var id in toRemove)
+                    _alarms.TryRemove(id, out _);
+            }
+
+            // 硬上限兜底：优先淘汰最老的已恢复记录
+            if (_alarms.Count > MaxRetainedAlarms)
+            {
+                var overflow = _alarms.Count - MaxRetainedAlarms;
+                var oldest = _alarms.Values
+                    .Where(a => a.Status == AlarmStatusEnum.Recovered)
+                    .OrderBy(a => a.RecoverTime ?? a.OccurTime)
+                    .Take(overflow)
+                    .Select(a => a.AlarmId)
+                    .ToList();
+
+                foreach (var id in oldest)
+                    _alarms.TryRemove(id, out _);
+            }
+        }
+        catch
+        {
+            // 清理失败不影响报警主流程
+        }
+    }
+
     public void Dispose()
     {
+        _cleanupTimer.Dispose();
         _debounceEngine.Dispose();
         _aggregation.Clear();
         _stormGuard.Reset();

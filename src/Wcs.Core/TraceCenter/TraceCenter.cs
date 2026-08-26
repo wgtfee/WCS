@@ -106,6 +106,8 @@ public class TraceCenter : ITraceCenter
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _lastEventTime = new();
     private const int MaxRecordsPerCorrelation = 500;
     private const int TotalMaxRecords = 50000;
+    /// <summary>总记录数计数器（Interlocked 维护），避免每次 Trace 全表求和。</summary>
+    private long _totalRecords;
 
     public void Trace(TraceRecord record)
     {
@@ -119,14 +121,19 @@ public class TraceCenter : ITraceCenter
 
             list.Add(record);
             _lastEventTime[record.CorrelationId] = record.Timestamp;
+            Interlocked.Increment(ref _totalRecords);
 
             // 限制单条轨迹长度
             if (list.Count > MaxRecordsPerCorrelation)
-                list.RemoveRange(0, list.Count - MaxRecordsPerCorrelation);
+            {
+                var excess = list.Count - MaxRecordsPerCorrelation;
+                list.RemoveRange(0, excess);
+                Interlocked.Add(ref _totalRecords, -excess);
+            }
         }
 
-        // 限制总记录数
-        if (_traces.Sum(kvp => kvp.Value.Count) > TotalMaxRecords)
+        // 限制总记录数（O(1) 计数判断，替代全字典 Sum）
+        if (Interlocked.Read(ref _totalRecords) > TotalMaxRecords)
             Cleanup(TimeSpan.FromDays(7));
     }
 
@@ -190,8 +197,17 @@ public class TraceCenter : ITraceCenter
                 var before = kvp.Value.Count;
                 kvp.Value.RemoveAll(r => r.Timestamp < cutoff);
                 removed += before - kvp.Value.Count;
+
+                // 空轨迹连同 _lastEventTime 一并清除，防止字典键无限累积。
+                if (kvp.Value.Count == 0 && _traces.TryGetValue(kvp.Key, out var current) && ReferenceEquals(current, kvp.Value))
+                {
+                    _traces.TryRemove(kvp.Key, out _);
+                    _lastEventTime.TryRemove(kvp.Key, out _);
+                }
             }
         }
+
+        Interlocked.Add(ref _totalRecords, -removed);
         return removed;
     }
 }

@@ -172,6 +172,14 @@ public class ChainExecutionEngine
             result.EndTime = DateTime.UtcNow;
             if (result.Success)
                 _recoveryService.MarkComplete(graph.GraphId);
+
+            // 清理本图的 DecisionNode 分支结果缓存：
+            // 结果只在单次图执行内被消费，跨图保留只会造成内存累积。
+            foreach (var node in graph.Nodes)
+            {
+                if (node is DecisionNode)
+                    _decisionResults.TryRemove(node.NodeId, out _);
+            }
         }
 
         return result;

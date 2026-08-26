@@ -363,29 +363,35 @@ public sealed class TransportTrafficCoordinator : ITransportTrafficCoordinator, 
 
     public IReadOnlyList<TransportDeadlockCycle> DetectDeadlocks(DateTime? nowUtc = null)
     {
+        var now = nowUtc ?? DateTime.UtcNow;
+
+        Dictionary<string, TransportTrafficWait> waits;
+        Dictionary<string, string[]> graph;
+
+        // 锁内仅做刷新与快照复制，DFS 和 SHA256 哈希在锁外执行，
+        // 避免等待者较多时长时间占用全局交通锁。
         lock (_sync)
         {
-            var now = nowUtc ?? DateTime.UtcNow;
             RefreshWaitBlockersUnsafe(now);
 
-            var waits = _waitsByOwner.Values.ToDictionary(x => x.OwnerId, StringComparer.Ordinal);
-            var graph = waits.ToDictionary(
+            waits = _waitsByOwner.Values.ToDictionary(x => x.OwnerId, StringComparer.Ordinal);
+            graph = waits.ToDictionary(
                 x => x.Key,
                 x => x.Value.BlockingOwnerIds.Where(waits.ContainsKey).Distinct(StringComparer.Ordinal).ToArray(),
                 StringComparer.Ordinal);
-
-            var state = new Dictionary<string, int>(StringComparer.Ordinal);
-            var stack = new List<string>();
-            var cycles = new Dictionary<string, TransportDeadlockCycle>(StringComparer.Ordinal);
-
-            foreach (var owner in graph.Keys)
-            {
-                if (!state.TryGetValue(owner, out var value) || value == 0)
-                    DetectCyclesDepthFirstUnsafe(owner, graph, waits, state, stack, cycles, now);
-            }
-
-            return cycles.Values.OrderBy(x => x.CycleId, StringComparer.Ordinal).ToArray();
         }
+
+        var state = new Dictionary<string, int>(StringComparer.Ordinal);
+        var stack = new List<string>();
+        var cycles = new Dictionary<string, TransportDeadlockCycle>(StringComparer.Ordinal);
+
+        foreach (var owner in graph.Keys)
+        {
+            if (!state.TryGetValue(owner, out var value) || value == 0)
+                DetectCyclesDepthFirstUnsafe(owner, graph, waits, state, stack, cycles, now);
+        }
+
+        return cycles.Values.OrderBy(x => x.CycleId, StringComparer.Ordinal).ToArray();
     }
 
     public void RecordIncident(TransportTrafficIncident incident)
@@ -584,6 +590,12 @@ public sealed class TransportTrafficCoordinator : ITransportTrafficCoordinator, 
         {
             var wait = _waitsByOwner[ownerId];
             var blockers = GetBlockingOwnersUnsafe(ownerId, wait.RequestedResourceIds);
+
+            // 脏检查：blockers 集合未变化时跳过重建，
+            // 避免每轮刷新都为每个等待者做字符串拼接与 record 复制。
+            if (SameOwners(blockers, wait.BlockingOwnerIds))
+                continue;
+
             _waitsByOwner[ownerId] = wait with
             {
                 BlockingOwnerIds = blockers,
@@ -592,6 +604,19 @@ public sealed class TransportTrafficCoordinator : ITransportTrafficCoordinator, 
                     : "等待调度器按优先级和先到先服务重新尝试"
             };
         }
+    }
+
+    private static bool SameOwners(IReadOnlyList<string> left, IReadOnlyList<string> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+        // 两个列表均为有序（Ordinal）去重结果，逐位比较即可。
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!string.Equals(left[i], right[i], StringComparison.Ordinal))
+                return false;
+        }
+        return true;
     }
 
     private static void DetectCyclesDepthFirstUnsafe(

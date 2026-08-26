@@ -261,8 +261,12 @@ public interface IIndustrialIntelligenceAuditJournal
 
 public sealed class InMemoryIndustrialIntelligenceAuditJournal : IIndustrialIntelligenceAuditJournal
 {
+    /// <summary>内存审计条目上限：超限后同步淘汰最旧条目与 ID 去重集合。</summary>
+    private const int MaxEntries = 10_000;
+
     private readonly ConcurrentQueue<IndustrialIntelligenceAuditRecord> _entries = new();
     private readonly ConcurrentDictionary<string, byte> _ids = new(StringComparer.Ordinal);
+    private int _count;
 
     public void Append(IndustrialIntelligenceAuditRecord record)
     {
@@ -279,6 +283,12 @@ public sealed class InMemoryIndustrialIntelligenceAuditJournal : IIndustrialInte
         if (!_ids.TryAdd(record.AuditId, 0))
             throw new InvalidOperationException($"AuditId '{record.AuditId}' already exists; journal entries are immutable.");
         _entries.Enqueue(record);
+
+        if (Interlocked.Increment(ref _count) > MaxEntries && _entries.TryDequeue(out var evicted))
+        {
+            Interlocked.Decrement(ref _count);
+            _ids.TryRemove(evicted.AuditId, out _);
+        }
     }
 
     public IReadOnlyList<IndustrialIntelligenceAuditRecord> Snapshot() => _entries.ToArray();
