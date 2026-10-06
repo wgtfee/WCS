@@ -30,6 +30,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Industrial.Security.Abstractions;
 using Industrial.Security.AspNetCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Wcs.Host.Health;
 using Wcs.Host.IndustrialSecurity;
 
@@ -55,7 +56,8 @@ try
         ?.Equals("Centralized", StringComparison.OrdinalIgnoreCase) == true;
     if (centralizedAuthentication)
     {
-        builder.Services.AddAuthentication().AddIndustrialJwt(builder.Configuration);
+        // The SDK also registers an emergency cookie; choose IAM JWT explicitly for normal requests.
+        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddIndustrialJwt(builder.Configuration);
         builder.Services.AddAuthorization();
     }
 
